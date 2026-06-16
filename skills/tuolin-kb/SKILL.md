@@ -104,6 +104,7 @@ Use `scan_partitions.py` when the user asks:
 Rules:
 
 - Do not treat `raw/00_知识库核心资料/` as a long-term business partition.
+- The business priority is: first organize the core upstream queue when the user explicitly asks to整理核心资料; after core materials are handled, prioritize `石英纤维隔热带` before other product or domain partitions whenever it still has a next action.
 - Product partitions may include the core upstream queue in their fingerprint.
 - If the user says “高硅氧纤维隔热带资料” without adhesive/non-adhesive, ask them to choose or recommend one explicit partition.
 - Missing or empty raw folders should produce `prepare_raw`, not a fake complete knowledge result.
@@ -233,6 +234,7 @@ Supported flows:
 Rules:
 
 - Do not execute knowledge-layer writes unless the route sees explicit confirmation.
+- For general “整理一下拓霖知识库” or “查看当前还有哪些资料需要继续整理” requests, recommend `石英纤维隔热带` first when it has any actionable state. This reflects the current business focus on the quartz product.
 - User-visible messages should say “整理资料”“继续看资料”“整理成可用资料”“需要你确认”.
 - Avoid exposing internal terms such as cache, indexes, manifest, frontmatter, or generated file paths as the main answer.
 - Every suggested next step should include a copyable Chinese reply.

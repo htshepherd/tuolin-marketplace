@@ -26,6 +26,21 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertIn("确认，继续看石英纤维隔热带资料。", response.copyable_reply)
             self.assertFalse((paths.knowledge_dir / "产品" / "石英纤维隔热带.md").exists())
 
+    def test_organize_knowledge_prioritizes_quartz_over_other_actionable_partitions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz_report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            quartz_report.write_text("fake report", encoding="utf-8")
+            market_report = paths.raw_dir / "04_市场情报" / "01_市场现状与平台调研" / "market.md"
+            market_report.write_text("market material", encoding="utf-8")
+
+            response = route_natural_language(paths, "整理一下拓霖知识库。")
+
+            self.assertEqual(response.intent, "recommend_next")
+            self.assertEqual(response.recommended_partition, "石英纤维隔热带")
+            self.assertEqual(response.copyable_reply, "确认，继续看石英纤维隔热带资料。")
+
     def test_confirm_recommended_executes_current_product_next_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

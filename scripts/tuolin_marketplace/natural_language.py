@@ -39,6 +39,10 @@ GLOBAL_ACTION_PRIORITY = {
     "use_existing": 5,
 }
 
+BUSINESS_PARTITION_PRIORITY = {
+    "quartz_fiber_tape": 0,
+}
+
 
 @dataclass(frozen=True)
 class NaturalLanguageResponse:
@@ -350,6 +354,7 @@ def _best_summary(summaries: list[PartitionSummary]) -> PartitionSummary | None:
     return sorted(
         summaries,
         key=lambda summary: (
+            BUSINESS_PARTITION_PRIORITY.get(summary.slug, 100),
             GLOBAL_ACTION_PRIORITY[summary.recommended_next_action],
             summary.name,
         ),
