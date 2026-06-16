@@ -90,6 +90,23 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertFalse(response.needs_confirmation)
             self.assertEqual(len(response.details["partitions"]), 11)
             self.assertIn("知识卡片数量", response.message)
+            self.assertIn("PDF/视频素材需要继续处理", response.message)
+
+    def test_status_details_include_pdf_and_video_processing_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            pdf = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            pdf.write_text("fake pdf", encoding="utf-8")
+            video.write_text("fake video", encoding="utf-8")
+
+            response = route_natural_language(paths, "查看知识库状态。")
+
+            quartz = next(item for item in response.details["partitions"] if item["name"] == "石英纤维隔热带")
+            self.assertEqual(quartz["pdf_progress"], "0/1")
+            self.assertEqual(quartz["video_progress"], "0/1")
+            self.assertEqual(quartz["pending_processing_count"], 2)
 
     def test_full_rebuild_request_returns_partition_queue_and_waits_for_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

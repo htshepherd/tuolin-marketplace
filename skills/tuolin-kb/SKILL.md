@@ -109,6 +109,8 @@ Rules:
 - Product partitions may include the core upstream queue in their fingerprint.
 - If the user says “高硅氧纤维隔热带资料” without adhesive/non-adhesive, ask them to choose or recommend one explicit partition.
 - Missing or empty raw folders should produce `prepare_raw`, not a fake complete knowledge result.
+- Do not say a partition is “整理完了” unless `pending_material_count`, `pending_processing_count`, `review_item_count`, and `recognized_unapplied_count` are all zero.
+- `ready` means business knowledge can be used; it does not by itself mean all PDFs and videos have been deeply processed. Always report PDF and video progress separately.
 
 ## Partition Scope Protocol
 
@@ -261,6 +263,7 @@ Rules:
 - Do not execute knowledge-layer writes unless the route sees explicit confirmation.
 - For general “整理一下拓霖知识库” or “查看当前还有哪些资料需要继续整理” requests, recommend `石英纤维隔热带` first when it has any actionable state. This reflects the current business focus on the quartz product.
 - User-visible messages should say “整理资料”“继续看资料”“整理成可用资料”“需要你确认”.
+- For status answers, distinguish “业务可用” from “素材处理完成”. If PDFs or videos remain pending, say the partition is usable but still has material work left.
 - Avoid exposing internal terms such as cache, indexes, manifest, frontmatter, or generated file paths as the main answer.
 - Every suggested next step should include a copyable Chinese reply.
 

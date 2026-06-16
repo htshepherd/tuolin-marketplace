@@ -218,6 +218,9 @@ def _card_body(card_path: Path) -> str:
 def _partition_totals(partitions: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "pending_material_count": sum(item["pending_material_count"] for item in partitions),
+        "pending_processing_count": sum(item.get("pending_processing_count", 0) for item in partitions),
+        "pdf_pending_count": sum(item.get("pdf_pending_count", 0) for item in partitions),
+        "video_pending_count": sum(item.get("video_pending_count", 0) for item in partitions),
         "recognized_unapplied_count": sum(item["recognized_unapplied_count"] for item in partitions),
         "review_item_count": sum(item["review_item_count"] for item in partitions),
         "needs_update_count": sum(1 for item in partitions if item["status"] == "needs_update"),

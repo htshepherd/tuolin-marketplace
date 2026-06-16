@@ -29,6 +29,8 @@ RECOMMENDED_NEXT_ACTIONS = {
 }
 
 IGNORED_FILE_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
+PDF_SUFFIXES = {".pdf"}
+VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,13 @@ class PartitionSummary:
     raw_path: str
     status: str
     pending_material_count: int
+    pending_processing_count: int
+    pdf_total_count: int
+    pdf_processed_count: int
+    pdf_pending_count: int
+    video_total_count: int
+    video_processed_count: int
+    video_pending_count: int
     recognized_unapplied_count: int
     review_item_count: int
     last_raw_changed_at: str | None
@@ -156,6 +165,7 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
     primary_files = list(_iter_files(primary_raw_dir)) if primary_raw_dir.exists() else []
     fingerprint = build_fingerprint(paths, definition) if primary_raw_dir.exists() else None
     previous = load_partition_snapshot(paths, definition.slug)
+    processing = _processing_counts(paths, primary_files)
 
     recognized_unapplied_count = _count_json_files(paths.generated_dir / "cache" / "recognized-unapplied" / definition.slug)
     review_item_count = _count_json_files(paths.generated_dir / "cache" / "review-items" / definition.slug)
@@ -183,6 +193,7 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
     recommended_next_action = recommend_next_action(
         status=status,
         pending_material_count=pending_material_count,
+        pending_processing_count=processing["pending_processing_count"],
         recognized_unapplied_count=recognized_unapplied_count,
         review_item_count=review_item_count,
     )
@@ -195,6 +206,13 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
         raw_path=str(primary_raw_dir),
         status=status,
         pending_material_count=pending_material_count,
+        pending_processing_count=processing["pending_processing_count"],
+        pdf_total_count=processing["pdf_total_count"],
+        pdf_processed_count=processing["pdf_processed_count"],
+        pdf_pending_count=processing["pdf_pending_count"],
+        video_total_count=processing["video_total_count"],
+        video_processed_count=processing["video_processed_count"],
+        video_pending_count=processing["video_pending_count"],
         recognized_unapplied_count=recognized_unapplied_count,
         review_item_count=review_item_count,
         last_raw_changed_at=_format_timestamp(fingerprint.latest_mtime) if fingerprint else None,
@@ -208,8 +226,9 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
 def recommend_next_action(
     status: str,
     pending_material_count: int,
-    recognized_unapplied_count: int,
-    review_item_count: int,
+    recognized_unapplied_count: int = 0,
+    review_item_count: int = 0,
+    pending_processing_count: int = 0,
 ) -> str:
     if status == "needs_update":
         return "update_first"
@@ -219,6 +238,8 @@ def recommend_next_action(
         return "organize_usable"
     if review_item_count > 0:
         return "review_required"
+    if pending_processing_count > 0:
+        return "continue_reading"
     if pending_material_count > 0:
         return "continue_reading"
     if status == "ready":
@@ -293,6 +314,44 @@ def _iter_files(directory: Path) -> Iterable[Path]:
     for path in sorted(directory.rglob("*")):
         if path.is_file() and path.name not in IGNORED_FILE_NAMES:
             yield path
+
+
+def _processing_counts(paths: ProjectPaths, primary_files: list[Path]) -> dict[str, int]:
+    pdf_files = [path for path in primary_files if path.suffix.lower() in PDF_SUFFIXES]
+    video_files = [path for path in primary_files if path.suffix.lower() in VIDEO_SUFFIXES]
+    pdf_processed = sum(1 for path in pdf_files if _pdf_text_available(paths, path))
+    video_processed = sum(1 for path in video_files if _video_frames_available(paths, path))
+    pdf_pending = len(pdf_files) - pdf_processed
+    video_pending = len(video_files) - video_processed
+    return {
+        "pending_processing_count": pdf_pending + video_pending,
+        "pdf_total_count": len(pdf_files),
+        "pdf_processed_count": pdf_processed,
+        "pdf_pending_count": pdf_pending,
+        "video_total_count": len(video_files),
+        "video_processed_count": video_processed,
+        "video_pending_count": video_pending,
+    }
+
+
+def _pdf_text_available(paths: ProjectPaths, pdf_path: Path) -> bool:
+    if pdf_path.with_suffix(".md").exists():
+        return True
+    try:
+        relative = pdf_path.resolve().relative_to(paths.raw_dir).with_suffix("")
+    except ValueError:
+        return False
+    cache_dir = paths.generated_dir / "cache" / "pdf-markdown" / relative
+    return cache_dir.exists() and any(path.is_file() and path.suffix.lower() == ".md" for path in cache_dir.rglob("*"))
+
+
+def _video_frames_available(paths: ProjectPaths, video_path: Path) -> bool:
+    try:
+        relative = video_path.resolve().relative_to(paths.raw_dir).with_suffix("")
+    except ValueError:
+        return False
+    cache_dir = paths.generated_dir / "cache" / "video-frames" / relative
+    return cache_dir.exists() and any(path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"} for path in cache_dir.rglob("*"))
 
 
 def _count_json_files(directory: Path) -> int:

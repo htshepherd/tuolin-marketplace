@@ -72,7 +72,7 @@ class PartitionScanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             initialize_project(paths)
-            file_path = paths.raw_dir / "03_标准法规" / "01_中国标准" / "gb.pdf"
+            file_path = paths.raw_dir / "03_标准法规" / "01_中国标准" / "gb.md"
             file_path.write_text("fake standard", encoding="utf-8")
             standard = next(partition for partition in PARTITIONS if partition.slug == "standards")
             mark_partition_organized(paths, standard)
@@ -83,6 +83,50 @@ class PartitionScanTests(unittest.TestCase):
             self.assertEqual(summary.recommended_next_action, "use_existing")
             self.assertEqual(summary.pending_material_count, 0)
             self.assertIsNotNone(summary.last_organized_at)
+
+    def test_ready_partition_with_unprocessed_pdf_or_video_still_recommends_continue_reading(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            pdf = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            pdf.write_text("fake pdf", encoding="utf-8")
+            video.write_text("fake video", encoding="utf-8")
+            mark_partition_organized(paths, quartz)
+
+            summary = scan_partition(paths, quartz)
+
+            self.assertEqual(summary.status, "ready")
+            self.assertEqual(summary.pending_material_count, 0)
+            self.assertEqual(summary.pending_processing_count, 2)
+            self.assertEqual(summary.pdf_pending_count, 1)
+            self.assertEqual(summary.video_pending_count, 1)
+            self.assertEqual(summary.recommended_next_action, "continue_reading")
+
+    def test_pdf_and_video_processing_progress_detects_cache_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            pdf = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            pdf.write_text("fake pdf", encoding="utf-8")
+            video.write_text("fake video", encoding="utf-8")
+            pdf_cache = paths.generated_dir / "cache" / "pdf-markdown" / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report"
+            pdf_cache.mkdir(parents=True)
+            (pdf_cache / "report.md").write_text("text", encoding="utf-8")
+            video_cache = paths.generated_dir / "cache" / "video-frames" / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo"
+            video_cache.mkdir(parents=True)
+            (video_cache / "frame_000.jpg").write_text("frame", encoding="utf-8")
+            mark_partition_organized(paths, quartz)
+
+            summary = scan_partition(paths, quartz)
+
+            self.assertEqual(summary.pending_processing_count, 0)
+            self.assertEqual(summary.pdf_processed_count, 1)
+            self.assertEqual(summary.video_processed_count, 1)
+            self.assertEqual(summary.recommended_next_action, "use_existing")
 
     def test_raw_change_after_snapshot_sets_needs_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +217,7 @@ class PartitionScanTests(unittest.TestCase):
         self.assertEqual(recommend_next_action("needs_update", 3, 3, 3), "update_first")
         self.assertEqual(recommend_next_action("ready", 0, 2, 1), "organize_usable")
         self.assertEqual(recommend_next_action("ready", 0, 0, 1), "review_required")
+        self.assertEqual(recommend_next_action("ready", 0, 0, 0, pending_processing_count=1), "continue_reading")
         self.assertEqual(recommend_next_action("not_started", 2, 0, 0), "continue_reading")
         self.assertEqual(recommend_next_action("ready", 0, 0, 0), "use_existing")
 

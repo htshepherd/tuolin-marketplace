@@ -170,12 +170,14 @@ def _status_response(paths: ProjectPaths) -> NaturalLanguageResponse:
     except FileNotFoundError:
         status_payload = {"manifest_summary": {"card_count": 0, "counts_by_type": {}, "open_review_count": 0}}
     ready_count = sum(1 for item in summaries if item.status == "ready")
+    pending_processing_count = sum(item.pending_processing_count for item in summaries)
     return NaturalLanguageResponse(
         intent="knowledge_status",
         executed=False,
         needs_confirmation=False,
         message=(
             f"当前共有 {len(summaries)} 个业务分区，其中 {ready_count} 个可直接使用。"
+            f"仍有 {pending_processing_count} 个 PDF/视频素材需要继续处理。"
             f"知识卡片数量为 {status_payload['manifest_summary'].get('card_count', 0)}，"
             f"待确认内容 {status_payload['manifest_summary'].get('open_review_count', 0)} 条。"
         ),
@@ -381,6 +383,11 @@ def _summary_detail(summary: PartitionSummary) -> dict[str, Any]:
         "status_label": _status_label(summary.status),
         "next_step": ACTION_LABELS[summary.recommended_next_action],
         "pending_material_count": summary.pending_material_count,
+        "pending_processing_count": summary.pending_processing_count,
+        "pdf_progress": f"{summary.pdf_processed_count}/{summary.pdf_total_count}",
+        "pdf_pending_count": summary.pdf_pending_count,
+        "video_progress": f"{summary.video_processed_count}/{summary.video_total_count}",
+        "video_pending_count": summary.video_pending_count,
         "recognized_unapplied_count": summary.recognized_unapplied_count,
         "review_item_count": summary.review_item_count,
     }
