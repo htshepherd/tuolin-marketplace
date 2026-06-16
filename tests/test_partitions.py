@@ -17,6 +17,24 @@ from scripts.tuolin_marketplace.project_layout import initialize_project, resolv
 
 
 class PartitionScanTests(unittest.TestCase):
+    def _write_evidence_for_source(self, paths, partition_slug: str, source_relative: str, name: str) -> None:
+        evidence_dir = paths.knowledge_dir / "证据" / partition_slug
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / f"{name}.md").write_text(
+            "\n".join(
+                [
+                    "---",
+                    "source_paths:",
+                    f"  - raw/{source_relative}",
+                    "---",
+                    "",
+                    "# evidence",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
     def test_all_expected_partitions_are_defined(self) -> None:
         names = [partition.name for partition in PARTITIONS]
         self.assertEqual(
@@ -98,10 +116,43 @@ class PartitionScanTests(unittest.TestCase):
             summary = scan_partition(paths, quartz)
 
             self.assertEqual(summary.status, "ready")
-            self.assertEqual(summary.pending_material_count, 0)
+            self.assertEqual(summary.pending_material_count, 2)
+            self.assertEqual(summary.product_pending_registration_count, 2)
             self.assertEqual(summary.pending_processing_count, 2)
             self.assertEqual(summary.pdf_pending_count, 1)
             self.assertEqual(summary.video_pending_count, 1)
+            self.assertEqual(summary.recommended_next_action, "continue_reading")
+
+    def test_product_partition_reports_fixed_subfolder_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.md"
+            picture = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "02_产品图片" / "photo.jpg"
+            report.write_text("report", encoding="utf-8")
+            picture.write_text("photo", encoding="utf-8")
+            self._write_evidence_for_source(
+                paths,
+                "quartz_fiber_tape",
+                "01_产品/02_石英纤维隔热带/01_检测报告与认证/report.md",
+                "report",
+            )
+            mark_partition_organized(paths, quartz)
+
+            summary = scan_partition(paths, quartz)
+
+            self.assertEqual(len(summary.product_material_progress), 5)
+            self.assertEqual([item.name for item in summary.product_material_progress][0], "01_检测报告与认证")
+            report_progress = summary.product_material_progress[0]
+            picture_progress = summary.product_material_progress[1]
+            self.assertEqual(report_progress.status, "complete")
+            self.assertEqual(report_progress.registered_file_count, 1)
+            self.assertEqual(picture_progress.status, "in_progress")
+            self.assertEqual(picture_progress.pending_registration_count, 1)
+            self.assertEqual(summary.product_material_status, "in_progress")
+            self.assertEqual(summary.product_pending_subfolder_count, 4)
+            self.assertEqual(summary.product_pending_registration_count, 1)
             self.assertEqual(summary.recommended_next_action, "continue_reading")
 
     def test_pdf_and_video_processing_progress_detects_cache_outputs(self) -> None:
@@ -119,6 +170,18 @@ class PartitionScanTests(unittest.TestCase):
             video_cache = paths.generated_dir / "cache" / "video-frames" / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo"
             video_cache.mkdir(parents=True)
             (video_cache / "frame_000.jpg").write_text("frame", encoding="utf-8")
+            self._write_evidence_for_source(
+                paths,
+                "quartz_fiber_tape",
+                "01_产品/02_石英纤维隔热带/01_检测报告与认证/report.pdf",
+                "report",
+            )
+            self._write_evidence_for_source(
+                paths,
+                "quartz_fiber_tape",
+                "01_产品/02_石英纤维隔热带/03_产品视频/demo.mp4",
+                "demo",
+            )
             mark_partition_organized(paths, quartz)
 
             summary = scan_partition(paths, quartz)
@@ -126,7 +189,8 @@ class PartitionScanTests(unittest.TestCase):
             self.assertEqual(summary.pending_processing_count, 0)
             self.assertEqual(summary.pdf_processed_count, 1)
             self.assertEqual(summary.video_processed_count, 1)
-            self.assertEqual(summary.recommended_next_action, "use_existing")
+            self.assertEqual(summary.product_pending_registration_count, 0)
+            self.assertEqual(summary.recommended_next_action, "prepare_raw")
 
     def test_raw_change_after_snapshot_sets_needs_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -219,6 +283,10 @@ class PartitionScanTests(unittest.TestCase):
         self.assertEqual(recommend_next_action("ready", 0, 0, 1), "review_required")
         self.assertEqual(recommend_next_action("ready", 0, 0, 0, pending_processing_count=1), "continue_reading")
         self.assertEqual(recommend_next_action("not_started", 2, 0, 0), "continue_reading")
+        self.assertEqual(
+            recommend_next_action("ready", 0, 0, 0, product_pending_subfolder_count=1),
+            "prepare_raw",
+        )
         self.assertEqual(recommend_next_action("ready", 0, 0, 0), "use_existing")
 
 

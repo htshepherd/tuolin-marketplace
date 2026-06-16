@@ -171,12 +171,14 @@ def _status_response(paths: ProjectPaths) -> NaturalLanguageResponse:
         status_payload = {"manifest_summary": {"card_count": 0, "counts_by_type": {}, "open_review_count": 0}}
     ready_count = sum(1 for item in summaries if item.status == "ready")
     pending_processing_count = sum(item.pending_processing_count for item in summaries)
+    product_pending_subfolder_count = sum(item.product_pending_subfolder_count for item in summaries)
     return NaturalLanguageResponse(
         intent="knowledge_status",
         executed=False,
         needs_confirmation=False,
         message=(
             f"当前共有 {len(summaries)} 个业务分区，其中 {ready_count} 个可直接使用。"
+            f"产品素材还有 {product_pending_subfolder_count} 个子文件夹未完成。"
             f"仍有 {pending_processing_count} 个 PDF/视频素材需要继续处理。"
             f"知识卡片数量为 {status_payload['manifest_summary'].get('card_count', 0)}，"
             f"待确认内容 {status_payload['manifest_summary'].get('open_review_count', 0)} 条。"
@@ -388,6 +390,22 @@ def _summary_detail(summary: PartitionSummary) -> dict[str, Any]:
         "pdf_pending_count": summary.pdf_pending_count,
         "video_progress": f"{summary.video_processed_count}/{summary.video_total_count}",
         "video_pending_count": summary.video_pending_count,
+        "product_material_status": _product_material_status_label(summary.product_material_status),
+        "product_pending_subfolder_count": summary.product_pending_subfolder_count,
+        "product_pending_registration_count": summary.product_pending_registration_count,
+        "product_material_progress": [
+            {
+                "name": item.name,
+                "status": _product_material_status_label(item.status),
+                "total_file_count": item.total_file_count,
+                "registered_file_count": item.registered_file_count,
+                "pending_registration_count": item.pending_registration_count,
+                "pending_processing_count": item.pending_processing_count,
+                "pdf_progress": item.pdf_progress,
+                "video_progress": item.video_progress,
+            }
+            for item in summary.product_material_progress
+        ],
         "recognized_unapplied_count": summary.recognized_unapplied_count,
         "review_item_count": summary.review_item_count,
     }
@@ -400,6 +418,15 @@ def _status_label(status: str) -> str:
         "needs_update": "需要更新",
         "pending_review": "待确认",
         "incomplete_materials": "资料不完整",
+    }.get(status, status)
+
+
+def _product_material_status_label(status: str) -> str:
+    return {
+        "not_applicable": "不适用",
+        "not_started": "未开始",
+        "in_progress": "整理中",
+        "complete": "已完成",
     }.get(status, status)
 
 

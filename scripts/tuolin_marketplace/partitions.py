@@ -31,6 +31,26 @@ RECOMMENDED_NEXT_ACTIONS = {
 IGNORED_FILE_NAMES = {".DS_Store", "Thumbs.db", "desktop.ini"}
 PDF_SUFFIXES = {".pdf"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
+PRODUCT_MATERIAL_SUBFOLDERS = (
+    "01_检测报告与认证",
+    "02_产品图片",
+    "03_产品视频",
+    "04_应用场景素材",
+    "05_测试验证素材",
+)
+
+
+@dataclass(frozen=True)
+class ProductMaterialProgress:
+    name: str
+    raw_path: str
+    status: str
+    total_file_count: int
+    registered_file_count: int
+    pending_registration_count: int
+    pending_processing_count: int
+    pdf_progress: str
+    video_progress: str
 
 
 @dataclass(frozen=True)
@@ -65,6 +85,10 @@ class PartitionSummary:
     video_total_count: int
     video_processed_count: int
     video_pending_count: int
+    product_material_status: str
+    product_pending_subfolder_count: int
+    product_pending_registration_count: int
+    product_material_progress: tuple[ProductMaterialProgress, ...]
     recognized_unapplied_count: int
     review_item_count: int
     last_raw_changed_at: str | None
@@ -166,6 +190,10 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
     fingerprint = build_fingerprint(paths, definition) if primary_raw_dir.exists() else None
     previous = load_partition_snapshot(paths, definition.slug)
     processing = _processing_counts(paths, primary_files)
+    product_progress = _product_material_progress(paths, definition) if definition.partition_type == "product" else ()
+    product_pending_registration_count = sum(item.pending_registration_count for item in product_progress)
+    product_pending_subfolder_count = sum(1 for item in product_progress if item.status != "complete")
+    product_material_status = _product_material_status(product_progress)
 
     recognized_unapplied_count = _count_json_files(paths.generated_dir / "cache" / "recognized-unapplied" / definition.slug)
     review_item_count = _count_json_files(paths.generated_dir / "cache" / "review-items" / definition.slug)
@@ -188,12 +216,13 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
         pending_material_count = 0
     else:
         status = "ready"
-        pending_material_count = 0
+        pending_material_count = product_pending_registration_count
 
     recommended_next_action = recommend_next_action(
         status=status,
         pending_material_count=pending_material_count,
         pending_processing_count=processing["pending_processing_count"],
+        product_pending_subfolder_count=product_pending_subfolder_count,
         recognized_unapplied_count=recognized_unapplied_count,
         review_item_count=review_item_count,
     )
@@ -213,6 +242,10 @@ def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> Part
         video_total_count=processing["video_total_count"],
         video_processed_count=processing["video_processed_count"],
         video_pending_count=processing["video_pending_count"],
+        product_material_status=product_material_status,
+        product_pending_subfolder_count=product_pending_subfolder_count,
+        product_pending_registration_count=product_pending_registration_count,
+        product_material_progress=product_progress,
         recognized_unapplied_count=recognized_unapplied_count,
         review_item_count=review_item_count,
         last_raw_changed_at=_format_timestamp(fingerprint.latest_mtime) if fingerprint else None,
@@ -229,6 +262,7 @@ def recommend_next_action(
     recognized_unapplied_count: int = 0,
     review_item_count: int = 0,
     pending_processing_count: int = 0,
+    product_pending_subfolder_count: int = 0,
 ) -> str:
     if status == "needs_update":
         return "update_first"
@@ -242,6 +276,8 @@ def recommend_next_action(
         return "continue_reading"
     if pending_material_count > 0:
         return "continue_reading"
+    if product_pending_subfolder_count > 0:
+        return "prepare_raw"
     if status == "ready":
         return "use_existing"
     return "prepare_raw"
@@ -332,6 +368,76 @@ def _processing_counts(paths: ProjectPaths, primary_files: list[Path]) -> dict[s
         "video_processed_count": video_processed,
         "video_pending_count": video_pending,
     }
+
+
+def _product_material_progress(
+    paths: ProjectPaths,
+    definition: PartitionDefinition,
+) -> tuple[ProductMaterialProgress, ...]:
+    product_dir = paths.raw_dir / definition.primary_raw_path
+    registered_sources = _registered_source_paths(paths, definition)
+    progress: list[ProductMaterialProgress] = []
+    for subfolder in PRODUCT_MATERIAL_SUBFOLDERS:
+        subfolder_dir = product_dir / subfolder
+        files = list(_iter_files(subfolder_dir)) if subfolder_dir.exists() else []
+        processing = _processing_counts(paths, files)
+        registered_count = sum(1 for path in files if _raw_relative(path, paths) in registered_sources)
+        pending_registration_count = len(files) - registered_count
+        if not files:
+            status = "not_started"
+        elif pending_registration_count > 0 or processing["pending_processing_count"] > 0:
+            status = "in_progress"
+        else:
+            status = "complete"
+        progress.append(
+            ProductMaterialProgress(
+                name=subfolder,
+                raw_path=str(subfolder_dir),
+                status=status,
+                total_file_count=len(files),
+                registered_file_count=registered_count,
+                pending_registration_count=pending_registration_count,
+                pending_processing_count=processing["pending_processing_count"],
+                pdf_progress=f"{processing['pdf_processed_count']}/{processing['pdf_total_count']}",
+                video_progress=f"{processing['video_processed_count']}/{processing['video_total_count']}",
+            )
+        )
+    return tuple(progress)
+
+
+def _product_material_status(progress: tuple[ProductMaterialProgress, ...]) -> str:
+    if not progress:
+        return "not_applicable"
+    if all(item.status == "complete" for item in progress):
+        return "complete"
+    if any(item.total_file_count > 0 for item in progress):
+        return "in_progress"
+    return "not_started"
+
+
+def _registered_source_paths(paths: ProjectPaths, definition: PartitionDefinition) -> set[str]:
+    evidence_dir = paths.knowledge_dir / "证据" / definition.slug
+    if not evidence_dir.exists():
+        return set()
+    sources: set[str] = set()
+    for card_path in evidence_dir.rglob("*.md"):
+        if not card_path.is_file():
+            continue
+        try:
+            frontmatter = parse_frontmatter(card_path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        for source_path in frontmatter.get("source_paths", []):
+            if isinstance(source_path, str) and source_path.startswith("raw/"):
+                sources.add(source_path[4:])
+    return sources
+
+
+def _raw_relative(path: Path, paths: ProjectPaths) -> str:
+    try:
+        return path.relative_to(paths.raw_dir).as_posix()
+    except ValueError:
+        return path.resolve().relative_to(paths.raw_dir.resolve()).as_posix()
 
 
 def _pdf_text_available(paths: ProjectPaths, pdf_path: Path) -> bool:

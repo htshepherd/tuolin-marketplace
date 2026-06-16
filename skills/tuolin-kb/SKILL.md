@@ -109,8 +109,11 @@ Rules:
 - Product partitions may include the core upstream queue in their fingerprint.
 - If the user says “高硅氧纤维隔热带资料” without adhesive/non-adhesive, ask them to choose or recommend one explicit partition.
 - Missing or empty raw folders should produce `prepare_raw`, not a fake complete knowledge result.
-- Do not say a partition is “整理完了” unless `pending_material_count`, `pending_processing_count`, `review_item_count`, and `recognized_unapplied_count` are all zero.
-- `ready` means business knowledge can be used; it does not by itself mean all PDFs and videos have been deeply processed. Always report PDF and video progress separately.
+- Do not say a partition is “整理完了” unless `pending_material_count`, `pending_processing_count`, `review_item_count`, `recognized_unapplied_count`, and product material progress are all clear.
+- `ready` means business knowledge can be used; it does not by itself mean every raw file has been registered or every PDF/video has been deeply processed.
+- For product partitions, always report progress for the five fixed product subfolders: `01_检测报告与认证`, `02_产品图片`, `03_产品视频`, `04_应用场景素材`, and `05_测试验证素材`.
+- Product status answers must distinguish “业务可用” from “素材处理完成”. If any fixed product subfolder is `not_started` or `in_progress`, say the product can be used only as current knowledge, and there is still material work left.
+- Always report PDF and video processing progress separately, because registered evidence does not mean OCR or video keyframes are complete.
 
 ## Partition Scope Protocol
 

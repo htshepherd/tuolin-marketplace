@@ -219,6 +219,8 @@ def _partition_totals(partitions: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "pending_material_count": sum(item["pending_material_count"] for item in partitions),
         "pending_processing_count": sum(item.get("pending_processing_count", 0) for item in partitions),
+        "product_pending_registration_count": sum(item.get("product_pending_registration_count", 0) for item in partitions),
+        "product_pending_subfolder_count": sum(item.get("product_pending_subfolder_count", 0) for item in partitions),
         "pdf_pending_count": sum(item.get("pdf_pending_count", 0) for item in partitions),
         "video_pending_count": sum(item.get("video_pending_count", 0) for item in partitions),
         "recognized_unapplied_count": sum(item["recognized_unapplied_count"] for item in partitions),
@@ -253,6 +255,9 @@ def _interface_revision(cards: list[dict[str, Any]], partition_summaries: list[d
                 "fingerprint": item["fingerprint"],
                 "review_item_count": item["review_item_count"],
                 "recognized_unapplied_count": item["recognized_unapplied_count"],
+                "product_material_status": item.get("product_material_status"),
+                "product_pending_registration_count": item.get("product_pending_registration_count"),
+                "product_pending_subfolder_count": item.get("product_pending_subfolder_count"),
             }
             for item in partition_summaries
         ],

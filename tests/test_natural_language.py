@@ -107,6 +107,11 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertEqual(quartz["pdf_progress"], "0/1")
             self.assertEqual(quartz["video_progress"], "0/1")
             self.assertEqual(quartz["pending_processing_count"], 2)
+            self.assertEqual(quartz["product_material_status"], "整理中")
+            self.assertEqual(len(quartz["product_material_progress"]), 5)
+            self.assertEqual(quartz["product_material_progress"][0]["name"], "01_检测报告与认证")
+            self.assertEqual(quartz["product_material_progress"][2]["name"], "03_产品视频")
+            self.assertEqual(quartz["product_pending_subfolder_count"], 5)
 
     def test_full_rebuild_request_returns_partition_queue_and_waits_for_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
