@@ -119,6 +119,28 @@ class ReviewWorkflowTests(unittest.TestCase):
             self.assertTrue((paths.generated_dir / "reports" / "REVIEW_REPORT.md").exists())
             self.assertIn("复核处理", (paths.knowledge_dir / "变更记录.md").read_text(encoding="utf-8"))
 
+    def test_apply_review_recovers_corrupt_changelog_before_appending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_quartz_review_fixture(paths)
+            (paths.knowledge_dir / "变更记录.md").write_bytes(b"\xff\xfeold changelog")
+
+            preview = create_review_preview(paths, "review_item/quartz_fiber_tape/product_facts_pending", "approve_external")
+            apply_review_decision(
+                paths,
+                "review_item/quartz_fiber_tape/product_facts_pending",
+                "approve_external",
+                preview.confirmation_token,
+                reviewer="kkid",
+            )
+
+            changelog = (paths.knowledge_dir / "变更记录.md").read_text(encoding="utf-8")
+            self.assertIn("# 变更记录", changelog)
+            self.assertIn("复核处理", changelog)
+            self.assertTrue((paths.generated_dir / "reports" / "NAVIGATION_RECOVERY_REPORT.md").exists())
+            backups = list((paths.generated_dir / "cache" / "navigation-backups").rglob("变更记录-*.md"))
+            self.assertTrue(backups)
+
     def test_reject_archives_review_without_updating_affected_card(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

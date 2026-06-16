@@ -83,6 +83,24 @@ class ProductOrganizerTests(unittest.TestCase):
             self.assertEqual(summary.review_item_count, 1)
             self.assertEqual(summary.recommended_next_action, "review_required")
 
+    def test_product_organizer_recovers_corrupt_homepage_without_blocking_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            (paths.knowledge_dir / "首页.md").write_bytes(b"\xff\xfeold navigation")
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            report.write_text("fake pdf", encoding="utf-8")
+
+            organize_product_partition(paths, "石英纤维隔热带")
+
+            self.assertTrue((paths.knowledge_dir / "产品" / "石英纤维隔热带.md").exists())
+            homepage = (paths.knowledge_dir / "首页.md").read_text(encoding="utf-8")
+            self.assertIn("# 拓霖知识库", homepage)
+            self.assertIn("产品", homepage)
+            self.assertTrue((paths.generated_dir / "reports" / "NAVIGATION_RECOVERY_REPORT.md").exists())
+            backups = list((paths.generated_dir / "cache" / "navigation-backups").rglob("首页-*.md"))
+            self.assertTrue(backups)
+
     def test_product_organizer_rejects_ambiguous_high_silica(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .generated_index import rebuild_generated_indexes
+from .navigation import refresh_navigation
 from .partitions import PARTITIONS
 from .project_layout import ProjectPaths
 
@@ -83,6 +84,7 @@ def organize_core_upstream(paths: ProjectPaths) -> CoreUpstreamResult:
             recognized_paths.append(str(_write_recognized_unapplied(paths, slug, candidate, evidence_id, candidate_id, review_id)))
 
     _write_last_run(paths, candidates, evidence_ids, candidate_ids, review_ids)
+    refresh_navigation(paths, reason="organize_core_upstream")
     generated_summary = rebuild_generated_indexes(paths)
     return CoreUpstreamResult(
         preview_path=str(preview_path),

@@ -16,6 +16,7 @@ This skill is part of `tuolin-marketplace`. The marketplace may contain multiple
 - Treat `generated/` as rebuildable output. Do not ask humans to maintain it manually.
 - Treat `config/tuolin-okf-profile/` as the card template profile. Initialize it automatically; ordinary users do not configure templates by hand.
 - Use Chinese business titles for card filenames, the `title` field, and user-visible summaries. English names belong in `id` or `aliases`, not as the main title.
+- Treat `knowledge/okf/首页.md` and `knowledge/okf/变更记录.md` as rebuildable navigation files, not fact sources.
 - MinerU and ffmpeg may be called as internal local tools by Codex.
 - On Windows, check local dependencies before first use.
 
@@ -149,6 +150,7 @@ Rules:
 - Do not create free-form Markdown directly under `knowledge/okf/` as a completed knowledge result. Formal knowledge must be written as one of the ten card types.
 - Do not ask the user to request technical card checks. Validate and rebuild the generated interface before reporting that materials are organized.
 - Keep the main card title in Chinese. Put English product names, test names, platform names, and customer wording into `aliases`, evidence text, or source paths.
+- If `首页.md` or `变更记录.md` cannot be patched because of old encoding, stale text, or merge mismatch, do not ask the user what to do. Back up the old navigation file under `generated/cache/navigation-backups/`, rebuild the navigation file, continue writing formal cards, then validate and refresh `generated/`.
 - Do not let market, sales, or customer materials create product facts.
 - Images and videos can support appearance or content-asset notes only; performance, certification, safety, and compliance claims require reports, standards, or human confirmation.
 - Keep temporary manual-judgment materials out of official knowledge until a human decides where they belong.
@@ -196,7 +198,7 @@ Rules:
 
 - Do not modify an existing `official` card through this generic path.
 - Do not create facts from a review item body automatically.
-- After applying a decision, update `knowledge/okf/变更记录.md`, archive the review item, refresh `generated/`, and keep the review record for traceability.
+- After applying a decision, update `knowledge/okf/变更记录.md`, archive the review item, refresh `generated/`, and keep the review record for traceability. If the changelog cannot be appended cleanly, back it up, rebuild it, append the decision, and continue without asking the user.
 
 ## Generated Agent Interface
 

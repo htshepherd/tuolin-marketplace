@@ -9,6 +9,7 @@ from typing import Any
 
 from .card_validator import parse_frontmatter, validate_card_file
 from .generated_index import rebuild_generated_indexes
+from .navigation import append_changelog_entry, refresh_navigation
 from .partitions import find_partition
 from .project_layout import ProjectPaths
 
@@ -143,6 +144,7 @@ def apply_review_decision(
     archived_review_path = _archive_review_item(review_path, review_frontmatter, decision, reviewer)
     changelog_path = _append_changelog(paths, review_id, decision, updated_cards, reviewer)
     _write_review_report(paths, review_id, decision, updated_cards, archived_review_path)
+    refresh_navigation(paths, reason="apply_review")
     generated_summary = rebuild_generated_indexes(paths)
     return ApplyReviewResult(
         review_id=review_id,
@@ -264,21 +266,13 @@ def _archive_review_item(review_path: Path, frontmatter: dict[str, Any], decisio
 
 
 def _append_changelog(paths: ProjectPaths, review_id: str, decision: str, updated_cards: list[str], reviewer: str) -> Path:
-    path = paths.knowledge_dir / "变更记录.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text("# 变更记录\n\n", encoding="utf-8")
-    lines = [
-        "",
-        f"## {_now()} 复核处理",
-        "",
+    entries = [
         f"- 复核项：`{review_id}`",
         f"- 处理方式：`{decision}`",
         f"- 确认人：{reviewer}",
         f"- 更新卡片：{', '.join(f'`{card_id}`' for card_id in updated_cards) if updated_cards else '无'}",
     ]
-    path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n" + "\n".join(lines) + "\n", encoding="utf-8")
-    return path
+    return append_changelog_entry(paths, "复核处理", entries, reason="apply_review")
 
 
 def _write_review_report(

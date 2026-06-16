@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .generated_index import rebuild_generated_indexes
+from .navigation import refresh_navigation
 from .partitions import PartitionDefinition, find_partition, mark_partition_organized
 from .product_organizer import OrganizeResult as ProductOrganizeResult
 from .product_organizer import organize_product_partition
@@ -78,6 +79,7 @@ def _organize_domain_partition(paths: ProjectPaths, definition: PartitionDefinit
         review_cards.append(review_id)
 
     mark_partition_organized(paths, definition)
+    refresh_navigation(paths, reason="organize_partition")
     generated_summary = rebuild_generated_indexes(paths)
     return PartitionOrganizeResult(
         partition_name=definition.name,
@@ -98,6 +100,7 @@ def _organize_migration_buffer(paths: ProjectPaths, definition: PartitionDefinit
     review_cards = [_write_migration_review_item(paths, definition, raw_file) for raw_file in raw_files]
     report_path = _write_migration_report(paths, raw_files)
     mark_partition_organized(paths, definition)
+    refresh_navigation(paths, reason="organize_manual_review_buffer")
     generated_summary = rebuild_generated_indexes(paths)
     return PartitionOrganizeResult(
         partition_name=definition.name,

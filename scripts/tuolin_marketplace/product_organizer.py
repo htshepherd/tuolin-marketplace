@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .generated_index import rebuild_generated_indexes
+from .navigation import refresh_navigation
 from .partitions import PartitionDefinition, find_partition, mark_partition_organized
 from .project_layout import ProjectPaths
 
@@ -57,6 +58,7 @@ def organize_product_partition(paths: ProjectPaths, partition_query: str) -> Org
     product_id = _write_product_card(paths, definition, evidence_ids, [review_id])
 
     mark_partition_organized(paths, definition)
+    refresh_navigation(paths, reason="organize_product")
     generated_summary = rebuild_generated_indexes(paths)
     return OrganizeResult(
         partition_name=definition.name,
