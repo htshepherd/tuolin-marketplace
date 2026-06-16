@@ -1,0 +1,47 @@
+schema_version: "2.0"
+profile_name: tuolin-okf-profile
+card_types:
+  - product
+  - application_scenario
+  - standard
+  - company_capability
+  - market_intelligence
+  - sales_material
+  - customer_question
+  - content_asset
+  - evidence
+  - review_item
+card_statuses:
+  - draft
+  - review_required
+  - official
+  - archived
+usage_scopes:
+  - external_allowed
+  - internal_only
+  - review_before_external
+  - evidence_only
+  - not_answerable
+evidence_confidence:
+  - high
+  - medium
+  - low
+  - unusable
+id_pattern: "^[a-z0-9_/-]+$"
+knowledge_navigation_files:
+  - "首页.md"
+  - "变更记录.md"
+required_common_fields:
+  - card_template_version
+  - type
+  - id
+  - title
+  - aliases
+  - status
+  - usage_scope
+  - raw_partitions
+  - tags
+  - updated_at
+  - last_reviewed_at
+  - evidence_refs
+  - review_refs

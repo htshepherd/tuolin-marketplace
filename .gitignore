@@ -1,0 +1,28 @@
+# Local enterprise data and generated outputs
+raw/
+knowledge/
+generated/
+doc/
+*.local.json
+*.secret.json
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/

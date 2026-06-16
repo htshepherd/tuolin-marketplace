@@ -1,0 +1,34 @@
+{
+  "name": "tuolin-marketplace",
+  "version": "0.1.0",
+  "description": "Tuolin Agent marketplace for Codex, starting with the local knowledge base agent.",
+  "author": {
+    "name": "Tianjin Tuolin"
+  },
+  "repository": "https://github.com/htshepherd/tuolin-marketplace",
+  "license": "MIT",
+  "keywords": [
+    "tuolin",
+    "codex",
+    "knowledge-base",
+    "agents"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Tuolin Marketplace",
+    "shortDescription": "Tuolin business agents for Codex.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace.",
+    "developerName": "Tianjin Tuolin",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "整理一下拓霖知识库。",
+      "查看当前还有哪些资料需要继续整理。",
+      "有哪些内容需要我确认？"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

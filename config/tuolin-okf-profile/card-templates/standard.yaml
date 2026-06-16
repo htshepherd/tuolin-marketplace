@@ -1,0 +1,8 @@
+card_template_version: standard-card-v1
+type: standard
+required_fields:
+  - standard_region
+  - standard_code
+  - related_products
+  - applicability_notes
+

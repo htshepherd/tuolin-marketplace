@@ -1,0 +1,7 @@
+card_template_version: review-item-card-v1
+type: review_item
+required_fields:
+  - review_reason
+  - affected_cards
+  - decision_options
+  - blocking_level

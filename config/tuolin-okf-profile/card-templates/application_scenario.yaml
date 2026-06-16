@@ -1,0 +1,7 @@
+card_template_version: application-scenario-card-v1
+type: application_scenario
+required_fields:
+  - scenario_category
+  - related_products
+  - usable_channels
+

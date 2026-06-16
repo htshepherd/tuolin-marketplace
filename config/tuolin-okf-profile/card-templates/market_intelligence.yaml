@@ -1,0 +1,8 @@
+card_template_version: market-intelligence-card-v1
+type: market_intelligence
+required_fields:
+  - intelligence_type
+  - market_region
+  - data_time_range
+  - related_products
+

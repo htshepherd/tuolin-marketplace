@@ -1,0 +1,8 @@
+card_template_version: customer-question-card-v1
+type: customer_question
+required_fields:
+  - question_category
+  - customer_channel
+  - related_products
+  - response_status
+

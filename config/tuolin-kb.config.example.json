@@ -1,0 +1,12 @@
+{
+  "schema_version": "2.0",
+  "project_name": "tuolin-local-kb",
+  "raw_dir": "raw",
+  "knowledge_dir": "knowledge/okf",
+  "generated_dir": "generated",
+  "ffmpeg_path": "ffmpeg",
+  "mineru_command": "mineru",
+  "codex_client_only": true,
+  "user_cli_supported": false
+}
+

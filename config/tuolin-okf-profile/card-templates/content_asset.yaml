@@ -1,0 +1,8 @@
+card_template_version: content-asset-card-v1
+type: content_asset
+required_fields:
+  - asset_category
+  - media_types
+  - related_products
+  - usable_for
+

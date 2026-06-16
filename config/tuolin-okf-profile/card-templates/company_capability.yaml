@@ -1,0 +1,5 @@
+card_template_version: company-capability-card-v1
+type: company_capability
+required_fields:
+  - capability_area
+
