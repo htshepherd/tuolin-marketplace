@@ -66,6 +66,33 @@ class ProductOrganizerTests(unittest.TestCase):
             self.assertTrue((paths.knowledge_dir / "产品" / "石英纤维隔热带.md").exists())
             self.assertFalse((paths.knowledge_dir / "产品" / "陶瓷纤维隔热带.md").exists())
 
+    def test_product_organizer_only_uses_the_requested_product_raw_partition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz_raw = paths.raw_dir / "01_产品" / "02_石英纤维隔热带"
+            (quartz_raw / "01_检测报告与认证" / "report.pdf").write_text("fake pdf", encoding="utf-8")
+            (paths.raw_dir / "00_知识库核心资料" / "01_产品核心资料" / "石英核心.md").write_text(
+                "石英核心资料",
+                encoding="utf-8",
+            )
+            (paths.raw_dir / "04_市场情报" / "01_市场现状与平台调研" / "石英市场.md").write_text(
+                "石英市场资料",
+                encoding="utf-8",
+            )
+            (paths.raw_dir / "05_销售物料" / "01_Datasheet" / "石英datasheet.md").write_text(
+                "Special Glass Fiber Tape",
+                encoding="utf-8",
+            )
+
+            organize_product_partition(paths, "石英纤维隔热带")
+
+            cards = json.loads((paths.generated_dir / "indexes" / "cards.json").read_text(encoding="utf-8"))
+            for card in cards:
+                self.assertEqual(card["raw_partitions"], ["raw/01_产品/02_石英纤维隔热带/"])
+                for source_path in card.get("source_paths", []):
+                    self.assertTrue(source_path.startswith("raw/01_产品/02_石英纤维隔热带/"))
+
     def test_product_organizer_marks_partition_pending_review_after_generation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

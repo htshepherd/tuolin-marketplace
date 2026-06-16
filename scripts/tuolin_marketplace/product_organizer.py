@@ -88,10 +88,7 @@ def _write_product_card(
         "status": "draft",
         "usage_scope": "review_before_external",
         "product_line": "耐高温隔热带",
-        "raw_partitions": [
-            "raw/00_知识库核心资料/",
-            f"raw/{definition.primary_raw_path}/",
-        ],
+        "raw_partitions": [f"raw/{definition.primary_raw_path}/"],
         "tags": ["产品", "隔热带"],
         "updated_at": _now(),
         "last_reviewed_at": "",
@@ -242,10 +239,7 @@ def _write_review_item_card(paths: ProjectPaths, definition: PartitionDefinition
         "aliases": [],
         "status": "review_required",
         "usage_scope": "not_answerable",
-        "raw_partitions": [
-            "raw/00_知识库核心资料/",
-            f"raw/{definition.primary_raw_path}/",
-        ],
+        "raw_partitions": [f"raw/{definition.primary_raw_path}/"],
         "tags": ["复核", definition.name],
         "updated_at": _now(),
         "last_reviewed_at": "",

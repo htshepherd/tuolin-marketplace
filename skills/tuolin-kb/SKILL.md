@@ -116,6 +116,8 @@ Use `organize_product.py` for the Slice 05 product tracer after the user confirm
 
 Current behavior:
 
+- A product name always means the matching folder under `raw/01_产品/`. For example, `石英纤维隔热带` means exactly `raw/01_产品/02_石英纤维隔热带/`.
+- When organizing a product partition, do not search or merge `raw/00_知识库核心资料/`, `raw/04_市场情报/`, `raw/05_销售物料/`, `raw/06_客户问题与客服反馈/`, `raw/90_待迁移素材暂存区/`, or `generated/cache/pdf-markdown/`.
 - Generates a draft product card.
 - Generates evidence cards for raw files.
 - Generates content asset cards for images and videos.
@@ -152,6 +154,7 @@ Rules:
 - Do not create free-form Markdown directly under `knowledge/okf/` as a completed knowledge result. Formal knowledge must be written as one of the ten card types.
 - Do not ask the user to request technical card checks. Validate and rebuild the generated interface before reporting that materials are organized.
 - Keep the main card title in Chinese. Put English product names, test names, platform names, and customer wording into `aliases`, evidence text, or source paths.
+- Do not broaden a product organization request by keyword search. Related sales, market, customer-service, core, or cached PDF materials must be handled by their own explicit flow.
 - If `首页.md` or `变更记录.md` cannot be patched because of old encoding, stale text, or merge mismatch, do not ask the user what to do. Back up the old navigation file under `generated/cache/navigation-backups/`, rebuild the navigation file, continue writing formal cards, then validate and refresh `generated/`.
 - Do not let market, sales, or customer materials create product facts.
 - Images and videos can support appearance or content-asset notes only; performance, certification, safety, and compliance claims require reports, standards, or human confirmation.
