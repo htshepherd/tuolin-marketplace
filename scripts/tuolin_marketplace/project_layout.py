@@ -118,7 +118,7 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
             "knowledge_dir": "knowledge/okf",
             "generated_dir": "generated",
         }
-    with config_path.open("r", encoding="utf-8") as handle:
+    with config_path.open("r", encoding="utf-8-sig") as handle:
         return json.load(handle)
 
 

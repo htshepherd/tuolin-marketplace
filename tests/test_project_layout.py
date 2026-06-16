@@ -8,6 +8,7 @@ from scripts.tuolin_marketplace.project_layout import (
     KNOWLEDGE_DIRS,
     ProjectPaths,
     initialize_project,
+    load_config,
     resolve_paths,
     validate_path_boundaries,
 )
@@ -52,6 +53,15 @@ class ProjectLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as raw:
             paths = resolve_paths(Path(project), {"raw_dir": raw})
             self.assertEqual(paths.raw_dir, Path(raw).resolve())
+
+    def test_load_config_accepts_windows_utf8_bom(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "tuolin-kb.config.json"
+            config_path.write_text('{"raw_dir": "raw"}', encoding="utf-8-sig")
+
+            config = load_config(config_path)
+
+            self.assertEqual(config["raw_dir"], "raw")
 
 
 if __name__ == "__main__":
