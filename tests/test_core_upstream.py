@@ -27,8 +27,26 @@ class CoreUpstreamTests(unittest.TestCase):
             self.assertIsNone(result.generated_summary)
 
             preview = json.loads(Path(result.preview_path).read_text(encoding="utf-8"))
+            self.assertEqual(preview["source_root"], "raw/00_知识库核心资料/")
             self.assertEqual(preview["candidates"][0]["related_product_slugs"], ["quartz_fiber_tape"])
             self.assertIn("不会移动", preview["note"])
+
+    def test_core_upstream_ignores_other_folders_named_core_materials(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            official_core = paths.raw_dir / "00_知识库核心资料" / "01_产品核心资料" / "石英纤维资料.md"
+            official_core.write_text("石英纤维隔热带核心资料", encoding="utf-8")
+            temp_core = paths.raw_dir / "90_待迁移素材暂存区" / "00_核心资料PDF暂存" / "不应计入核心资料.pdf"
+            temp_core.parent.mkdir(parents=True, exist_ok=True)
+            temp_core.write_text("temporary pdf", encoding="utf-8")
+
+            result = preview_core_upstream(paths)
+
+            self.assertEqual(result.candidate_count, 1)
+            preview = json.loads(Path(result.preview_path).read_text(encoding="utf-8"))
+            source_paths = [candidate["source_path"] for candidate in preview["candidates"]]
+            self.assertEqual(source_paths, ["raw/00_知识库核心资料/01_产品核心资料/石英纤维资料.md"])
 
     def test_core_upstream_generates_candidate_cards_and_review_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

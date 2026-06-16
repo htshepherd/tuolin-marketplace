@@ -12,6 +12,7 @@ This skill is part of `tuolin-marketplace`. The marketplace may contain multiple
 - Use this only through the Codex client.
 - Do not present scripts as a user-facing standalone CLI product.
 - Treat `raw/` as original evidence. Do not move, rename, delete, or write generated files into raw.
+- Treat “核心资料” as exactly `raw/00_知识库核心资料/`. No other folder is allowed to mean core materials.
 - Treat `knowledge/okf/` as the official knowledge layer. Human-confirmed card edits live here.
 - Treat `generated/` as rebuildable output. Do not ask humans to maintain it manually.
 - Treat `config/tuolin-okf-profile/` as the card template profile. Initialize it automatically; ordinary users do not configure templates by hand.
@@ -168,6 +169,7 @@ Use `organize_core_upstream.py` only after the user confirms that Codex may整�
 Current behavior:
 
 - Scans only `raw/00_知识库核心资料/`.
+- Never include temporary folders whose names contain “核心资料”, including `raw/90_待迁移素材暂存区/00_核心资料PDF暂存/`; those belong to migration/manual judgment, not the core upstream queue.
 - Does not treat core materials as a long-term business partition.
 - Generates evidence cards for core source files.
 - Routes customer answers to draft customer question cards.

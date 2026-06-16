@@ -20,6 +20,8 @@ CORE_UPSTREAM_DIRS = {
     "04_公共内容素材": "public_content_asset",
 }
 
+CORE_UPSTREAM_RAW_DIR = "00_知识库核心资料"
+
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
 DOCUMENT_SUFFIXES = {".pdf", ".md", ".docx", ".doc", ".xlsx", ".xls", ".txt"}
@@ -98,7 +100,7 @@ def organize_core_upstream(paths: ProjectPaths) -> CoreUpstreamResult:
 
 
 def discover_core_candidates(paths: ProjectPaths) -> list[CoreCandidate]:
-    core_dir = paths.raw_dir / "00_知识库核心资料"
+    core_dir = paths.raw_dir / CORE_UPSTREAM_RAW_DIR
     if not core_dir.exists():
         return []
 
@@ -126,6 +128,7 @@ def discover_core_candidates(paths: ProjectPaths) -> list[CoreCandidate]:
 def _write_preview(paths: ProjectPaths, candidates: list[CoreCandidate]) -> Path:
     preview = {
         "generated_at": _now(),
+        "source_root": f"raw/{CORE_UPSTREAM_RAW_DIR}/",
         "note": "预览只说明核心资料可能如何进入知识卡片；不会移动、删除、重命名 raw，也不会写回 raw。",
         "candidate_count": len(candidates),
         "candidates": [
