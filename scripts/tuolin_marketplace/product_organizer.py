@@ -123,6 +123,7 @@ def _write_product_card(
 
 
 def _write_evidence_card(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> str:
+    _assert_file_in_product_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"evidence/{definition.slug}/{safe_name}"
     raw_relative = raw_file.relative_to(paths.raw_dir).as_posix()
@@ -160,6 +161,7 @@ def _write_evidence_card(paths: ProjectPaths, definition: PartitionDefinition, r
 
 
 def _write_content_asset_card(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path, evidence_id: str) -> str:
+    _assert_file_in_product_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"content_asset/{definition.slug}/{safe_name}"
     raw_relative = raw_file.relative_to(paths.raw_dir).as_posix()
@@ -195,6 +197,7 @@ def _write_content_asset_card(paths: ProjectPaths, definition: PartitionDefiniti
 
 
 def _write_application_scenario_card(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path, evidence_id: str) -> str:
+    _assert_file_in_product_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"application_scenario/{definition.slug}/{safe_name}"
     raw_relative = raw_file.relative_to(paths.raw_dir).as_posix()
@@ -263,6 +266,13 @@ def _write_review_item_card(paths: ProjectPaths, definition: PartitionDefinition
     ]
     _write_card(path, frontmatter, body)
     return card_id
+
+
+def _assert_file_in_product_partition(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> None:
+    try:
+        raw_file.resolve().relative_to((paths.raw_dir / definition.primary_raw_path).resolve())
+    except ValueError as exc:
+        raise ValueError(f"product organization cannot use files outside {definition.primary_raw_path}: {raw_file}") from exc
 
 
 def _write_card(path: Path, frontmatter: dict[str, Any], body_lines: list[str]) -> None:

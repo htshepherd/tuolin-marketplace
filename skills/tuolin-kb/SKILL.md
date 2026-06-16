@@ -110,6 +110,26 @@ Rules:
 - If the user says “高硅氧纤维隔热带资料” without adhesive/non-adhesive, ask them to choose or recommend one explicit partition.
 - Missing or empty raw folders should produce `prepare_raw`, not a fake complete knowledge result.
 
+## Partition Scope Protocol
+
+Every natural-language organization request must resolve to exactly one fixed raw folder before reading files:
+
+- `整理石英纤维隔热带资料` means only `raw/01_产品/02_石英纤维隔热带/`.
+- `整理公司资料` means only `raw/02_公司能力/`.
+- `整理标准资料` means only `raw/03_标准法规/`.
+- `整理市场资料` means only `raw/04_市场情报/`.
+- `整理销售物料` means only `raw/05_销售物料/`.
+- `整理客户问题` or `整理客服反馈` means only `raw/06_客户问题与客服反馈/`.
+- `整理不好判断归属的素材` means only `raw/90_待迁移素材暂存区/`.
+
+Rules:
+
+- Do not broaden any partition request by keyword search across other raw folders.
+- Do not use `generated/cache/` as source material for a partition organization request. Cache files are tool outputs and can only support the explicit file that produced them.
+- `fingerprint_raw_paths` can be broader for update detection, but write-time card generation must use only the resolved partition raw folder.
+- Cross-partition relations are allowed only as explicit references or review candidates; they do not authorize reading another partition during the current organization action.
+- All generated cards for a partition must have `raw_partitions` set to that partition's fixed raw folder. Evidence `source_paths` must also stay under that folder.
+
 ## Product Tracer
 
 Use `organize_product.py` for the Slice 05 product tracer after the user confirms a specific product partition.

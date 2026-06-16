@@ -114,6 +114,7 @@ def _organize_migration_buffer(paths: ProjectPaths, definition: PartitionDefinit
 
 
 def _write_domain_card(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path, evidence_id: str) -> str | None:
+    _assert_file_in_partition(paths, definition, raw_file)
     if definition.slug == "company_capability":
         return _write_company_capability_card(paths, definition, raw_file, evidence_id)
     if definition.slug == "standards":
@@ -283,6 +284,7 @@ def _base_frontmatter(
 
 
 def _write_evidence_card(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> str:
+    _assert_file_in_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"evidence/{definition.slug}/{safe_name}"
     raw_relative = raw_file.relative_to(paths.raw_dir).as_posix()
@@ -317,6 +319,7 @@ def _write_review_item_card(
     evidence_id: str,
     affected_card: str | None,
 ) -> str:
+    _assert_file_in_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"review_item/{definition.slug}/{safe_name}_review"
     path = paths.knowledge_dir / "复核项" / definition.slug / f"{safe_name}_review.md"
@@ -345,6 +348,7 @@ def _write_review_item_card(
 
 
 def _write_migration_review_item(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> str:
+    _assert_file_in_partition(paths, definition, raw_file)
     safe_name = _safe_stem(raw_file)
     card_id = f"review_item/{definition.slug}/{safe_name}_manual_review"
     path = paths.knowledge_dir / "复核项" / definition.slug / f"{safe_name}_manual_review.md"
@@ -369,6 +373,13 @@ def _write_migration_review_item(paths: ProjectPaths, definition: PartitionDefin
     }
     _write_card(path, frontmatter, _body("待人工判定", raw_file, "该暂存区只生成人工判定项，不直接生成正式业务卡。"))
     return card_id
+
+
+def _assert_file_in_partition(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> None:
+    try:
+        raw_file.resolve().relative_to((paths.raw_dir / definition.primary_raw_path).resolve())
+    except ValueError as exc:
+        raise ValueError(f"partition organization cannot use files outside {definition.primary_raw_path}: {raw_file}") from exc
 
 
 def _write_migration_report(paths: ProjectPaths, raw_files: list[Path]) -> Path:

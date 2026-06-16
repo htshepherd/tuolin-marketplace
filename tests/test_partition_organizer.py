@@ -120,6 +120,45 @@ class PartitionOrganizerTests(unittest.TestCase):
             self.assertEqual(list((paths.knowledge_dir / "产品").glob("*.md")), [])
             self.assertTrue(list((paths.knowledge_dir / "复核项").rglob("*.md")))
 
+    def test_each_domain_partition_only_uses_its_own_raw_folder(self) -> None:
+        cases = [
+            ("公司能力", "02_公司能力/01_公司介绍/石英公司.md", "raw/02_公司能力/"),
+            ("标准法规", "03_标准法规/01_中国标准/石英标准.pdf", "raw/03_标准法规/"),
+            ("市场情报", "04_市场情报/01_市场现状与平台调研/石英市场.md", "raw/04_市场情报/"),
+            ("销售物料", "05_销售物料/01_Datasheet/石英销售.md", "raw/05_销售物料/"),
+            ("客户问题/客服反馈", "06_客户问题与客服反馈/02_已归类问题素材/冒烟异味/石英客服.md", "raw/06_客户问题与客服反馈/"),
+            ("待迁移素材暂存区", "90_待迁移素材暂存区/90_待人工判定/石英暂存.mp4", "raw/90_待迁移素材暂存区/"),
+        ]
+        decoys = [
+            "00_知识库核心资料/01_产品核心资料/石英核心.md",
+            "01_产品/02_石英纤维隔热带/01_检测报告与认证/石英产品.pdf",
+            "04_市场情报/01_市场现状与平台调研/石英市场.md",
+            "05_销售物料/01_Datasheet/石英销售.md",
+            "06_客户问题与客服反馈/02_已归类问题素材/冒烟异味/石英客服.md",
+            "90_待迁移素材暂存区/90_待人工判定/石英暂存.mp4",
+        ]
+        for partition, target_relative, expected_prefix in cases:
+            with self.subTest(partition=partition):
+                with tempfile.TemporaryDirectory() as tmp:
+                    paths = resolve_paths(Path(tmp), {})
+                    initialize_project(paths)
+                    for relative in decoys:
+                        decoy = paths.raw_dir / relative
+                        decoy.parent.mkdir(parents=True, exist_ok=True)
+                        decoy.write_text("decoy", encoding="utf-8")
+                    target = paths.raw_dir / target_relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text("target", encoding="utf-8")
+
+                    organize_partition(paths, partition)
+
+                    cards = json.loads((paths.generated_dir / "indexes" / "cards.json").read_text(encoding="utf-8"))
+                    self.assertTrue(cards)
+                    for card in cards:
+                        self.assertEqual(card["raw_partitions"], [expected_prefix])
+                        for source_path in card.get("source_paths", []):
+                            self.assertTrue(source_path.startswith(expected_prefix), source_path)
+
     def test_manual_review_buffer_only_generates_report_and_review_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
