@@ -1,0 +1,20 @@
+{
+  "name": "tuolin-marketplace",
+  "interface": {
+    "displayName": "Tuolin Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "tuolin-marketplace",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
