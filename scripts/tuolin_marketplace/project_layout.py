@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -160,6 +161,7 @@ def validate_path_boundaries(paths: ProjectPaths) -> None:
 
 def initialize_project(paths: ProjectPaths, include_raw_template: bool = True) -> list[Path]:
     created: list[Path] = []
+    created.extend(_ensure_profile_config(paths.project_dir / "config" / "tuolin-okf-profile"))
     if include_raw_template:
         for relative in RAW_TEMPLATE_DIRS:
             created.extend(_ensure_dir(paths.raw_dir / relative))
@@ -187,6 +189,30 @@ def inspect_project(paths: ProjectPaths) -> dict[str, Any]:
             "首页.md": (paths.knowledge_dir / "首页.md").exists(),
             "变更记录.md": (paths.knowledge_dir / "变更记录.md").exists(),
         },
+        "profile_config": {
+            "profile.yaml": (paths.project_dir / "config" / "tuolin-okf-profile" / "profile.yaml").exists(),
+            "card_templates": {
+                name: (
+                    paths.project_dir
+                    / "config"
+                    / "tuolin-okf-profile"
+                    / "card-templates"
+                    / f"{name}.yaml"
+                ).exists()
+                for name in [
+                    "product",
+                    "application_scenario",
+                    "standard",
+                    "company_capability",
+                    "market_intelligence",
+                    "sales_material",
+                    "customer_question",
+                    "content_asset",
+                    "evidence",
+                    "review_item",
+                ]
+            },
+        },
         "knowledge_card_dirs": {
             name: (paths.knowledge_dir / name).is_dir() for name in KNOWLEDGE_DIRS
         },
@@ -209,6 +235,26 @@ def _ensure_file(path: Path, content: str) -> list[Path]:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return [path]
+
+
+def _ensure_profile_config(target_dir: Path) -> list[Path]:
+    source_dir = Path(__file__).resolve().parents[2] / "config" / "tuolin-okf-profile"
+    if not source_dir.exists():
+        return []
+
+    created: list[Path] = []
+    for source_path in sorted(source_dir.rglob("*")):
+        relative = source_path.relative_to(source_dir)
+        target_path = target_dir / relative
+        if source_path.is_dir():
+            created.extend(_ensure_dir(target_path))
+            continue
+        if target_path.exists():
+            continue
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        created.append(target_path)
+    return created
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

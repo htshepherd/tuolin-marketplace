@@ -25,6 +25,16 @@ class ProjectLayoutTests(unittest.TestCase):
                 self.assertTrue((paths.knowledge_dir / relative).is_dir(), relative)
             self.assertTrue((paths.generated_dir / "agent-interface" / "contexts").is_dir())
             self.assertTrue((paths.raw_dir / "01_产品" / "02_石英纤维隔热带").is_dir())
+            self.assertTrue((paths.project_dir / "config" / "tuolin-okf-profile" / "profile.yaml").is_file())
+            self.assertTrue(
+                (
+                    paths.project_dir
+                    / "config"
+                    / "tuolin-okf-profile"
+                    / "card-templates"
+                    / "product.yaml"
+                ).is_file()
+            )
 
     def test_path_boundaries_reject_nested_generated_in_raw(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

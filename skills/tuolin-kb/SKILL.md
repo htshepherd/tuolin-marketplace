@@ -14,6 +14,8 @@ This skill is part of `tuolin-marketplace`. The marketplace may contain multiple
 - Treat `raw/` as original evidence. Do not move, rename, delete, or write generated files into raw.
 - Treat `knowledge/okf/` as the official knowledge layer. Human-confirmed card edits live here.
 - Treat `generated/` as rebuildable output. Do not ask humans to maintain it manually.
+- Treat `config/tuolin-okf-profile/` as the card template profile. Initialize it automatically; ordinary users do not configure templates by hand.
+- Use Chinese business titles for card filenames, the `title` field, and user-visible summaries. English names belong in `id` or `aliases`, not as the main title.
 - MinerU and ffmpeg may be called as internal local tools by Codex.
 - On Windows, check local dependencies before first use.
 
@@ -76,9 +78,10 @@ When the user asks to set up the knowledge base:
 
 1. Confirm the target local knowledge project directory.
 2. Validate that `raw_dir`, `knowledge_dir`, and `generated_dir` do not overlap.
-3. Initialize `knowledge/okf/首页.md`, `knowledge/okf/变更记录.md`, the ten card directories, and generated output directories.
-4. If requested, create the raw template directory structure.
-5. Report the result in business language.
+3. Initialize `config/tuolin-okf-profile/profile.yaml` and the ten card templates.
+4. Initialize `knowledge/okf/首页.md`, `knowledge/okf/变更记录.md`, the ten card directories, and generated output directories.
+5. If requested, create the raw template directory structure.
+6. Report the result in business language.
 
 ## PDF And Video Boundary
 
@@ -143,6 +146,9 @@ Current behavior:
 Rules:
 
 - Do not fabricate official cards when materials are missing or incomplete.
+- Do not create free-form Markdown directly under `knowledge/okf/` as a completed knowledge result. Formal knowledge must be written as one of the ten card types.
+- Do not ask the user to request technical card checks. Validate and rebuild the generated interface before reporting that materials are organized.
+- Keep the main card title in Chinese. Put English product names, test names, platform names, and customer wording into `aliases`, evidence text, or source paths.
 - Do not let market, sales, or customer materials create product facts.
 - Images and videos can support appearance or content-asset notes only; performance, certification, safety, and compliance claims require reports, standards, or human confirmation.
 - Keep temporary manual-judgment materials out of official knowledge until a human decides where they belong.
