@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import os
+from pathlib import Path
+import re
 from typing import Any
 
 from .agent_interface import knowledge_status
 from .core_upstream import organize_core_upstream, preview_core_upstream
+from .linkedin_agent import (
+    confirm_linkedin_campaign_plan,
+    confirm_linkedin_chinese_draft,
+    create_linkedin_campaign_plan,
+    generate_linkedin_publishing_images,
+    is_linkedin_campaign_request,
+)
 from .partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_partitions, scan_partition
 from .partition_organizer import organize_partition
 from .project_layout import ProjectPaths
@@ -62,6 +72,10 @@ class NaturalLanguageResponse:
 def route_natural_language(paths: ProjectPaths, text: str) -> NaturalLanguageResponse:
     utterance = text.strip()
     confirmed = _is_confirmed(utterance)
+
+    linkedin_response = _linkedin_response(paths, utterance)
+    if linkedin_response is not None:
+        return linkedin_response
 
     if _is_status_request(utterance):
         return _status_response(paths)
@@ -135,6 +149,117 @@ def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:
         copyable_reply=_copyable_for(best),
         details=_summary_detail(best),
     )
+
+
+def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse | None:
+    if _is_linkedin_confirm_chinese_draft_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("确认中文总稿")
+        try:
+            result = confirm_linkedin_chinese_draft(campaign_dir)
+        except (RuntimeError, ValueError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_english_package",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                "已根据确认后的中文总稿生成英文发布包。"
+                f"每日英文贴文在：{Path(result.campaign_dir) / 'daily'}。"
+                "下一步如需生成配图，请提供透明背景 logo 和产品源图路径；仍不会自动发布。"
+            ),
+            copyable_reply=(
+                "生成 LinkedIn 配图，"
+                f"活动文件夹：{result.campaign_dir}，"
+                "logo：/path/to/transparent-logo.png，源图：/path/to/source-image.png"
+            ),
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_confirm_plan_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("确认策划")
+        try:
+            result = confirm_linkedin_campaign_plan(campaign_dir)
+        except (RuntimeError, ValueError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_chinese_draft",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                "已根据确认后的策划生成中文 30 天贴文总稿。"
+                f"请人工检查：{Path(result.campaign_dir) / '02_中文30天贴文总稿.md'}。"
+                "确认中文总稿后才会拆成英文每日发布文件。"
+            ),
+            copyable_reply=f"确认中文总稿，活动文件夹：{result.campaign_dir}",
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_image_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        logo_path = _extract_linkedin_path(utterance, ["logo", "Logo", "透明logo", "透明背景logo"])
+        source_path = _extract_linkedin_path(utterance, ["源图", "产品源图", "source-image", "source_image"])
+        missing = []
+        if campaign_dir is None:
+            missing.append("活动文件夹")
+        if logo_path is None:
+            missing.append("透明背景 logo")
+        if source_path is None:
+            missing.append("产品源图")
+        if missing:
+            return NaturalLanguageResponse(
+                intent="linkedin_image_assets",
+                executed=False,
+                needs_confirmation=True,
+                message=(
+                    "生成 LinkedIn 配图还需要："
+                    f"{'、'.join(missing)}。logo 必须是透明背景 PNG/WebP；"
+                    "tags 会按每日主题生成，不写进配置文件。"
+                ),
+                copyable_reply=(
+                    "生成 LinkedIn 配图，"
+                    "活动文件夹：/path/to/campaign，"
+                    "logo：/path/to/transparent-logo.png，源图：/path/to/source-image.png"
+                ),
+            )
+        try:
+            result = generate_linkedin_publishing_images(campaign_dir, logo_path, source_path)
+        except (RuntimeError, ValueError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_image_assets",
+            executed=True,
+            needs_confirmation=False,
+            message=(
+                "已生成 30 张 LinkedIn 发布配图，并把每张图写回对应 daily/day-XX.md。"
+                f"配图目录：{Path(result.campaign_dir) / 'assets' / 'publishing-images'}。"
+                "这一步只生成文件，不会自动发布。"
+            ),
+            details=result.to_dict(),
+        )
+
+    if is_linkedin_campaign_request(utterance):
+        try:
+            result = create_linkedin_campaign_plan(paths, utterance, output_root=_linkedin_output_root())
+        except (RuntimeError, ValueError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_campaign_plan",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                "已生成 LinkedIn 30 天宣传策划包。"
+                f"请先检查策划文件：{Path(result.campaign_dir) / '01_中文策划.md'}。"
+                "确认策划后才会生成 30 天中文贴文总稿；不会自动发布。"
+            ),
+            copyable_reply=f"确认策划，活动文件夹：{result.campaign_dir}",
+            details=result.to_dict(),
+        )
+
+    return None
 
 
 def _pending_response(paths: ProjectPaths) -> NaturalLanguageResponse:
@@ -464,6 +589,77 @@ def _resolve_partition_from_text(utterance: str):
 
 def _is_confirmed(utterance: str) -> bool:
     return utterance.startswith("确认") or "确认，" in utterance
+
+
+def _linkedin_output_root() -> Path | None:
+    configured = os.environ.get("TUOLIN_LINKEDIN_OUTPUT_ROOT")
+    if not configured:
+        return None
+    return Path(configured).expanduser()
+
+
+def _is_linkedin_confirm_plan_request(utterance: str) -> bool:
+    return "确认策划" in utterance and _mentions_linkedin_context(utterance)
+
+
+def _is_linkedin_confirm_chinese_draft_request(utterance: str) -> bool:
+    return ("确认中文总稿" in utterance or "确认中文30天贴文总稿" in utterance) and _mentions_linkedin_context(
+        utterance
+    )
+
+
+def _is_linkedin_image_request(utterance: str) -> bool:
+    image_words = ["生成配图", "生成发布图", "生成图片", "生成 LinkedIn 配图", "生成领英配图"]
+    return any(word in utterance for word in image_words) and _mentions_linkedin_context(utterance)
+
+
+def _mentions_linkedin_context(utterance: str) -> bool:
+    return (
+        "LinkedIn" in utterance
+        or "Linkedin" in utterance
+        or "linkedin" in utterance
+        or "领英" in utterance
+        or "活动文件夹" in utterance
+        or "campaign-dir" in utterance
+        or "campaign_dir" in utterance
+    )
+
+
+def _extract_linkedin_path(utterance: str, labels: list[str]) -> Path | None:
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    stop_labels = (
+        "活动文件夹|campaign-dir|campaign_dir|logo|Logo|透明logo|透明背景logo|源图|产品源图|source-image|source_image"
+    )
+    match = re.search(
+        rf"(?:{label_pattern})\s*[：:=]\s*(.+?)(?=\s*(?:，|,)\s*(?:{stop_labels})\s*[：:=]|$)",
+        utterance,
+    )
+    if not match:
+        return None
+    value = match.group(1).strip().strip("'\"")
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
+def _linkedin_missing_campaign_dir_response(action: str) -> NaturalLanguageResponse:
+    return NaturalLanguageResponse(
+        intent="linkedin_campaign_dir_required",
+        executed=False,
+        needs_confirmation=True,
+        message=f"{action}需要提供活动文件夹路径，这样才能找到上一步生成的 campaign-manifest.json。",
+        copyable_reply=f"{action}，活动文件夹：/path/to/campaign",
+    )
+
+
+def _linkedin_operation_error_response(message: str) -> NaturalLanguageResponse:
+    return NaturalLanguageResponse(
+        intent="linkedin_operation_blocked",
+        executed=False,
+        needs_confirmation=True,
+        message=message,
+        copyable_reply="请切换到有效知识库项目目录，或先初始化知识库并重建 Agent读取接口。",
+    )
 
 
 def _is_confirm_recommended(utterance: str) -> bool:

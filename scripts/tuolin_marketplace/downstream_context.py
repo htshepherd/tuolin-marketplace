@@ -12,7 +12,10 @@ from .project_layout import ProjectPaths
 
 TASK_TYPES = {
     "youtube_video": {"audience": "external", "card_types": ["product", "application_scenario", "content_asset"]},
-    "linkedin_post": {"audience": "external", "card_types": ["product", "application_scenario", "sales_material"]},
+    "linkedin_post": {
+        "audience": "external",
+        "card_types": ["product", "application_scenario", "sales_material", "content_asset"],
+    },
     "outreach_email": {"audience": "external", "card_types": ["product", "application_scenario", "sales_material"]},
     "follow_up_email": {"audience": "external", "card_types": ["product", "sales_material", "customer_question"]},
     "video_script": {"audience": "external", "card_types": ["product", "application_scenario", "content_asset"]},
@@ -58,6 +61,7 @@ def build_downstream_context(
             "external_requires": "external_allowed",
             "review_items_are_facts": False,
             "contexts_are_formal_knowledge": False,
+            "content_assets_prove_product_facts": False,
         },
         "note": "下游任务上下文只用于本次任务，不是正式知识；不得扫描 raw，也不得把上下文结论写回 knowledge/okf/。",
     }
@@ -167,7 +171,7 @@ def _matches_query(card: dict[str, Any], query: str) -> bool:
 
 
 def _query_sensitive(card_type: str) -> bool:
-    return card_type in {"application_scenario", "content_asset", "customer_question", "market_intelligence"}
+    return card_type in {"application_scenario", "customer_question", "market_intelligence"}
 
 
 def _tokens(query: str) -> list[str]:

@@ -30,10 +30,12 @@ class DownstreamContextTests(unittest.TestCase):
             self.assertIn("product", context["cards_by_type"])
             self.assertIn("application_scenario", context["cards_by_type"])
             self.assertIn("sales_material", context["cards_by_type"])
+            self.assertIn("content_asset", context["cards_by_type"])
             self.assertNotIn("customer_question", context["cards_by_type"])
             self.assertTrue(context["evidence"])
             self.assertEqual(context["risk_items"], [])
             self.assertEqual(context["policy"]["source_boundary"], "generated/agent-interface only")
+            self.assertFalse(context["policy"]["content_assets_prove_product_facts"])
             self.assertTrue((paths.generated_dir / "agent-interface" / "contexts" / f"{context['context_id']}.json").exists())
 
     def test_customer_support_context_can_use_internal_cards(self) -> None:
@@ -107,6 +109,7 @@ def _create_fixture(paths, leave_open_review: bool = False) -> None:
     _write_application_scenario(paths)
     _write_sales_material(paths)
     _write_customer_question(paths)
+    _write_content_asset(paths)
     rebuild_agent_interface(paths)
 
 
@@ -194,6 +197,37 @@ def _write_customer_question(paths) -> None:
             "response_status: 已确认内部参考",
         ],
         "客户问题只能作为内部客服参考。",
+    )
+
+
+def _write_content_asset(paths) -> None:
+    _write_card(
+        paths.knowledge_dir / "内容素材" / "quartz_product_photo.md",
+        [
+            "card_template_version: content-asset-card-v1",
+            "type: content_asset",
+            "id: content_asset/quartz_product_photo",
+            "title: 石英纤维隔热带产品图片",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/01_产品/02_石英纤维隔热带/02_产品图片/",
+            "tags:",
+            "  - 产品图片",
+            "updated_at: 2026-06-15T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-15T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "asset_category: 产品图片",
+            "media_types:",
+            "  - image",
+            "related_products:",
+            "  - product/quartz_fiber_tape",
+            "usable_for:",
+            "  - LinkedIn配图",
+        ],
+        "可用于 LinkedIn 配图的产品素材；不能单独证明产品性能事实。",
     )
 
 
