@@ -9,6 +9,8 @@ Use this skill only after the campaign Agent has prepared a single-day image gen
 
 If the user only says `生成 LinkedIn Day XX 发布图`, stop and route to `tuolin-linkedin`; do not generate an image from this skill yet.
 
+If the user has not explicitly selected a source image index and at least one exact style category name, do not infer the style from the Day topic and do not generate a publishing image.
+
 ## Workflow
 
 1. Read the Day folder:

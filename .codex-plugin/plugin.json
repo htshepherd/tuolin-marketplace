@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent and controlled LinkedIn campaign workflows.",
   "author": {
     "name": "Tianjin Tuolin"
@@ -11,7 +11,9 @@
     "tuolin",
     "codex",
     "knowledge-base",
-    "agents"
+    "agents",
+    "linkedin",
+    "publishing-image"
   ],
   "skills": "./skills/",
   "interface": {

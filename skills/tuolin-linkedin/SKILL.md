@@ -42,6 +42,15 @@ The natural-language router supports the manual flow: Chinese plan, optional mar
 
 ## Mandatory Routing Rule
 
+Hard stop for `生成 LinkedIn Day XX 发布图`:
+
+- Do not say “我现在开始生成新版图”.
+- Do not inspect existing final images to decide a new layout.
+- Do not create a PNG/JPG/SVG.
+- Do not call image generation or image editing tools.
+- Do not write into `Publish-Images/`.
+- The only allowed first action is to route the request and produce the Day image selection sheet.
+
 For every request listed in "Natural Language Entry Points", run the natural-language router before doing file edits or image work:
 
 ```bash
