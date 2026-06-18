@@ -429,6 +429,56 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertFalse(response.executed)
             self.assertIn("旧的批量 LinkedIn 配图入口已删除", response.message)
 
+    def test_linkedin_day_image_selection_can_resolve_standard_campaign_without_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            campaign_dir = paths.generated_dir / "reports" / "linkedin-30-day-special-fiberglass-tape"
+            assets_dir = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            (assets_dir / "source-product.jpg").write_bytes(b"image")
+
+            response = route_natural_language(paths, "生成 LinkedIn Day 01 发布图")
+
+            self.assertEqual(response.intent, "linkedin_image_selection")
+            self.assertTrue(response.executed)
+            self.assertTrue((campaign_dir / "campaign-manifest.json").exists())
+            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Day 01" / "Publishing Image Selection.md").exists())
+            self.assertIn(str(campaign_dir), response.copyable_reply)
+
+    def test_linkedin_package_repair_moves_legacy_asset_publish_images(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            campaign_dir = paths.generated_dir / "reports" / "linkedin-30-day-special-fiberglass-tape"
+            old_image = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "linkedin-publishing-image.png"
+            old_image.parent.mkdir(parents=True, exist_ok=True)
+            old_image.write_bytes(b"legacy")
+            index = campaign_dir / "Manual-Posting-Package" / "00_Package_Index.md"
+            index.write_text(
+                "Day 01/assets/linkedin-publishing-image.png\n"
+                "Manual-Posting-Package/Day 01/assets/linkedin-publishing-image.png\n",
+                encoding="utf-8",
+            )
+
+            response = route_natural_language(paths, "修复 LinkedIn 发布包结构")
+
+            new_image = (
+                campaign_dir
+                / "Manual-Posting-Package"
+                / "Day 01"
+                / "Publish-Images"
+                / "legacy-generated"
+                / "linkedin-publishing-image.png"
+            )
+            self.assertEqual(response.intent, "linkedin_package_structure_repaired")
+            self.assertTrue(response.executed)
+            self.assertFalse(old_image.exists())
+            self.assertTrue(new_image.exists())
+            index_text = index.read_text(encoding="utf-8")
+            self.assertIn("Day 01/Publish-Images/legacy-generated/linkedin-publishing-image.png", index_text)
+            self.assertNotIn("Day 01/assets/linkedin-publishing-image.png", index_text)
+
 def _write_linkedin_official_cards(paths) -> None:
     _write_linkedin_card(
         paths.knowledge_dir / "产品" / "石英纤维隔热带.md",

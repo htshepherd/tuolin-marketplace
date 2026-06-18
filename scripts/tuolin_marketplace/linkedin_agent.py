@@ -101,6 +101,17 @@ class LinkedInImageGenerationPlan:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class LinkedInPackageRepairResult:
+    campaign_dir: str
+    migrated_images: tuple[str, ...]
+    updated_files: tuple[str, ...]
+    status: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def is_linkedin_campaign_request(text: str) -> bool:
     utterance = text.strip().lower()
     if not utterance:
@@ -336,12 +347,10 @@ def confirm_linkedin_chinese_draft(campaign_dir: Path, overwrite: bool = False) 
 def create_linkedin_image_selection_sheet(campaign_dir: Path, day_number: int) -> LinkedInImageSelectionResult:
     campaign_dir = campaign_dir.expanduser().resolve()
     manifest_path = campaign_dir / "campaign-manifest.json"
-    if not manifest_path.exists():
-        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
     if day_number < 1 or day_number > DEFAULT_CAMPAIGN_DAYS:
         raise ValueError(f"Day 必须在 1 到 {DEFAULT_CAMPAIGN_DAYS} 之间：{day_number}")
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = _load_or_create_linkedin_campaign_manifest(campaign_dir)
     status = manifest.get("status")
     if status not in {"english_package_ready", "image_selection_ready", "image_generation_ready"}:
         raise ValueError(f"当前活动状态是 {status!r}，不能生成发布图选择单。请先生成英文发布包和人工发布包。")
@@ -380,6 +389,37 @@ def create_linkedin_image_selection_sheet(campaign_dir: Path, day_number: int) -
         not_recommended_categories=tuple(not_recommended),
         status="image_selection_ready",
     )
+
+
+def _load_or_create_linkedin_campaign_manifest(campaign_dir: Path) -> dict[str, Any]:
+    manifest_path = campaign_dir / "campaign-manifest.json"
+    if manifest_path.exists():
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
+    manual_dir = _manual_package_dir(campaign_dir)
+    if not manual_dir.exists():
+        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
+    manifest = {
+        "schema_version": "linkedin-campaign-legacy-v1",
+        "status": "english_package_ready",
+        "status_history": [{"status": "legacy_manifest_created", "at": datetime.now().strftime("%Y%m%d_%H%M%S")}],
+        "campaign_dir": str(campaign_dir),
+        "product": {
+            "internal_id": INTERNAL_PRODUCT_ID,
+            "internal_name": INTERNAL_PRODUCT_NAME,
+            "external_name_zh": EXTERNAL_PRODUCT_NAME_ZH,
+            "external_name_en": EXTERNAL_PRODUCT_NAME_EN,
+        },
+        "contact_email": DEFAULT_CONTACT_EMAIL,
+        "campaign_days": DEFAULT_CAMPAIGN_DAYS,
+        "context": {"context_id": "legacy-linkedin-campaign", "raw_access": False, "policy": {}},
+        "files": {
+            "manual_package_dir": str(manual_dir),
+            "manual_overview": str(manual_dir / "Campaign Overview.md"),
+            "manual_calendar": str(manual_dir / "Publishing Calendar.csv"),
+        },
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
 
 
 def prepare_linkedin_image_generation(
@@ -450,6 +490,78 @@ def prepare_linkedin_image_generation(
         desktop_output_dirs=tuple(desktop_output_dirs),
         status="image_generation_ready",
     )
+
+
+def repair_linkedin_manual_package_structure(campaign_dir: Path) -> LinkedInPackageRepairResult:
+    campaign_dir = campaign_dir.expanduser().resolve()
+    manual_dir = _manual_package_dir(campaign_dir)
+    if not manual_dir.exists():
+        raise ValueError(f"找不到人工发布包目录：{manual_dir}")
+
+    migrated_images: list[str] = []
+    path_replacements: dict[str, str] = {}
+    for day_number in range(1, DEFAULT_CAMPAIGN_DAYS + 1):
+        old_relative = Path("Manual-Posting-Package") / f"Day {day_number:02d}" / "assets" / "linkedin-publishing-image.png"
+        old_path = campaign_dir / old_relative
+        if not old_path.exists():
+            continue
+        new_relative = (
+            Path("Manual-Posting-Package")
+            / f"Day {day_number:02d}"
+            / "Publish-Images"
+            / "legacy-generated"
+            / "linkedin-publishing-image.png"
+        )
+        new_path = campaign_dir / new_relative
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        if new_path.exists():
+            old_path.unlink()
+        else:
+            shutil.move(str(old_path), str(new_path))
+        migrated_images.append(str(new_path))
+        _add_path_replacements(path_replacements, old_relative, new_relative)
+
+    updated_files = _rewrite_linkedin_package_references(campaign_dir, path_replacements)
+    return LinkedInPackageRepairResult(
+        campaign_dir=str(campaign_dir),
+        migrated_images=tuple(migrated_images),
+        updated_files=tuple(updated_files),
+        status="repaired",
+    )
+
+
+def _add_path_replacements(replacements: dict[str, str], old_relative: Path, new_relative: Path) -> None:
+    old_posix = old_relative.as_posix()
+    new_posix = new_relative.as_posix()
+    old_windows = str(old_relative).replace("/", "\\")
+    new_windows = str(new_relative).replace("/", "\\")
+    old_url = old_posix.replace(" ", "%20")
+    new_url = new_posix.replace(" ", "%20")
+    for old, new in [
+        (old_posix, new_posix),
+        (old_windows, new_windows),
+        (old_url, new_url),
+        (old_posix.replace("Manual-Posting-Package/", ""), new_posix.replace("Manual-Posting-Package/", "")),
+        (old_url.replace("Manual-Posting-Package/", ""), new_url.replace("Manual-Posting-Package/", "")),
+    ]:
+        replacements[old] = new
+
+
+def _rewrite_linkedin_package_references(campaign_dir: Path, replacements: dict[str, str]) -> list[str]:
+    if not replacements:
+        return []
+    updated: list[str] = []
+    for path in sorted(campaign_dir.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".csv", ".json"}:
+            continue
+        text = path.read_text(encoding="utf-8")
+        new_text = text
+        for old, new in replacements.items():
+            new_text = new_text.replace(old, new)
+        if new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+            updated.append(str(path))
+    return updated
 
 
 def _ensure_campaign_dirs(campaign_dir: Path) -> None:
@@ -1332,10 +1444,12 @@ def _day_source_images(campaign_dir: Path, day_number: int) -> list[dict[str, An
     images = []
     if not assets_dir.exists():
         return images
-    for index, path in enumerate(sorted(item for item in assets_dir.iterdir() if item.suffix.lower() in suffixes), 1):
+    for path in sorted(item for item in assets_dir.iterdir() if item.suffix.lower() in suffixes):
+        if path.name == "linkedin-publishing-image.png":
+            continue
         images.append(
             {
-                "index": index,
+                "index": len(images) + 1,
                 "path": str(path),
                 "filename": path.name,
                 "role": _source_image_role(path),

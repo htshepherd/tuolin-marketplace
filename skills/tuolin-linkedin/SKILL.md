@@ -33,6 +33,8 @@ Common user requests:
 - “确认策划，活动文件夹：<campaign-dir>”
 - “确认中文总稿，活动文件夹：<campaign-dir>”
 - “将30天发帖计划复制到桌面方便查看，活动文件夹：<campaign-dir>”
+- “修复 LinkedIn 发布包结构”
+- “生成 LinkedIn Day 01 发布图”
 - “生成 LinkedIn Day 01 发布图，活动文件夹：<campaign-dir>”
 - “Day 01 源图选 1，风格选：原图轻量增强型，活动文件夹：<campaign-dir>”
 
@@ -122,10 +124,20 @@ When the user asks to copy the 30-day posting plan to the desktop:
 When the user asks to generate one Day's publishing image:
 
 1. Require the English manual package.
-2. Require approved source images inside `Manual-Posting-Package/Day XX/assets/`.
-3. Generate `Manual-Posting-Package/Day XX/Publishing Image Selection.md`.
-4. Show 20 style categories and Day-specific recommendations.
-5. Ask the user to choose one source image and 1-3 categories.
-6. Prepare output directories under `Manual-Posting-Package/Day XX/Publish-Images/<category-slug>/`.
-7. Use `tuolin-linkedin-image-style` to generate exactly one image per selected category.
-8. Do not generate all 30 days in one batch.
+2. Resolve the campaign folder from the supplied `活动文件夹`; if omitted, use the single standard LinkedIn campaign folder under `generated/reports/`.
+3. Require approved source images inside `Manual-Posting-Package/Day XX/assets/`.
+4. Never use old final images named `assets/linkedin-publishing-image.png` as source images.
+5. If old final images still live under `assets/`, ask to repair the package structure first.
+6. Generate `Manual-Posting-Package/Day XX/Publishing Image Selection.md`.
+7. Show 20 style categories and Day-specific recommendations.
+8. Ask the user to choose one source image and 1-3 categories.
+9. Prepare output directories under `Manual-Posting-Package/Day XX/Publish-Images/<category-slug>/`.
+10. Use `tuolin-linkedin-image-style` to generate exactly one image per selected category.
+11. Do not generate all 30 days in one batch.
+
+When the user asks to repair an old LinkedIn publishing package:
+
+1. Resolve the campaign folder from the supplied `活动文件夹`; if omitted, use the single standard LinkedIn campaign folder under `generated/reports/`.
+2. Move old final images from `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png` to `Manual-Posting-Package/Day XX/Publish-Images/legacy-generated/linkedin-publishing-image.png`.
+3. Update Markdown, CSV, and JSON references so publishing image paths point to `Publish-Images/legacy-generated/`.
+4. Do not rewrite campaign copy, do not generate selection sheets, and do not regenerate images during repair.

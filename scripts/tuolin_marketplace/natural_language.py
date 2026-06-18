@@ -19,6 +19,7 @@ from .linkedin_agent import (
     decide_linkedin_marketing_review,
     is_linkedin_campaign_request,
     prepare_linkedin_image_generation,
+    repair_linkedin_manual_package_structure,
 )
 from .partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_partitions, scan_partition
 from .partition_organizer import organize_partition
@@ -163,8 +164,28 @@ def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:
 
 
 def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse | None:
+    if _is_linkedin_package_repair_request(utterance):
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("修复 LinkedIn 发布包结构")
+        try:
+            result = repair_linkedin_manual_package_structure(campaign_dir)
+        except (RuntimeError, ValueError, FileExistsError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_package_structure_repaired",
+            executed=True,
+            needs_confirmation=False,
+            message=(
+                "已修复 LinkedIn 发布包结构。"
+                f"迁移旧发布图 {len(result.migrated_images)} 张，更新导航文件 {len(result.updated_files)} 个。"
+                "旧发布图已迁入各 Day 的 `Publish-Images/legacy-generated/`，后续发布图不再使用 `assets/linkedin-publishing-image.png` 作为最终路径。"
+            ),
+            details=result.to_dict(),
+        )
+
     if _is_linkedin_marketing_review_decision_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         if campaign_dir is None:
             return _linkedin_missing_campaign_dir_response("处理营销审阅决策")
         decision = "accepted" if _accepts_marketing_review(utterance) else "rejected"
@@ -187,7 +208,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_marketing_review_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         if campaign_dir is None:
             return _linkedin_missing_campaign_dir_response("进行营销策划审阅")
         try:
@@ -208,7 +229,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_desktop_copy_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         if campaign_dir is None:
             return _linkedin_missing_campaign_dir_response("复制30天发帖计划到桌面")
         try:
@@ -228,7 +249,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_image_generation_choice_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         day_number = _extract_linkedin_day_number(utterance)
         source_index = _extract_linkedin_source_index(utterance)
         categories = _extract_linkedin_image_categories(utterance)
@@ -267,7 +288,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_day_image_selection_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         day_number = _extract_linkedin_day_number(utterance)
         missing = []
         if campaign_dir is None:
@@ -304,7 +325,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_confirm_chinese_draft_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         if campaign_dir is None:
             return _linkedin_missing_campaign_dir_response("确认中文总稿")
         try:
@@ -329,7 +350,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_confirm_plan_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        campaign_dir = _resolve_linkedin_campaign_dir(paths, utterance)
         if campaign_dir is None:
             return _linkedin_missing_campaign_dir_response("确认策划")
         try:
@@ -868,6 +889,38 @@ def _linkedin_desktop_root() -> Path | None:
     return None
 
 
+def _resolve_linkedin_campaign_dir(paths: ProjectPaths, utterance: str) -> Path | None:
+    explicit = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir", "项目目录"])
+    if explicit is not None:
+        return explicit
+    candidates = _linkedin_campaign_dir_candidates(paths)
+    if len(candidates) == 1:
+        return candidates[0]
+    default = paths.generated_dir / "reports" / "linkedin-30-day-special-fiberglass-tape"
+    if default.exists() and _looks_like_linkedin_campaign_dir(default):
+        return default
+    return None
+
+
+def _linkedin_campaign_dir_candidates(paths: ProjectPaths) -> list[Path]:
+    reports_dir = paths.generated_dir / "reports"
+    if not reports_dir.exists():
+        return []
+    candidates = []
+    for path in sorted(reports_dir.iterdir()):
+        if path.is_dir() and _looks_like_linkedin_campaign_dir(path):
+            candidates.append(path.resolve())
+    return candidates
+
+
+def _looks_like_linkedin_campaign_dir(path: Path) -> bool:
+    return (
+        (path / "campaign-manifest.json").exists()
+        or (path / "Manual-Posting-Package").is_dir()
+        or (path / "LinkedIn-30-Day-Plan-and-Posts.md").exists()
+    )
+
+
 def _is_linkedin_confirm_plan_request(utterance: str) -> bool:
     return "确认策划" in utterance and _mentions_linkedin_context(utterance)
 
@@ -882,6 +935,12 @@ def _is_linkedin_marketing_review_request(utterance: str) -> bool:
     if "采纳" in utterance or "不采纳" in utterance:
         return False
     return "营销策划审阅" in utterance or "进行营销审阅" in utterance or "进行智能审阅" in utterance
+
+
+def _is_linkedin_package_repair_request(utterance: str) -> bool:
+    if not _mentions_linkedin_context(utterance):
+        return False
+    return any(term in utterance for term in ["修复发布包结构", "迁移发布包结构", "修复 LinkedIn 发布包", "迁移旧发布图", "迁移到最新结构"])
 
 
 def _is_linkedin_marketing_review_decision_request(utterance: str) -> bool:
