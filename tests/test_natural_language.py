@@ -71,6 +71,43 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertTrue(response.needs_confirmation)
             self.assertTrue(all(item["next_step"] != "直接使用现有资料" for item in response.details))
 
+    def test_product_completion_check_is_read_only_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            report.write_text("fake report", encoding="utf-8")
+
+            response = route_natural_language(paths, "石英纤维隔热带资料整理完了吗？")
+
+            self.assertEqual(response.intent, "partition_completion_check")
+            self.assertFalse(response.executed)
+            self.assertEqual(response.recommended_partition, "石英纤维隔热带")
+            self.assertIn("当前状态", response.message)
+            self.assertFalse((paths.knowledge_dir / "产品" / "石英纤维隔热带.md").exists())
+
+    def test_common_quartz_typo_routes_to_quartz_partition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+
+            response = route_natural_language(paths, "整理世英纤维隔热带资料。")
+
+            self.assertEqual(response.intent, "partition_plan")
+            self.assertEqual(response.recommended_partition, "石英纤维隔热带")
+
+    def test_core_material_completion_check_does_not_start_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+
+            response = route_natural_language(paths, "知识库核心资料整理完了吗？")
+
+            self.assertEqual(response.intent, "core_upstream_completion_check")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertFalse((paths.generated_dir / "cache" / "core-upstream-preview" / "preview.json").exists())
+
     def test_manual_judgment_material_wording_routes_to_buffer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

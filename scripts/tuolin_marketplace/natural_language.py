@@ -80,6 +80,9 @@ def route_natural_language(paths: ProjectPaths, text: str) -> NaturalLanguageRes
     if _is_status_request(utterance):
         return _status_response(paths)
 
+    if _is_completion_check_request(utterance):
+        return _completion_check_response(paths, utterance)
+
     if _is_pending_request(utterance):
         return _pending_response(paths)
 
@@ -284,6 +287,61 @@ def _pending_response(paths: ProjectPaths) -> NaturalLanguageResponse:
         message=f"当前还有 {len(summaries)} 个分区有后续动作。建议先处理「{best.name}」。",
         copyable_reply=_copyable_for(best),
         details=detail,
+    )
+
+
+def _completion_check_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse:
+    if "核心资料" in utterance:
+        return _core_completion_check_response(paths)
+
+    partition = _resolve_partition_from_text(utterance)
+    if partition and partition != "ambiguous_high_silica":
+        summary = scan_partition(paths, partition)
+        finished = summary.recommended_next_action == "use_existing"
+        action_label = ACTION_LABELS[summary.recommended_next_action]
+        result_text = ACTION_RESULT_TEXT[summary.recommended_next_action]
+        return NaturalLanguageResponse(
+            intent="partition_completion_check",
+            executed=False,
+            needs_confirmation=not finished,
+            recommended_partition=summary.name,
+            recommended_action=summary.recommended_next_action,
+            message=(
+                f"「{summary.name}」当前状态：{_status_label(summary.status)}。"
+                f"下一步建议：{action_label}。{result_text}"
+            ),
+            copyable_reply=None if finished else _copyable_for(summary),
+            details=_summary_detail(summary),
+        )
+
+    return _status_response(paths)
+
+
+def _core_completion_check_response(paths: ProjectPaths) -> NaturalLanguageResponse:
+    last_run = paths.generated_dir / "cache" / "core-upstream" / "last-run.json"
+    preview = paths.generated_dir / "cache" / "core-upstream-preview" / "preview.json"
+    if last_run.exists():
+        return NaturalLanguageResponse(
+            intent="core_upstream_completion_check",
+            executed=False,
+            needs_confirmation=False,
+            message="知识库核心资料最近已经执行过整理。是否还有待处理内容，需要看各产品分区和复核项状态。",
+            copyable_reply="查看当前还有哪些资料需要继续整理。",
+        )
+    if preview.exists():
+        return NaturalLanguageResponse(
+            intent="core_upstream_completion_check",
+            executed=False,
+            needs_confirmation=True,
+            message="知识库核心资料已有整理预览，但还没有执行写入候选卡片和复核项。",
+            copyable_reply="确认，继续看核心资料里的图片、报告和视频。",
+        )
+    return NaturalLanguageResponse(
+        intent="core_upstream_completion_check",
+        executed=False,
+        needs_confirmation=True,
+        message="还没有发现知识库核心资料的整理记录。可以先整理核心资料；执行前会先生成预览或候选内容。",
+        copyable_reply="整理知识库核心资料。",
     )
 
 
@@ -560,6 +618,7 @@ def _resolve_partition_from_text(utterance: str):
         return "ambiguous_high_silica"
     aliases = {
         "石英纤维隔热带": "石英纤维隔热带",
+        "世英纤维隔热带": "石英纤维隔热带",
         "陶瓷纤维隔热带": "陶瓷纤维隔热带",
         "玄武岩纤维隔热带": "玄武岩纤维隔热带",
         "高硅氧纤维隔热带_有背胶": "高硅氧纤维隔热带_有背胶",
@@ -677,6 +736,10 @@ def _is_pending_request(utterance: str) -> bool:
         or "还有哪些资料" in utterance
         or "哪些资料需要" in utterance
     )
+
+
+def _is_completion_check_request(utterance: str) -> bool:
+    return "整理完了吗" in utterance or "整理完成了吗" in utterance or "整理好了没" in utterance
 
 
 def _is_full_rebuild_request(utterance: str) -> bool:
