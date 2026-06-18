@@ -294,11 +294,11 @@ def generate_linkedin_publishing_images(
     for day, output_path in zip(_campaign_days(), output_paths):
         tags = [str(tag) for tag in day["tags"][:3]]
         image = _compose_publishing_image(source, logo, tags, font_large, font_small)
-        image.save(output_path)
-        generated.append(str(output_path))
         manual_path = _manual_day_assets_dir(campaign_dir, int(day["day"])) / "linkedin-publishing-image.png"
         manual_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(output_path, manual_path)
+        image.save(manual_path)
+        shutil.copyfile(manual_path, output_path)
+        generated.append(str(output_path))
         manual_generated.append(str(manual_path))
         _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{int(day['day']):02d}.md", output_path)
         _upsert_manual_asset_note(campaign_dir, int(day["day"]), output_path, manual_path, tags)
@@ -312,7 +312,7 @@ def generate_linkedin_publishing_images(
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
-        plan_path=generated[0],
+        plan_path=manual_generated[0],
         manifest_path=str(manifest_path),
         context_id=manifest["context"]["context_id"],
         status="image_assets_ready",
@@ -374,11 +374,11 @@ def regenerate_linkedin_publishing_image(
     output_dir = Path(manifest["files"]["publishing_images_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"day-{day_number:02d}.png"
-    image.save(output_path)
 
     manual_path = _manual_day_assets_dir(campaign_dir, day_number) / "linkedin-publishing-image.png"
     manual_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(output_path, manual_path)
+    image.save(manual_path)
+    shutil.copyfile(manual_path, output_path)
     _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{day_number:02d}.md", output_path)
     _upsert_manual_asset_note(campaign_dir, day_number, output_path, manual_path, clean_tags)
 
@@ -392,7 +392,7 @@ def regenerate_linkedin_publishing_image(
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
-        plan_path=str(output_path),
+        plan_path=str(manual_path),
         manifest_path=str(manifest_path),
         context_id=manifest["context"]["context_id"],
         status="image_assets_ready",
@@ -1041,12 +1041,14 @@ def _render_manual_asset_notes(post: dict[str, Any]) -> str:
 
 
 def _compose_publishing_image(source, logo, tags: list[str], font_large, font_small):
-    from PIL import ImageDraw
+    from PIL import Image, ImageDraw
 
-    image = _canvas_from_source(source)
-    draw = ImageDraw.Draw(image)
+    image = source.convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
     _draw_visual_tags(draw, tags, font_large, font_small)
-    _paste_logo(image, logo)
+    _paste_logo(overlay, logo, image.size)
+    image.alpha_composite(overlay)
     return image
 
 
@@ -1111,22 +1113,9 @@ def _load_font(image_font_module, size: int):
     return image_font_module.load_default()
 
 
-def _canvas_from_source(source):
-    from PIL import Image
-
-    target_size = (1200, 675)
-    image = source.copy()
-    image.thumbnail(target_size)
-    canvas = Image.new("RGB", target_size, (28, 28, 28))
-    x = (target_size[0] - image.width) // 2
-    y = (target_size[1] - image.height) // 2
-    canvas.paste(image, (x, y))
-    return canvas.convert("RGBA")
-
-
 def _draw_visual_tags(draw, tags: list[str], font_large, font_small) -> None:
-    x = 54
-    y = 56
+    x = 50
+    y = 58
     orange = (245, 158, 11, 255)
     shadow = (0, 0, 0, 180)
     draw.text((x + 2, y + 2), "Advantage", font=font_large, fill=shadow)
@@ -1139,15 +1128,16 @@ def _draw_visual_tags(draw, tags: list[str], font_large, font_small) -> None:
         line_y += 34
 
 
-def _paste_logo(image, logo) -> None:
-    max_width = 270
+def _paste_logo(image, logo, canvas_size: tuple[int, int]) -> None:
+    canvas_width, canvas_height = canvas_size
+    max_width = max(120, min(270, int(canvas_width * 0.24)))
     resized = logo.copy()
     if resized.width > max_width:
         ratio = max_width / resized.width
         resized = resized.resize((max_width, max(1, int(resized.height * ratio))))
-    margin = 48
-    x = image.width - resized.width - margin
-    y = 42
+    margin = max(24, int(min(canvas_width, canvas_height) * 0.045))
+    x = canvas_width - resized.width - margin
+    y = margin
     image.alpha_composite(resized, (x, y))
 
 

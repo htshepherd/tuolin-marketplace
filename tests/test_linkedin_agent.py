@@ -309,7 +309,14 @@ class LinkedInAgentTests(unittest.TestCase):
             manual_day_1_image = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "linkedin-publishing-image.png"
             self.assertTrue(manual_day_1_image.exists())
             with Image.open(publishing_images[0]) as generated:
-                self.assertEqual(generated.size, (1200, 675))
+                self.assertEqual(generated.size, (900, 520))
+            with Image.open(manual_day_1_image) as generated:
+                self.assertEqual(generated.size, (900, 520))
+                with Image.open(source_path) as source:
+                    generated_pixel = generated.convert("RGBA").getpixel((450, 260))
+                    source_pixel = source.convert("RGBA").getpixel((450, 260))
+                    self.assertEqual(generated_pixel, source_pixel)
+            self.assertEqual(Path(result.plan_path), manual_day_1_image)
 
             day_1 = (campaign_dir / "daily" / "day-01.md").read_text(encoding="utf-8")
             self.assertIn("## Publishing Image", day_1)
@@ -359,9 +366,11 @@ class LinkedInAgentTests(unittest.TestCase):
             self.assertEqual(result.status, "image_assets_ready")
             standard_path = campaign_dir / "assets" / "publishing-images" / "day-03.png"
             manual_path = campaign_dir / "Manual-Posting-Package" / "Day 03" / "assets" / "linkedin-publishing-image.png"
-            self.assertEqual(Path(result.plan_path), standard_path)
+            self.assertEqual(Path(result.plan_path), manual_path)
             self.assertTrue(standard_path.exists())
             self.assertTrue(manual_path.exists())
+            with Image.open(manual_path) as generated:
+                self.assertEqual(generated.size, (900, 520))
             asset_notes = (campaign_dir / "Manual-Posting-Package" / "Day 03" / "Asset Notes.md").read_text(
                 encoding="utf-8"
             )

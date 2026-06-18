@@ -118,17 +118,21 @@ When the user provides image inputs:
 1. Resolve the transparent logo from explicit `logo`, then campaign manifest config/default path.
 2. Require a user-provided approved source image.
 3. Do not scan `raw/` for images.
-4. Generate `assets/publishing-images/day-01.png` through `day-30.png`.
-5. Also copy each final publishing image to `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png`.
-6. Overlay the logo and daily visual tags.
-7. Add publishing image references to the daily English files and each Day's `Asset Notes.md`.
-8. Update manifest status to `image_assets_ready`.
+4. Preserve the source image dimensions, crop, background, color, and brightness.
+5. Do not add poster overlays, dark masks, title blocks, hashtag pills, cards, or generated backgrounds.
+6. Overlay only transparent visual elements: the transparent logo and 2-3 daily visual tags.
+7. Generate the primary human-use image at `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png`.
+8. Copy a compatibility archive to `assets/publishing-images/day-XX.png`.
+9. Add publishing image references to the daily English files and each Day's `Asset Notes.md`.
+10. Update manifest status to `image_assets_ready`.
 
 When the user wants to adjust one day's image tags:
 
 1. Require a campaign folder, Day number, and manually supplied tags.
 2. Reuse the manifest's previous source image and transparent logo when present; otherwise require source image/logo paths.
 3. Regenerate only that day's publishing image.
-4. Update both `assets/publishing-images/day-XX.png` and `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png`.
-5. Update that Day's `Asset Notes.md` and manifest `custom_visual_tags`.
-6. Do not modify other days and do not publish to LinkedIn.
+4. Keep the original source image dimensions and visual appearance.
+5. Update `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png` as the primary output.
+6. Update `assets/publishing-images/day-XX.png` as the compatibility archive.
+7. Update that Day's `Asset Notes.md` and manifest `custom_visual_tags`.
+8. Do not modify other days and do not publish to LinkedIn.

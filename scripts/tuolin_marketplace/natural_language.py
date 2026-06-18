@@ -209,8 +209,8 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             needs_confirmation=False,
             message=(
                 f"已重新生成 Day {day_number:02d} 的 LinkedIn 发布图。"
-                f"标准路径：{Path(result.plan_path)}；"
-                f"人工包路径：{manual_image_path}。"
+                f"人工包路径：{manual_image_path}；"
+                f"兼容备份路径：{Path(result.campaign_dir) / 'assets' / 'publishing-images' / f'day-{day_number:02d}.png'}。"
                 "这一步只更新单日图片和 Asset Notes，不会自动发布。"
             ),
             details=result.to_dict(),
