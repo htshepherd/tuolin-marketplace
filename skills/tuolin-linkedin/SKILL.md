@@ -1,6 +1,6 @@
 ---
 name: tuolin-linkedin
-description: Create Tuolin LinkedIn campaign plans and publishing packages from the local knowledge base. Use when the user asks in Chinese to make a LinkedIn posting plan, 30-day LinkedIn campaign, LinkedIn copy, or LinkedIn promotional content for Tuolin products.
+description: Create and operate Tuolin LinkedIn campaign plans, manual publishing packages, package repair, and single-day publishing image selection from the local knowledge base. Use when the user asks in Chinese to make a LinkedIn posting plan, 30-day LinkedIn campaign, LinkedIn copy, LinkedIn promotional content, repair a LinkedIn publishing package, or generate a LinkedIn Day XX publishing image. For "生成 LinkedIn Day XX 发布图", this skill must route the request first and must not generate an image directly.
 ---
 
 # Tuolin LinkedIn Agent
@@ -38,7 +38,23 @@ Common user requests:
 - “生成 LinkedIn Day 01 发布图，活动文件夹：<campaign-dir>”
 - “Day 01 源图选 1，风格选：原图轻量增强型，活动文件夹：<campaign-dir>”
 
-The natural-language router supports the manual flow: Chinese plan, optional marketing review, Chinese 30-day draft, English daily publishing package, desktop review copy, and single-day image generation preparation. Each step stops for user confirmation; no step publishes to LinkedIn.
+The natural-language router supports the manual flow: Chinese plan, optional marketing review, Chinese 30-day draft, English daily publishing package, desktop review copy, package repair, and single-day image generation preparation. Each step stops for user confirmation; no step publishes to LinkedIn.
+
+## Mandatory Routing Rule
+
+For every request listed in "Natural Language Entry Points", run the natural-language router before doing file edits or image work:
+
+```bash
+python3 scripts/route_natural_language.py "<user request>" --project-dir <knowledge-project-dir>
+```
+
+If the user says `生成 LinkedIn Day 01 发布图`, the correct first result is `linkedin_image_selection`: generate `Manual-Posting-Package/Day 01/Publishing Image Selection.md` and ask the user to choose source image and 1-3 style categories.
+
+Do not directly generate, compose, edit, or save a publishing image for `生成 LinkedIn Day XX 发布图`. Direct image generation is allowed only after the user has chosen source image and style category, for example:
+
+```text
+Day 01 源图选 1，风格选：原图轻量增强型
+```
 
 ## Internal Tools
 
@@ -128,12 +144,13 @@ When the user asks to generate one Day's publishing image:
 3. Require approved source images inside `Manual-Posting-Package/Day XX/assets/`.
 4. Never use old final images named `assets/linkedin-publishing-image.png` as source images.
 5. If old final images still live under `assets/`, ask to repair the package structure first.
-6. Generate `Manual-Posting-Package/Day XX/Publishing Image Selection.md`.
-7. Show 20 style categories and Day-specific recommendations.
-8. Ask the user to choose one source image and 1-3 categories.
-9. Prepare output directories under `Manual-Posting-Package/Day XX/Publish-Images/<category-slug>/`.
-10. Use `tuolin-linkedin-image-style` to generate exactly one image per selected category.
-11. Do not generate all 30 days in one batch.
+6. Run `scripts/route_natural_language.py "生成 LinkedIn Day XX 发布图..." --project-dir <knowledge-project-dir>`.
+7. Generate `Manual-Posting-Package/Day XX/Publishing Image Selection.md`.
+8. Show 20 style categories and Day-specific recommendations.
+9. Ask the user to choose one source image and 1-3 categories.
+10. Prepare output directories under `Manual-Posting-Package/Day XX/Publish-Images/<category-slug>/`.
+11. Use `tuolin-linkedin-image-style` to generate exactly one image per selected category only after the user chooses categories.
+12. Do not generate all 30 days in one batch.
 
 When the user asks to repair an old LinkedIn publishing package:
 

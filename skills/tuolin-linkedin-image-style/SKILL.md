@@ -1,11 +1,13 @@
 ---
 name: tuolin-linkedin-image-style
-description: Generate one Tuolin LinkedIn publishing image for a single campaign day from that day's source image, tags, contact email, transparent logo, and selected image style category. Use when the user has chosen Day XX source image and one style category after the publishing image selection sheet.
+description: Generate one Tuolin LinkedIn publishing image for a single campaign day from that day's selected source image, tags, contact email, transparent logo, and selected image style category. Use only after the user has already chosen Day XX source image and one style category from the publishing image selection sheet, such as "Day 01 源图选 1，风格选：原图轻量增强型". Do not use for the initial request "生成 LinkedIn Day XX 发布图"; that request must be handled by tuolin-linkedin to create a selection sheet first.
 ---
 
 # Tuolin LinkedIn Image Style
 
 Use this skill only after the campaign Agent has prepared a single-day image generation plan. It creates exactly one publishing image for one selected style category.
+
+If the user only says `生成 LinkedIn Day XX 发布图`, stop and route to `tuolin-linkedin`; do not generate an image from this skill yet.
 
 ## Workflow
 
