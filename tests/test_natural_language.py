@@ -224,88 +224,88 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertEqual(response.copyable_reply, "请先生成知识卡片修改预览，不要直接写入。")
 
     def test_linkedin_campaign_routes_through_manual_confirmation_steps(self) -> None:
-        try:
-            import PIL  # noqa: F401
-        except ImportError:
-            self.skipTest("Pillow is not available")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = resolve_paths(root / "knowledge-project", {})
             initialize_project(paths)
             _write_linkedin_official_cards(paths)
             rebuild_agent_interface(paths)
-            logo_path, source_path = _write_linkedin_test_images(root)
             default_logo = paths.project_dir / "assets" / "logo" / "tuolin-logo-transparent.png"
-            default_logo.write_bytes(logo_path.read_bytes())
             request = (
                 "请做一个30天在Linkedin上发贴宣传的计划。"
                 "要求：产品面向欧美市场；产品名称不叫石英纤维，改成特种玻璃纤维带；"
                 "重点突出带子的耐高温1000度、不刺痒、不冒烟的特性。"
             )
 
-            with patch.dict(os.environ, {"TUOLIN_LINKEDIN_OUTPUT_ROOT": str(root / "Desktop")}):
+            with patch.dict(
+                os.environ,
+                {
+                    "TUOLIN_LINKEDIN_OUTPUT_ROOT": str(root / "Desktop"),
+                    "TUOLIN_LINKEDIN_DESKTOP_ROOT": str(root / "BossDesktop"),
+                },
+            ):
                 plan_response = route_natural_language(paths, request)
 
-            self.assertEqual(plan_response.intent, "linkedin_campaign_plan")
-            self.assertTrue(plan_response.executed)
-            self.assertTrue(plan_response.needs_confirmation)
-            campaign_dir = Path(plan_response.details["campaign_dir"])
-            self.assertEqual(campaign_dir.parent.resolve(), (root / "Desktop").resolve())
-            self.assertTrue((campaign_dir / "01_中文策划.md").exists())
-            self.assertIn("确认策划，活动文件夹：", plan_response.copyable_reply)
+                self.assertEqual(plan_response.intent, "linkedin_campaign_plan")
+                self.assertTrue(plan_response.executed)
+                self.assertTrue(plan_response.needs_confirmation)
+                campaign_dir = Path(plan_response.details["campaign_dir"])
+                self.assertEqual(campaign_dir.parent.resolve(), (root / "Desktop").resolve())
+                self.assertTrue((campaign_dir / "01_中文策划.md").exists())
+                self.assertIn("进行营销策划审阅，活动文件夹：", plan_response.copyable_reply)
 
-            chinese_response = route_natural_language(paths, plan_response.copyable_reply)
+                review_response = route_natural_language(paths, plan_response.copyable_reply)
 
-            self.assertEqual(chinese_response.intent, "linkedin_chinese_draft")
-            self.assertTrue(chinese_response.executed)
-            self.assertTrue((campaign_dir / "02_中文30天贴文总稿.md").exists())
-            self.assertEqual(chinese_response.copyable_reply, f"确认中文总稿，活动文件夹：{campaign_dir}")
+                self.assertEqual(review_response.intent, "linkedin_marketing_review")
+                self.assertTrue(review_response.executed)
+                self.assertTrue((campaign_dir / "01_中文策划_营销审阅.md").exists())
+                self.assertIn("采纳营销审阅建议", review_response.copyable_reply)
 
-            english_response = route_natural_language(paths, chinese_response.copyable_reply)
+                chinese_response = route_natural_language(paths, review_response.copyable_reply)
 
-            self.assertEqual(english_response.intent, "linkedin_english_package")
-            self.assertTrue(english_response.executed)
-            self.assertTrue((campaign_dir / "04_英文发布日历.csv").exists())
-            self.assertEqual(len(list((campaign_dir / "daily").glob("day-*.md"))), 30)
-            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Campaign Overview.md").exists())
-            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Publishing Calendar.csv").exists())
-            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Day 01" / "LinkedIn Post Content.md").exists())
-            self.assertNotIn("logo：", english_response.copyable_reply)
-            self.assertIn(str(default_logo), english_response.message)
-            self.assertIn("人工发布包", english_response.message)
+                self.assertEqual(chinese_response.intent, "linkedin_chinese_draft")
+                self.assertTrue(chinese_response.executed)
+                self.assertTrue((campaign_dir / "02_中文30天贴文总稿.md").exists())
+                self.assertEqual(chinese_response.copyable_reply, f"确认中文总稿，活动文件夹：{campaign_dir}")
 
-            image_response = route_natural_language(
-                paths,
-                f"生成 LinkedIn 配图，活动文件夹：{campaign_dir}，源图：{source_path}",
-            )
+                english_response = route_natural_language(paths, chinese_response.copyable_reply)
 
-            self.assertEqual(image_response.intent, "linkedin_image_assets")
-            self.assertTrue(image_response.executed)
-            self.assertFalse(image_response.needs_confirmation)
-            self.assertEqual(len(list((campaign_dir / "assets" / "publishing-images").glob("day-*.png"))), 30)
-            self.assertTrue(
-                (campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "linkedin-publishing-image.png").exists()
-            )
-            self.assertIn("重新生成 LinkedIn Day 01 发布图", image_response.copyable_reply)
-            manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["status"], "image_assets_ready")
-            self.assertEqual(manifest["files"]["transparent_logo"], str(default_logo.resolve()))
+                self.assertEqual(english_response.intent, "linkedin_english_package")
+                self.assertTrue(english_response.executed)
+                self.assertTrue((campaign_dir / "04_英文发布日历.csv").exists())
+                self.assertEqual(len(list((campaign_dir / "daily").glob("day-*.md"))), 30)
+                self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Campaign Overview.md").exists())
+                self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Publishing Calendar.csv").exists())
+                self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Day 01" / "LinkedIn Post Content.md").exists())
+                self.assertIn(str(default_logo), english_response.message)
+                self.assertIn("复制到桌面", english_response.copyable_reply)
 
-            single_day_response = route_natural_language(
-                paths,
-                (
-                    f"重新生成 LinkedIn Day 03 发布图，活动文件夹：{campaign_dir}，"
-                    "tags：Custom Heat, No Itch, Clean Install"
-                ),
-            )
+                desktop_response = route_natural_language(paths, english_response.copyable_reply)
 
-            self.assertEqual(single_day_response.intent, "linkedin_single_day_image")
-            self.assertTrue(single_day_response.executed)
-            self.assertIn("Day 03", single_day_response.message)
-            day_3_notes = (campaign_dir / "Manual-Posting-Package" / "Day 03" / "Asset Notes.md").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn("Custom Heat, No Itch, Clean Install", day_3_notes)
+                self.assertEqual(desktop_response.intent, "linkedin_desktop_delivery_copy")
+                self.assertTrue(desktop_response.executed)
+                self.assertTrue(Path(desktop_response.details["plan_path"]).exists())
+
+                source_path = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "main_product.jpg"
+                source_path.write_bytes(b"image")
+                selection_response = route_natural_language(
+                    paths,
+                    f"生成 LinkedIn Day 01 发布图，活动文件夹：{campaign_dir}",
+                )
+
+                self.assertEqual(selection_response.intent, "linkedin_image_selection")
+                self.assertTrue(selection_response.executed)
+                self.assertIn("Publishing Image Selection.md", selection_response.message)
+                self.assertIn("源图选 1", selection_response.copyable_reply)
+
+                generation_response = route_natural_language(paths, selection_response.copyable_reply)
+
+                self.assertEqual(generation_response.intent, "linkedin_image_generation_ready")
+                self.assertTrue(generation_response.executed)
+                self.assertIn("tuolin-linkedin-image-style", generation_response.message)
+                manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["status"], "image_generation_ready")
+                self.assertEqual(manifest["single_day_images"]["day-01"]["selected_source_image"]["path"], str(source_path))
 
     def test_linkedin_confirmation_without_campaign_dir_asks_for_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -347,9 +347,9 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
                 ),
             )
 
-            self.assertEqual(response.intent, "linkedin_operation_blocked")
+            self.assertEqual(response.intent, "linkedin_legacy_image_request_removed")
             self.assertFalse(response.executed)
-            self.assertIn("manifest", response.message)
+            self.assertIn("旧的批量 LinkedIn 配图入口已删除", response.message)
 
 def _write_linkedin_official_cards(paths) -> None:
     _write_linkedin_card(
@@ -409,24 +409,6 @@ def _write_linkedin_official_cards(paths) -> None:
 def _write_linkedin_card(path: Path, frontmatter_lines: list[str], body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("---\n" + "\n".join(frontmatter_lines) + "\n---\n\n" + body + "\n", encoding="utf-8")
-
-
-def _write_linkedin_test_images(root: Path) -> tuple[Path, Path]:
-    from PIL import Image, ImageDraw
-
-    logo_path = root / "transparent-logo.png"
-    source_path = root / "source-product.png"
-    logo = Image.new("RGBA", (220, 72), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(logo)
-    draw.text((12, 16), "TuoLin", fill=(245, 158, 11, 255))
-    logo.save(logo_path)
-
-    source = Image.new("RGB", (900, 520), (240, 240, 236))
-    draw = ImageDraw.Draw(source)
-    draw.rectangle((140, 180, 760, 320), fill=(250, 250, 250), outline=(160, 160, 160), width=4)
-    draw.text((300, 235), "Product Tape", fill=(80, 80, 80))
-    source.save(source_path)
-    return logo_path, source_path
 
 
 if __name__ == "__main__":

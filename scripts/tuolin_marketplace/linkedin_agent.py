@@ -20,6 +20,31 @@ EXTERNAL_PRODUCT_NAME_EN = "Specialty Glass Fiber Tape"
 DEFAULT_CONTACT_EMAIL = "tuolin@tuolintech.com"
 DEFAULT_CAMPAIGN_DAYS = 30
 DEFAULT_TRANSPARENT_LOGO_RELATIVE_PATH = Path("assets/logo/tuolin-logo-transparent.png")
+MARKETING_REVIEW_FILENAME = "01_中文策划_营销审阅.md"
+DESKTOP_DELIVERY_DIR_PREFIX = "LinkedIn-30-Day-Special-Fiberglass-Tape-For-Review"
+
+IMAGE_STYLE_CATEGORIES = [
+    {"slug": "original-light-enhancement", "name": "原图轻量增强型", "recommended_for": ["产品", "首发", "日常"]},
+    {"slug": "minimal-premium", "name": "极简高端型", "recommended_for": ["首发", "复盘", "品牌"]},
+    {"slug": "industrial-technical", "name": "工业技术型", "recommended_for": ["技术", "参数", "工程"]},
+    {"slug": "engineering-drawing", "name": "工程图纸型", "recommended_for": ["尺寸", "工程", "规格"]},
+    {"slug": "product-detail-closeup", "name": "产品细节特写型", "recommended_for": ["织纹", "细节", "不刺痒"]},
+    {"slug": "technical-parameter-card", "name": "技术参数卡片型", "recommended_for": ["1000", "参数", "卖点"]},
+    {"slug": "three-benefit-banner", "name": "三大卖点横幅型", "recommended_for": ["1000", "不刺痒", "不冒烟"]},
+    {"slug": "application-scenario", "name": "应用场景型", "recommended_for": ["应用", "场景"]},
+    {"slug": "exhaust-wrap-scenario", "name": "排气管包覆场景型", "recommended_for": ["排气", "exhaust"]},
+    {"slug": "industrial-pipe-insulation", "name": "工业管道保温型", "recommended_for": ["管道", "保温"]},
+    {"slug": "high-temperature-test", "name": "高温测试型", "recommended_for": ["高温", "1000"]},
+    {"slug": "cutting-processing", "name": "切割加工型", "recommended_for": ["切割", "加工", "不冒烟"]},
+    {"slug": "comfortable-handling", "name": "手感舒适型", "recommended_for": ["不刺痒", "安装"]},
+    {"slug": "pain-point-solution", "name": "痛点解决型", "recommended_for": ["痛点", "问题"]},
+    {"slug": "buyer-checklist", "name": "采购清单型", "recommended_for": ["采购", "清单"]},
+    {"slug": "inquiry-conversion", "name": "询盘转化型", "recommended_for": ["询盘", "样品", "联系"]},
+    {"slug": "specification-display", "name": "规格展示型", "recommended_for": ["规格", "尺寸"]},
+    {"slug": "multi-spec-combination", "name": "多规格组合型", "recommended_for": ["多规格", "组合"]},
+    {"slug": "split-screen-comparison", "name": "分屏对比型", "recommended_for": ["对比", "传统"]},
+    {"slug": "qa-education", "name": "问答科普型", "recommended_for": ["FAQ", "为什么", "科普"]},
+]
 
 CONFIRMED_CLAIMS = [
     {"zh": "耐高温1000度", "en": "withstands temperatures up to 1000°C", "tokens": ["1000", "1000°", "1000度"]},
@@ -40,6 +65,36 @@ class LinkedInCampaignResult:
     plan_path: str
     manifest_path: str
     context_id: str
+    status: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LinkedInImageSelectionResult:
+    campaign_dir: str
+    day_number: int
+    selection_path: str
+    manifest_path: str
+    source_images: tuple[dict[str, Any], ...]
+    recommended_categories: tuple[dict[str, str], ...]
+    not_recommended_categories: tuple[dict[str, str], ...]
+    status: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LinkedInImageGenerationPlan:
+    campaign_dir: str
+    day_number: int
+    manifest_path: str
+    source_image: str
+    categories: tuple[dict[str, str], ...]
+    output_dirs: tuple[str, ...]
+    desktop_output_dirs: tuple[str, ...]
     status: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,32 +192,11 @@ def _resolve_project_path(project_dir: Path, value: str) -> Path:
     return path.resolve()
 
 
-def _resolve_generation_logo_path(
-    campaign_dir: Path,
-    manifest: dict[str, Any],
-    explicit_logo_path: Path | None,
-) -> Path:
-    if explicit_logo_path is not None:
-        return explicit_logo_path.expanduser().resolve()
-
-    configured = (
-        manifest.get("files", {}).get("transparent_logo")
-        or manifest.get("files", {}).get("default_transparent_logo")
-        or manifest.get("image_policy", {}).get("default_transparent_logo_path")
-    )
-    if not configured:
-        raise ValueError(
-            "生成 LinkedIn 配图需要透明背景 logo。"
-            f"请把 logo 放到 {DEFAULT_TRANSPARENT_LOGO_RELATIVE_PATH}，"
-            "或在命令中提供 logo 路径。"
-        )
-    path = Path(str(configured)).expanduser()
-    if not path.is_absolute():
-        path = campaign_dir / path
-    return path.resolve()
-
-
 def confirm_linkedin_campaign_plan(campaign_dir: Path, overwrite: bool = False) -> LinkedInCampaignResult:
+    return decide_linkedin_marketing_review(campaign_dir, "skipped", overwrite=overwrite)
+
+
+def create_linkedin_marketing_review(campaign_dir: Path, overwrite: bool = False) -> LinkedInCampaignResult:
     campaign_dir = campaign_dir.expanduser().resolve()
     manifest_path = campaign_dir / "campaign-manifest.json"
     if not manifest_path.exists():
@@ -170,22 +204,77 @@ def confirm_linkedin_campaign_plan(campaign_dir: Path, overwrite: bool = False) 
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     status = manifest.get("status")
-    if status != "planning_ready":
+    if status not in {"planning_ready", "marketing_review_ready"}:
+        raise ValueError(f"当前活动状态是 {status!r}，不能进行营销策划审阅。请先生成中文策划。")
+
+    plan_path = Path(manifest["files"]["chinese_plan"])
+    if not plan_path.exists():
+        raise ValueError(f"找不到已生成的中文策划文件：{plan_path}")
+
+    review_path = campaign_dir / MARKETING_REVIEW_FILENAME
+    if review_path.exists() and not overwrite:
+        raise FileExistsError(f"营销策划审阅文件已存在，未覆盖：{review_path}")
+
+    review = _marketing_review_payload(plan_path, manifest)
+    review_path.write_text(_render_marketing_review(review, manifest), encoding="utf-8")
+    manifest["status"] = "marketing_review_ready"
+    _append_status_history(manifest, "marketing_review_ready")
+    manifest["marketing_review"] = {
+        "status": "ready",
+        "review_path": str(review_path),
+        "result": review["result"],
+        "decision": None,
+        "decision_at": None,
+        "applied_to_chinese_draft": False,
+        "risk_override": False,
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return LinkedInCampaignResult(
+        campaign_dir=str(campaign_dir),
+        plan_path=str(review_path),
+        manifest_path=str(manifest_path),
+        context_id=manifest["context"]["context_id"],
+        status="marketing_review_ready",
+    )
+
+
+def decide_linkedin_marketing_review(
+    campaign_dir: Path,
+    decision: str,
+    overwrite: bool = False,
+) -> LinkedInCampaignResult:
+    if decision not in {"skipped", "accepted", "rejected"}:
+        raise ValueError(f"不支持的营销策划审阅决策：{decision}")
+
+    campaign_dir = campaign_dir.expanduser().resolve()
+    manifest_path = campaign_dir / "campaign-manifest.json"
+    if not manifest_path.exists():
+        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    status = manifest.get("status")
+    if status not in {"planning_ready", "marketing_review_ready"}:
         raise ValueError(f"当前活动状态是 {status!r}，不能生成中文30天贴文总稿。请先完成中文策划。")
 
     plan_path = Path(manifest["files"]["chinese_plan"])
     if not plan_path.exists():
         raise ValueError(f"找不到已生成的中文策划文件：{plan_path}")
 
+    if decision in {"accepted", "rejected"}:
+        review_path = Path(str(manifest.get("marketing_review", {}).get("review_path", "")))
+        if not review_path.exists():
+            raise ValueError("采纳或不采纳营销审阅建议前，必须先生成营销策划审阅文件。")
+
     draft_path = campaign_dir / "02_中文30天贴文总稿.md"
     if draft_path.exists() and not overwrite:
         raise FileExistsError(f"中文30天贴文总稿已存在，未覆盖：{draft_path}")
 
-    draft_path.write_text(_render_chinese_30_day_draft(manifest), encoding="utf-8")
-    _append_status_history(manifest, "planning_confirmed")
+    manifest["marketing_review"] = _resolved_marketing_review(manifest, decision)
+    _append_status_history(manifest, f"marketing_review_{decision}")
     manifest["status"] = "chinese_draft_ready"
     _append_status_history(manifest, "chinese_draft_ready")
     manifest["files"]["chinese_draft"] = str(draft_path)
+    draft_path.write_text(_render_chinese_30_day_draft(manifest), encoding="utf-8")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
@@ -244,158 +333,122 @@ def confirm_linkedin_chinese_draft(campaign_dir: Path, overwrite: bool = False) 
     )
 
 
-def generate_linkedin_publishing_images(
-    campaign_dir: Path,
-    logo_path: Path | None,
-    source_image_path: Path,
-    overwrite: bool = False,
-) -> LinkedInCampaignResult:
-    campaign_dir = campaign_dir.expanduser().resolve()
-    source_image_path = source_image_path.expanduser().resolve()
-    manifest_path = campaign_dir / "campaign-manifest.json"
-    if not manifest_path.exists():
-        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
-    if not source_image_path.exists():
-        raise ValueError(f"找不到源图片文件：{source_image_path}")
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    resolved_logo_path = _resolve_generation_logo_path(campaign_dir, manifest, logo_path)
-    if not resolved_logo_path.exists():
-        logo_path_label = "指定路径" if logo_path is not None else "配置路径"
-        raise ValueError(
-            f"找不到透明 logo 文件：{resolved_logo_path}。"
-            f"请把透明背景 logo 放到{logo_path_label} {resolved_logo_path}，或在命令中提供 logo 路径。"
-        )
-    status = manifest.get("status")
-    if status not in {"english_package_ready", "image_assets_ready"}:
-        raise ValueError(f"当前活动状态是 {status!r}，不能生成发布图。请先生成英文发布包。")
-
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as exc:
-        raise RuntimeError("生成发布图需要 Pillow 图片库。请先安装 Pillow，或只使用 image brief。") from exc
-
-    logo = Image.open(resolved_logo_path).convert("RGBA")
-    if not _has_transparency(logo):
-        raise ValueError("logo 文件必须是带透明通道的图片。请提供独立透明 logo，不要使用带背景的参考图。")
-
-    source = Image.open(source_image_path).convert("RGB")
-    output_dir = Path(manifest["files"]["publishing_images_dir"])
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_paths = [output_dir / f"day-{day['day']:02d}.png" for day in _campaign_days()]
-    existing = [path for path in output_paths if path.exists()]
-    if existing and not overwrite:
-        raise FileExistsError("发布图已存在，未覆盖：" + "；".join(str(path) for path in existing))
-
-    font_large = _load_font(ImageFont, 34)
-    font_small = _load_font(ImageFont, 22)
-    generated = []
-    manual_generated = []
-    for day, output_path in zip(_campaign_days(), output_paths):
-        tags = [str(tag) for tag in day["tags"][:3]]
-        image = _compose_publishing_image(source, logo, tags, font_large, font_small)
-        manual_path = _manual_day_assets_dir(campaign_dir, int(day["day"])) / "linkedin-publishing-image.png"
-        manual_path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(manual_path)
-        shutil.copyfile(manual_path, output_path)
-        generated.append(str(output_path))
-        manual_generated.append(str(manual_path))
-        _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{int(day['day']):02d}.md", output_path)
-        _upsert_manual_asset_note(campaign_dir, int(day["day"]), output_path, manual_path, tags)
-
-    manifest["status"] = "image_assets_ready"
-    _append_status_history(manifest, "image_assets_ready")
-    manifest["files"]["transparent_logo"] = str(resolved_logo_path)
-    manifest["files"]["publishing_image_source"] = str(source_image_path)
-    manifest["files"]["publishing_images"] = generated
-    manifest["files"]["manual_publishing_images"] = manual_generated
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return LinkedInCampaignResult(
-        campaign_dir=str(campaign_dir),
-        plan_path=manual_generated[0],
-        manifest_path=str(manifest_path),
-        context_id=manifest["context"]["context_id"],
-        status="image_assets_ready",
-    )
-
-
-def regenerate_linkedin_publishing_image(
-    campaign_dir: Path,
-    day_number: int,
-    tags: list[str],
-    logo_path: Path | None = None,
-    source_image_path: Path | None = None,
-) -> LinkedInCampaignResult:
+def create_linkedin_image_selection_sheet(campaign_dir: Path, day_number: int) -> LinkedInImageSelectionResult:
     campaign_dir = campaign_dir.expanduser().resolve()
     manifest_path = campaign_dir / "campaign-manifest.json"
     if not manifest_path.exists():
         raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
     if day_number < 1 or day_number > DEFAULT_CAMPAIGN_DAYS:
         raise ValueError(f"Day 必须在 1 到 {DEFAULT_CAMPAIGN_DAYS} 之间：{day_number}")
-    clean_tags = [tag.strip() for tag in tags if tag.strip()]
-    if not clean_tags:
-        raise ValueError("重新生成单日发布图需要至少 1 个 tag。")
-    if len(clean_tags) > 3:
-        clean_tags = clean_tags[:3]
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     status = manifest.get("status")
-    if status not in {"english_package_ready", "image_assets_ready"}:
-        raise ValueError(f"当前活动状态是 {status!r}，不能重新生成发布图。请先生成英文发布包。")
+    if status not in {"english_package_ready", "image_selection_ready", "image_generation_ready"}:
+        raise ValueError(f"当前活动状态是 {status!r}，不能生成发布图选择单。请先生成英文发布包和人工发布包。")
 
-    resolved_source = source_image_path
-    if resolved_source is None:
-        configured_source = manifest.get("files", {}).get("publishing_image_source")
-        if configured_source:
-            resolved_source = Path(str(configured_source))
-    if resolved_source is None:
-        raise ValueError("重新生成单日发布图需要源图。请先生成整套配图，或在命令中提供源图路径。")
-    resolved_source = resolved_source.expanduser().resolve()
-    if not resolved_source.exists():
-        raise ValueError(f"找不到源图片文件：{resolved_source}")
+    source_images = _day_source_images(campaign_dir, day_number)
+    if not source_images:
+        raise ValueError(f"Day {day_number:02d} 的 assets 目录没有源图。请先把当天源图放入该目录。")
 
-    resolved_logo_path = _resolve_generation_logo_path(campaign_dir, manifest, logo_path)
-    if not resolved_logo_path.exists():
-        raise ValueError(f"找不到透明 logo 文件：{resolved_logo_path}")
+    day = _campaign_days()[day_number - 1]
+    recommended = _recommended_image_categories(day, source_images)
+    not_recommended = _not_recommended_image_categories(day, source_images)
+    selection_path = _manual_day_dir(campaign_dir, day_number) / "Publishing Image Selection.md"
+    selection_path.write_text(
+        _render_image_selection_sheet(day, manifest, source_images, recommended, not_recommended),
+        encoding="utf-8",
+    )
 
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as exc:
-        raise RuntimeError("生成发布图需要 Pillow 图片库。请先安装 Pillow，或只使用 image brief。") from exc
-
-    logo = Image.open(resolved_logo_path).convert("RGBA")
-    if not _has_transparency(logo):
-        raise ValueError("logo 文件必须是带透明通道的图片。请提供独立透明 logo，不要使用带背景的参考图。")
-    source = Image.open(resolved_source).convert("RGB")
-    font_large = _load_font(ImageFont, 34)
-    font_small = _load_font(ImageFont, 22)
-    image = _compose_publishing_image(source, logo, clean_tags, font_large, font_small)
-
-    output_dir = Path(manifest["files"]["publishing_images_dir"])
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"day-{day_number:02d}.png"
-
-    manual_path = _manual_day_assets_dir(campaign_dir, day_number) / "linkedin-publishing-image.png"
-    manual_path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(manual_path)
-    shutil.copyfile(manual_path, output_path)
-    _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{day_number:02d}.md", output_path)
-    _upsert_manual_asset_note(campaign_dir, day_number, output_path, manual_path, clean_tags)
-
-    manifest["status"] = "image_assets_ready"
-    _append_status_history(manifest, f"day_{day_number:02d}_image_regenerated")
-    manifest["files"]["transparent_logo"] = str(resolved_logo_path)
-    manifest["files"]["publishing_image_source"] = str(resolved_source)
-    manifest.setdefault("custom_visual_tags", {})[f"day-{day_number:02d}"] = clean_tags
-    _upsert_manifest_file_list(manifest, "publishing_images", str(output_path), day_number)
-    _upsert_manifest_file_list(manifest, "manual_publishing_images", str(manual_path), day_number)
+    day_key = f"day-{day_number:02d}"
+    manifest.setdefault("single_day_images", {})[day_key] = {
+        "selection_sheet_status": "shown",
+        "selection_sheet_path": str(selection_path),
+        "source_images": source_images,
+        "recommended_categories": recommended,
+        "not_recommended_categories": not_recommended,
+    }
+    manifest["status"] = "image_selection_ready"
+    _append_status_history(manifest, f"{day_key}_image_selection_ready")
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return LinkedInCampaignResult(
+    return LinkedInImageSelectionResult(
         campaign_dir=str(campaign_dir),
-        plan_path=str(manual_path),
+        day_number=day_number,
+        selection_path=str(selection_path),
         manifest_path=str(manifest_path),
-        context_id=manifest["context"]["context_id"],
-        status="image_assets_ready",
+        source_images=tuple(source_images),
+        recommended_categories=tuple(recommended),
+        not_recommended_categories=tuple(not_recommended),
+        status="image_selection_ready",
+    )
+
+
+def prepare_linkedin_image_generation(
+    campaign_dir: Path,
+    day_number: int,
+    source_index: int,
+    category_values: list[str],
+) -> LinkedInImageGenerationPlan:
+    campaign_dir = campaign_dir.expanduser().resolve()
+    manifest_path = campaign_dir / "campaign-manifest.json"
+    if not manifest_path.exists():
+        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
+    if day_number < 1 or day_number > DEFAULT_CAMPAIGN_DAYS:
+        raise ValueError(f"Day 必须在 1 到 {DEFAULT_CAMPAIGN_DAYS} 之间：{day_number}")
+    if not category_values:
+        raise ValueError("生成单日发布图需要选择 1-3 个风格类别。")
+    if len(category_values) > 3:
+        raise ValueError("一次最多只能选择 3 个发布图风格类别。")
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    day_key = f"day-{day_number:02d}"
+    selection = manifest.get("single_day_images", {}).get(day_key)
+    if not selection:
+        raise ValueError(f"请先生成 Day {day_number:02d} 发布图选择单。")
+    source_images = selection.get("source_images", [])
+    if source_index < 1 or source_index > len(source_images):
+        raise ValueError(f"源图编号无效：{source_index}。请选择 1 到 {len(source_images)}。")
+    source_image = source_images[source_index - 1]
+    categories = [_resolve_image_category(value) for value in category_values]
+    output_dirs = []
+    desktop_output_dirs = []
+    for category in categories:
+        output_dir = _manual_day_publish_images_dir(campaign_dir, day_number) / category["slug"]
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dirs.append(str(output_dir))
+        desktop_root = manifest.get("desktop_delivery", {}).get("path")
+        if desktop_root:
+            desktop_dir = (
+                Path(desktop_root)
+                / "Manual-Posting-Package"
+                / f"Day {day_number:02d}"
+                / "Publish-Images"
+                / category["slug"]
+            )
+            desktop_dir.mkdir(parents=True, exist_ok=True)
+            desktop_output_dirs.append(str(desktop_dir))
+
+    selection.update(
+        {
+            "selected_source_image": source_image,
+            "selected_categories": categories,
+            "output_dirs": output_dirs,
+            "desktop_output_dirs": desktop_output_dirs,
+            "generation_status": "ready_for_codex_image_model",
+            "generated_at": None,
+        }
+    )
+    manifest["status"] = "image_generation_ready"
+    _append_status_history(manifest, f"{day_key}_image_generation_ready")
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return LinkedInImageGenerationPlan(
+        campaign_dir=str(campaign_dir),
+        day_number=day_number,
+        manifest_path=str(manifest_path),
+        source_image=str(source_image["path"]),
+        categories=tuple(categories),
+        output_dirs=tuple(output_dirs),
+        desktop_output_dirs=tuple(desktop_output_dirs),
+        status="image_generation_ready",
     )
 
 
@@ -405,7 +458,6 @@ def _ensure_campaign_dirs(campaign_dir: Path) -> None:
         "daily",
         "assets/logo",
         "assets/source-images",
-        "assets/publishing-images",
     ]:
         (campaign_dir / relative).mkdir(parents=True, exist_ok=True)
 
@@ -467,6 +519,132 @@ def _content_assets(context: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return assets
+
+
+def _marketing_review_payload(plan_path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    plan_text = plan_path.read_text(encoding="utf-8")
+    risks: list[str] = []
+    suggestions: list[str] = []
+
+    if EXTERNAL_PRODUCT_NAME_ZH not in plan_text:
+        risks.append(f"策划中没有稳定出现对外中文产品名「{EXTERNAL_PRODUCT_NAME_ZH}」。")
+        suggestions.append(f"统一使用「{EXTERNAL_PRODUCT_NAME_ZH}」作为中文对外名称。")
+    if EXTERNAL_PRODUCT_NAME_EN not in plan_text:
+        suggestions.append(f"在英文对外素材中统一使用「{EXTERNAL_PRODUCT_NAME_EN}」。")
+    for claim in CONFIRMED_CLAIMS:
+        if claim["zh"] not in plan_text and not any(token in plan_text for token in claim["tokens"]):
+            risks.append(f"核心卖点「{claim['zh']}」覆盖不足。")
+            suggestions.append(f"在内容节奏中补充「{claim['zh']}」对应的教育或转化主题。")
+
+    blocked_terms = ["环保", "无致癌", "马力提升", "降噪", "固定降温", "A1", "asbestos-free"]
+    found_blocked = [term for term in blocked_terms if term.lower() in plan_text.lower()]
+    if found_blocked:
+        risks.append("策划中出现需要报告或证据支持的高风险词：" + "、".join(found_blocked))
+        suggestions.append("删除或改为仅在报告已审核并附图时使用的谨慎表述。")
+
+    if not risks:
+        result = "recommended"
+        conclusion = "建议通过"
+        risks.append("未发现阻塞性营销策划风险。")
+    elif len(risks) <= 2:
+        result = "recommended_with_changes"
+        conclusion = "建议修改后通过"
+    else:
+        result = "not_recommended"
+        conclusion = "不建议直接继续"
+
+    suggestions.extend(
+        [
+            "保持欧美 B2B 语气，优先面向工业采购、分销商、维修维护团队和热管理相关从业者。",
+            "将图片生产与内容包生产拆开，发布图按 Day 单独生成。",
+            "继续避免把内容素材当作性能事实证据。",
+        ]
+    )
+    return {
+        "result": result,
+        "conclusion": conclusion,
+        "risks": risks,
+        "suggestions": suggestions,
+    }
+
+
+def _render_marketing_review(review: dict[str, Any], manifest: dict[str, Any]) -> str:
+    lines = [
+        "# LinkedIn 中文策划营销审阅",
+        "",
+        "## 审阅结论",
+        "",
+        f"- 结论：{review['conclusion']}",
+        f"- 是否建议进入中文 30 天贴文总稿：{'是' if review['result'] != 'not_recommended' else '否，除非员工确认 override'}",
+        "",
+        "## 审阅范围",
+        "",
+        "- 只审阅 `01_中文策划.md` 的营销质量、市场适配和对外表达风险。",
+        "- 不调用知识库复核项流程。",
+        "- 不写回正式知识层。",
+        "",
+        "## 检查项",
+        "",
+        f"- 欧美 B2B 市场适配：面向工业采购、工业品分销商、维修维护团队和热管理相关从业者。",
+        f"- 对外中文名：{EXTERNAL_PRODUCT_NAME_ZH}",
+        f"- 对外英文名：{EXTERNAL_PRODUCT_NAME_EN}",
+        "- 核心卖点：1000°C working temperature、itch-free handling、no smoke。",
+        "- 发布方式：人工检查后手动发布，不自动发布。",
+        "",
+        "## 风险",
+        "",
+    ]
+    lines.extend(f"- {risk}" for risk in review["risks"])
+    lines.extend(["", "## 修改建议", ""])
+    lines.extend(f"- {suggestion}" for suggestion in review["suggestions"])
+    lines.extend(
+        [
+            "",
+            "## 下一步",
+            "",
+            "- 如采纳：生成中文 30 天贴文总稿时应用上述建议。",
+            "- 如不采纳：仍可继续生成中文 30 天贴文总稿，但 manifest 和总稿中应记录未采纳状态。",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _resolved_marketing_review(manifest: dict[str, Any], decision: str) -> dict[str, Any]:
+    current = dict(manifest.get("marketing_review") or {})
+    if not current:
+        current = {
+            "status": "skipped",
+            "review_path": None,
+            "result": "not_reviewed",
+        }
+    current["status"] = decision
+    current["decision"] = decision
+    current["decision_at"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+    current["applied_to_chinese_draft"] = decision == "accepted"
+    current["risk_override"] = decision == "rejected" and current.get("result") == "not_recommended"
+    return current
+
+
+def _marketing_review_lines(manifest: dict[str, Any]) -> list[str]:
+    review = manifest.get("marketing_review") or {}
+    status = review.get("status", "skipped")
+    if status == "accepted":
+        return [
+            f"- 营销策划审阅：已采纳。",
+            f"- 审阅文件：{review.get('review_path')}",
+            "- 本中文总稿生成时应应用审阅建议。",
+        ]
+    if status == "rejected":
+        lines = [
+            "- 营销策划审阅：未采纳，员工确认继续。",
+            f"- 审阅文件：{review.get('review_path')}",
+        ]
+        if review.get("risk_override"):
+            lines.append("- 审阅结论为不建议继续，但员工已确认 override。")
+        return lines
+    if status == "ready":
+        return ["- 营销策划审阅：已生成但尚未决策。"]
+    return ["- 营销策划审阅：已跳过。"]
 
 
 def _render_chinese_plan(
@@ -590,7 +768,6 @@ def _manifest(
             "logo_dir": str(campaign_dir / "assets" / "logo"),
             "default_transparent_logo": str(default_transparent_logo_path),
             "source_images_dir": str(campaign_dir / "assets" / "source-images"),
-            "publishing_images_dir": str(campaign_dir / "assets" / "publishing-images"),
         },
     }
 
@@ -612,6 +789,10 @@ def _render_chinese_30_day_draft(manifest: dict[str, Any]) -> str:
         "- 排期方式：Day 1 到 Day 30，不绑定具体日期。",
         "- 发布方式：人工检查后手动发布 LinkedIn。",
         f"- 联系邮箱：{manifest.get('contact_email', DEFAULT_CONTACT_EMAIL)}",
+        "",
+        "## 营销策划审阅状态",
+        "",
+        *_marketing_review_lines(manifest),
         "",
         "## 发布前复核提示",
         "",
@@ -893,6 +1074,47 @@ def _manual_day_assets_dir(campaign_dir: Path, day_number: int) -> Path:
     return _manual_day_dir(campaign_dir, day_number) / "assets"
 
 
+def _manual_day_publish_images_dir(campaign_dir: Path, day_number: int) -> Path:
+    return _manual_day_dir(campaign_dir, day_number) / "Publish-Images"
+
+
+def copy_linkedin_campaign_to_desktop(
+    campaign_dir: Path,
+    desktop_dir: Path | None = None,
+    now: datetime | None = None,
+) -> LinkedInCampaignResult:
+    campaign_dir = campaign_dir.expanduser().resolve()
+    manifest_path = campaign_dir / "campaign-manifest.json"
+    if not manifest_path.exists():
+        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    draft_path = Path(manifest.get("files", {}).get("chinese_draft") or campaign_dir / "02_中文30天贴文总稿.md")
+    if not draft_path.exists():
+        raise ValueError("复制到桌面前，请先生成详细 30 天发帖内容（02_中文30天贴文总稿.md）。")
+
+    root = (desktop_dir or Path.home() / "Desktop").expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    destination = root / f"{DESKTOP_DELIVERY_DIR_PREFIX}-{stamp}"
+    if destination.exists():
+        raise FileExistsError(f"桌面交付目录已存在，未覆盖：{destination}")
+
+    manifest["desktop_delivery"] = {
+        "path": str(destination),
+        "created_at": stamp,
+        "source_campaign_dir": str(campaign_dir),
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    shutil.copytree(campaign_dir, destination)
+    return LinkedInCampaignResult(
+        campaign_dir=str(campaign_dir),
+        plan_path=str(destination),
+        manifest_path=str(manifest_path),
+        context_id=manifest["context"]["context_id"],
+        status=manifest["status"],
+    )
+
+
 def _write_manual_posting_package(
     campaign_dir: Path,
     posts: list[dict[str, Any]],
@@ -950,7 +1172,7 @@ def _render_manual_campaign_overview(posts: list[dict[str, Any]], manifest: dict
         lines.append(
             f"- Day {post['day']:02d}: {post['theme']} | "
             f"Post: Day {post['day']:02d}/LinkedIn Post Content.md | "
-            f"Assets: Day {post['day']:02d}/assets/linkedin-publishing-image.png"
+            f"Publishing images: Day {post['day']:02d}/Publish-Images/"
         )
     return "\n".join(lines) + "\n"
 
@@ -964,7 +1186,7 @@ def _write_manual_calendar(path: Path, posts: list[dict[str, Any]]) -> None:
                 "theme",
                 "post_content_file",
                 "asset_notes_file",
-                "publishing_image_file",
+                "publishing_images_dir",
                 "hashtags",
                 "manual_review_status",
             ],
@@ -978,7 +1200,7 @@ def _write_manual_calendar(path: Path, posts: list[dict[str, Any]]) -> None:
                     "theme": post["theme"],
                     "post_content_file": f"Day {day:02d}/LinkedIn Post Content.md",
                     "asset_notes_file": f"Day {day:02d}/Asset Notes.md",
-                    "publishing_image_file": f"Day {day:02d}/assets/linkedin-publishing-image.png",
+                    "publishing_images_dir": f"Day {day:02d}/Publish-Images/",
                     "hashtags": " ".join(post["hashtags"]),
                     "manual_review_status": "unchecked",
                 }
@@ -1012,9 +1234,9 @@ def _render_manual_asset_notes(post: dict[str, Any]) -> str:
         [
             f"# Day {post['day']:02d} Asset Notes",
             "",
-            "## Publishing Image",
+            "## Source Images",
             "",
-            "assets/linkedin-publishing-image.png",
+            "Place approved source images for this Day in `assets/` before generating publishing images.",
             "",
             "## Image Brief",
             "",
@@ -1033,132 +1255,146 @@ def _render_manual_asset_notes(post: dict[str, Any]) -> str:
             "## Regeneration",
             "",
             (
-                f"To adjust this day's image tags, ask Codex to regenerate Day {post['day']:02d} "
-                "with the new tags."
+                f"To create publishing images, ask Codex to generate the Day {post['day']:02d} "
+                "publishing image selection sheet, then choose one source image and 1-3 style categories."
             ),
         ]
     ) + "\n"
 
 
-def _compose_publishing_image(source, logo, tags: list[str], font_large, font_small):
-    from PIL import Image, ImageDraw
+def _day_source_images(campaign_dir: Path, day_number: int) -> list[dict[str, Any]]:
+    assets_dir = _manual_day_assets_dir(campaign_dir, day_number)
+    suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    images = []
+    if not assets_dir.exists():
+        return images
+    for index, path in enumerate(sorted(item for item in assets_dir.iterdir() if item.suffix.lower() in suffixes), 1):
+        images.append(
+            {
+                "index": index,
+                "path": str(path),
+                "filename": path.name,
+                "role": _source_image_role(path),
+            }
+        )
+    return images
 
-    image = source.convert("RGBA")
-    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    _draw_visual_tags(draw, tags, font_large, font_small)
-    _paste_logo(overlay, logo, image.size)
-    image.alpha_composite(overlay)
-    return image
+
+def _source_image_role(path: Path) -> str:
+    name = path.name.lower()
+    if any(token in name for token in ["exhaust", "pipe", "flue", "stove", "application", "scene"]):
+        return "scenario"
+    if any(token in name for token in ["texture", "closeup", "detail"]):
+        return "detail"
+    return "product"
 
 
-def _upsert_manual_asset_note(
-    campaign_dir: Path,
-    day_number: int,
-    standard_image_path: Path,
-    manual_image_path: Path,
-    tags: list[str],
-) -> None:
-    note_path = _manual_day_dir(campaign_dir, day_number) / "Asset Notes.md"
-    if not note_path.exists():
-        return
-    text = note_path.read_text(encoding="utf-8")
-    section = "\n".join(
+def _recommended_image_categories(day: dict[str, Any], source_images: list[dict[str, Any]]) -> list[dict[str, str]]:
+    text = f"{day['theme']} {day['angle']} {' '.join(day['tags'])}".lower()
+    roles = {image["role"] for image in source_images}
+    slugs: list[str]
+    if "排气" in text or "exhaust" in text:
+        slugs = ["exhaust-wrap-scenario", "industrial-technical", "three-benefit-banner"]
+    elif "采购" in text or "询盘" in text or "样品" in text:
+        slugs = ["buyer-checklist", "inquiry-conversion", "technical-parameter-card"]
+    elif "不刺痒" in text or "itch" in text:
+        slugs = ["comfortable-handling", "product-detail-closeup", "pain-point-solution"]
+    elif "不冒烟" in text or "smoke" in text:
+        slugs = ["cutting-processing", "pain-point-solution", "three-benefit-banner"]
+    elif "1000" in text or "高温" in text:
+        slugs = ["technical-parameter-card", "high-temperature-test", "industrial-technical"]
+    elif "detail" in roles:
+        slugs = ["product-detail-closeup", "comfortable-handling", "minimal-premium"]
+    else:
+        slugs = ["original-light-enhancement", "minimal-premium", "technical-parameter-card"]
+    return [_category_for_slug(slug) for slug in slugs]
+
+
+def _not_recommended_image_categories(day: dict[str, Any], source_images: list[dict[str, Any]]) -> list[dict[str, str]]:
+    roles = {image["role"] for image in source_images}
+    result = []
+    scenario_categories = {
+        "application-scenario": "当前 Day 没有明确真实应用场景源图时，不建议生成场景型图片。",
+        "exhaust-wrap-scenario": "需要真实排气管或包覆场景源图，不能从白底产品图编造。",
+        "industrial-pipe-insulation": "需要真实工业管道或保温现场源图，不能从白底产品图编造。",
+        "cutting-processing": "需要真实裁切或加工动作源图，否则容易误导。",
+    }
+    if "scenario" not in roles:
+        for slug, reason in scenario_categories.items():
+            category = _category_for_slug(slug)
+            result.append({"slug": category["slug"], "name": category["name"], "reason": reason})
+    return result[:6]
+
+
+def _render_image_selection_sheet(
+    day: dict[str, Any],
+    manifest: dict[str, Any],
+    source_images: list[dict[str, Any]],
+    recommended: list[dict[str, str]],
+    not_recommended: list[dict[str, str]],
+) -> str:
+    day_number = int(day["day"])
+    lines = [
+        f"# Day {day_number:02d} Publishing Image Selection",
+        "",
+        "## Day Content",
+        "",
+        f"- Theme: {day['theme']}",
+        f"- Core angle: {day['angle']}",
+        f"- Product: {EXTERNAL_PRODUCT_NAME_EN}",
+        f"- Contact: {manifest.get('contact_email', DEFAULT_CONTACT_EMAIL)}",
+        f"- Visual tags: {', '.join(day['tags'])}",
+        "",
+        "## Source Images",
+        "",
+    ]
+    for image in source_images:
+        lines.append(f"{image['index']}. `{image['filename']}` ({image['role']})")
+    lines.extend(
         [
-            "## Generated Publishing Image",
             "",
-            f"- Standard path: {standard_image_path}",
-            f"- Manual package path: {manual_image_path}",
-            f"- Current visual tags: {', '.join(tags)}",
+            "## Size Recommendation",
+            "",
+            "- Default: keep source image dimensions.",
+            "- Use another size only when the user explicitly requests it.",
+            "",
+            "## Recommended Categories",
             "",
         ]
     )
-    marker = "\n## Generated Publishing Image\n"
-    if marker not in text:
-        note_path.write_text(text.rstrip() + "\n\n" + section, encoding="utf-8")
-        return
-    before, _marker, after = text.partition(marker)
-    next_section_index = after.find("\n## ")
-    tail = "" if next_section_index == -1 else after[next_section_index:]
-    note_path.write_text(before.rstrip() + "\n\n" + section.rstrip() + "\n" + tail, encoding="utf-8")
+    for category in recommended:
+        lines.append(f"- {category['name']} (`{category['slug']}`)")
+    lines.extend(["", "## All Categories", ""])
+    for index, category in enumerate(IMAGE_STYLE_CATEGORIES, 1):
+        lines.append(f"{index}. {category['name']} (`{category['slug']}`)")
+    if not_recommended:
+        lines.extend(["", "## Not Recommended For Current Source", ""])
+        for category in not_recommended:
+            lines.append(f"- {category['name']}：{category['reason']}")
+    lines.extend(
+        [
+            "",
+            "## Next Input Example",
+            "",
+            f"Day {day_number:02d} 源图选 1，风格选：{recommended[0]['name']}、{recommended[1]['name']}",
+        ]
+    )
+    return "\n".join(lines) + "\n"
 
 
-def _upsert_manifest_file_list(manifest: dict[str, Any], key: str, value: str, day_number: int) -> None:
-    files = manifest.setdefault("files", {})
-    values = list(files.get(key) or [])
-    index = day_number - 1
-    while len(values) <= index:
-        values.append("")
-    values[index] = value
-    files[key] = values
+def _resolve_image_category(value: str) -> dict[str, str]:
+    cleaned = value.strip().strip("`")
+    for category in IMAGE_STYLE_CATEGORIES:
+        if cleaned == category["slug"] or cleaned == category["name"]:
+            return {"slug": category["slug"], "name": category["name"]}
+    raise ValueError(f"未知发布图风格类别：{value}")
 
 
-def _has_transparency(image) -> bool:
-    alpha = image.getchannel("A")
-    return alpha.getextrema()[0] < 255
-
-
-def _load_font(image_font_module, size: int):
-    candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/Library/Fonts/Arial.ttf",
-    ]
-    for candidate in candidates:
-        if Path(candidate).exists():
-            try:
-                return image_font_module.truetype(candidate, size)
-            except OSError:
-                continue
-    return image_font_module.load_default()
-
-
-def _draw_visual_tags(draw, tags: list[str], font_large, font_small) -> None:
-    x = 50
-    y = 58
-    orange = (245, 158, 11, 255)
-    shadow = (0, 0, 0, 180)
-    draw.text((x + 2, y + 2), "Advantage", font=font_large, fill=shadow)
-    draw.text((x, y), "Advantage", font=font_large, fill=orange)
-    line_y = y + 50
-    for tag in tags:
-        text = f"◇ {tag}"
-        draw.text((x + 1, line_y + 1), text, font=font_small, fill=shadow)
-        draw.text((x, line_y), text, font=font_small, fill=orange)
-        line_y += 34
-
-
-def _paste_logo(image, logo, canvas_size: tuple[int, int]) -> None:
-    canvas_width, canvas_height = canvas_size
-    max_width = max(120, min(270, int(canvas_width * 0.24)))
-    resized = logo.copy()
-    if resized.width > max_width:
-        ratio = max_width / resized.width
-        resized = resized.resize((max_width, max(1, int(resized.height * ratio))))
-    margin = max(24, int(min(canvas_width, canvas_height) * 0.045))
-    x = canvas_width - resized.width - margin
-    y = margin
-    image.alpha_composite(resized, (x, y))
-
-
-def _upsert_daily_image_reference(daily_path: Path, image_path: Path) -> None:
-    if not daily_path.exists():
-        return
-    text = daily_path.read_text(encoding="utf-8")
-    section = "\n## Publishing Image\n\n" + str(image_path) + "\n"
-    marker = "\n## Publishing Image\n"
-    if marker not in text:
-        daily_path.write_text(text.rstrip() + section, encoding="utf-8")
-        return
-    before, _marker, after = text.partition(marker)
-    next_section_index = after.find("\n## ")
-    if next_section_index == -1:
-        replacement = section
-        tail = ""
-    else:
-        replacement = section.rstrip() + "\n"
-        tail = after[next_section_index:]
-    daily_path.write_text(before.rstrip() + replacement + tail, encoding="utf-8")
+def _category_for_slug(slug: str) -> dict[str, str]:
+    for category in IMAGE_STYLE_CATEGORIES:
+        if category["slug"] == slug:
+            return {"slug": category["slug"], "name": category["name"]}
+    raise ValueError(f"未知发布图风格类别 slug：{slug}")
 
 
 def _display_path(root: Path, path: Path) -> str:

@@ -11,11 +11,14 @@ from .core_upstream import organize_core_upstream, preview_core_upstream
 from .linkedin_agent import (
     confirm_linkedin_campaign_plan,
     confirm_linkedin_chinese_draft,
+    copy_linkedin_campaign_to_desktop,
     create_linkedin_campaign_plan,
+    create_linkedin_image_selection_sheet,
+    create_linkedin_marketing_review,
     default_linkedin_transparent_logo_path,
-    generate_linkedin_publishing_images,
+    decide_linkedin_marketing_review,
     is_linkedin_campaign_request,
-    regenerate_linkedin_publishing_image,
+    prepare_linkedin_image_generation,
 )
 from .partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_partitions, scan_partition
 from .partition_organizer import organize_partition
@@ -157,61 +160,142 @@ def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:
 
 
 def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse | None:
-    if _is_linkedin_single_day_image_request(utterance):
+    if _is_linkedin_marketing_review_decision_request(utterance):
         campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
-        logo_path = _extract_linkedin_path(utterance, ["logo", "Logo", "透明logo", "透明背景logo"])
-        source_path = _extract_linkedin_path(utterance, ["源图", "产品源图", "source-image", "source_image"])
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("处理营销审阅决策")
+        decision = "accepted" if _accepts_marketing_review(utterance) else "rejected"
+        try:
+            result = decide_linkedin_marketing_review(campaign_dir, decision)
+        except (RuntimeError, ValueError, FileExistsError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        label = "采纳" if decision == "accepted" else "不采纳"
+        return NaturalLanguageResponse(
+            intent="linkedin_chinese_draft",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                f"已记录营销审阅决策：{label}。"
+                f"中文 30 天贴文总稿已生成：{Path(result.campaign_dir) / '02_中文30天贴文总稿.md'}。"
+                "确认中文总稿后才会拆成英文每日发布文件。"
+            ),
+            copyable_reply=f"确认中文总稿，活动文件夹：{result.campaign_dir}",
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_marketing_review_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("进行营销策划审阅")
+        try:
+            result = create_linkedin_marketing_review(campaign_dir)
+        except (RuntimeError, ValueError, FileExistsError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_marketing_review",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                "已生成 LinkedIn 营销策划审阅。"
+                f"请检查：{Path(result.plan_path)}。"
+                "你可以采纳审阅建议，也可以不采纳并继续生成中文 30 天贴文总稿。"
+            ),
+            copyable_reply=f"采纳营销审阅建议，活动文件夹：{result.campaign_dir}",
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_desktop_copy_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        if campaign_dir is None:
+            return _linkedin_missing_campaign_dir_response("复制30天发帖计划到桌面")
+        try:
+            result = copy_linkedin_campaign_to_desktop(campaign_dir, desktop_dir=_linkedin_desktop_root())
+        except (RuntimeError, ValueError, FileExistsError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        return NaturalLanguageResponse(
+            intent="linkedin_desktop_delivery_copy",
+            executed=True,
+            needs_confirmation=False,
+            message=(
+                "已复制 30 天发帖计划到桌面交付目录。"
+                f"桌面目录：{result.plan_path}。"
+                "后续单日生成发布图时，会同步复制到这个桌面副本。"
+            ),
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_image_generation_choice_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
         day_number = _extract_linkedin_day_number(utterance)
-        tags = _extract_linkedin_tags(utterance)
+        source_index = _extract_linkedin_source_index(utterance)
+        categories = _extract_linkedin_image_categories(utterance)
         missing = []
         if campaign_dir is None:
             missing.append("活动文件夹")
         if day_number is None:
             missing.append("Day 编号")
-        if not tags:
-            missing.append("tags")
+        if source_index is None:
+            missing.append("源图编号")
+        if not categories:
+            missing.append("1-3 个风格类别")
         if missing:
             return NaturalLanguageResponse(
-                intent="linkedin_single_day_image",
+                intent="linkedin_image_generation_choice",
                 executed=False,
                 needs_confirmation=True,
-                message=(
-                    "重新生成单日 LinkedIn 发布图还需要："
-                    f"{'、'.join(missing)}。如果此前已经生成过整套发布图，可以不再提供源图和 logo；"
-                    "系统会复用 manifest 里记录的源图和透明 logo。"
-                ),
-                copyable_reply=(
-                    "重新生成 LinkedIn Day 01 发布图，"
-                    "活动文件夹：/path/to/campaign，"
-                    "tags：1000°C Heat Resistance, No Itching, No Smoke"
-                ),
+                message=f"生成单日发布图还需要：{'、'.join(missing)}。",
+                copyable_reply="Day 01 源图选 1，风格选：原图轻量增强型、极简高端型，活动文件夹：/path/to/campaign",
             )
         try:
-            result = regenerate_linkedin_publishing_image(
-                campaign_dir,
-                day_number,
-                tags,
-                logo_path=logo_path,
-                source_image_path=source_path,
-            )
-        except (RuntimeError, ValueError) as exc:
+            result = prepare_linkedin_image_generation(campaign_dir, day_number, source_index, categories)
+        except (RuntimeError, ValueError, FileExistsError) as exc:
             return _linkedin_operation_error_response(str(exc))
-        manual_image_path = (
-            Path(result.campaign_dir)
-            / "Manual-Posting-Package"
-            / f"Day {day_number:02d}"
-            / "assets"
-            / "linkedin-publishing-image.png"
-        )
+        category_names = "、".join(category["name"] for category in result.categories)
         return NaturalLanguageResponse(
-            intent="linkedin_single_day_image",
+            intent="linkedin_image_generation_ready",
             executed=True,
-            needs_confirmation=False,
+            needs_confirmation=True,
             message=(
-                f"已重新生成 Day {day_number:02d} 的 LinkedIn 发布图。"
-                f"人工包路径：{manual_image_path}；"
-                f"兼容备份路径：{Path(result.campaign_dir) / 'assets' / 'publishing-images' / f'day-{day_number:02d}.png'}。"
-                "这一步只更新单日图片和 Asset Notes，不会自动发布。"
+                f"已准备 Day {day_number:02d} 发布图生成任务，类别：{category_names}。"
+                "下一步请 Codex 使用 `tuolin-linkedin-image-style` skill 调用图片模型，"
+                "基于所选源图为每个类别生成 1 张图，并保存到返回的输出目录。"
+            ),
+            details=result.to_dict(),
+        )
+
+    if _is_linkedin_day_image_selection_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        day_number = _extract_linkedin_day_number(utterance)
+        missing = []
+        if campaign_dir is None:
+            missing.append("活动文件夹")
+        if day_number is None:
+            missing.append("Day 编号")
+        if missing:
+            return NaturalLanguageResponse(
+                intent="linkedin_image_selection",
+                executed=False,
+                needs_confirmation=True,
+                message=f"生成单日发布图选择单还需要：{'、'.join(missing)}。",
+                copyable_reply="生成 LinkedIn Day 01 发布图，活动文件夹：/path/to/campaign",
+            )
+        try:
+            result = create_linkedin_image_selection_sheet(campaign_dir, day_number)
+        except (RuntimeError, ValueError, FileExistsError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        recommended = "、".join(item["name"] for item in result.recommended_categories)
+        return NaturalLanguageResponse(
+            intent="linkedin_image_selection",
+            executed=True,
+            needs_confirmation=True,
+            message=(
+                f"已生成 Day {day_number:02d} 发布图选择单：{result.selection_path}。"
+                f"推荐类别：{recommended}。"
+                "请选择源图编号和 1-3 个风格类别后再生成图片。"
+            ),
+            copyable_reply=(
+                f"Day {day_number:02d} 源图选 1，风格选：{result.recommended_categories[0]['name']}、"
+                f"{result.recommended_categories[1]['name']}，活动文件夹：{result.campaign_dir}"
             ),
             details=result.to_dict(),
         )
@@ -222,7 +306,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             return _linkedin_missing_campaign_dir_response("确认中文总稿")
         try:
             result = confirm_linkedin_chinese_draft(campaign_dir)
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError, FileExistsError) as exc:
             return _linkedin_operation_error_response(str(exc))
         return NaturalLanguageResponse(
             intent="linkedin_english_package",
@@ -233,15 +317,11 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
                 f"每日英文贴文在：{Path(result.campaign_dir) / 'daily'}。"
                 f"人工发布包在：{Path(result.campaign_dir) / 'Manual-Posting-Package'}。"
                 "请人工检查 Campaign Overview、Publishing Calendar 和 Day 01-Day 30 内容；"
-                "下一步如需生成配图，请提供产品源图路径；"
+                "下一步可以复制到桌面给老板查看；如需发布图，请按 Day 单独生成选择单。"
                 f"透明 logo 默认读取：{default_linkedin_transparent_logo_path(paths)}。"
                 "仍不会自动发布。"
             ),
-            copyable_reply=(
-                "生成 LinkedIn 配图，"
-                f"活动文件夹：{result.campaign_dir}，"
-                "源图：/path/to/source-image.png"
-            ),
+            copyable_reply=f"将30天发帖计划复制到桌面方便查看，活动文件夹：{result.campaign_dir}",
             details=result.to_dict(),
         )
 
@@ -251,14 +331,14 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             return _linkedin_missing_campaign_dir_response("确认策划")
         try:
             result = confirm_linkedin_campaign_plan(campaign_dir)
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError, FileExistsError) as exc:
             return _linkedin_operation_error_response(str(exc))
         return NaturalLanguageResponse(
             intent="linkedin_chinese_draft",
             executed=True,
             needs_confirmation=True,
             message=(
-                "已根据确认后的策划生成中文 30 天贴文总稿。"
+                "已跳过营销策划审阅，并根据确认后的策划生成中文 30 天贴文总稿。"
                 f"请人工检查：{Path(result.campaign_dir) / '02_中文30天贴文总稿.md'}。"
                 "确认中文总稿后才会拆成英文每日发布文件。"
             ),
@@ -267,59 +347,24 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         )
 
     if _is_linkedin_image_request(utterance):
-        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
-        logo_path = _extract_linkedin_path(utterance, ["logo", "Logo", "透明logo", "透明背景logo"])
-        source_path = _extract_linkedin_path(utterance, ["源图", "产品源图", "source-image", "source_image"])
-        missing = []
-        if campaign_dir is None:
-            missing.append("活动文件夹")
-        if source_path is None:
-            missing.append("产品源图")
-        if missing:
-            return NaturalLanguageResponse(
-                intent="linkedin_image_assets",
-                executed=False,
-                needs_confirmation=True,
-                message=(
-                    "生成 LinkedIn 配图还需要："
-                    f"{'、'.join(missing)}。透明 logo 默认读取："
-                    f"{default_linkedin_transparent_logo_path(paths)}；"
-                    "也可以在命令中指定 logo 路径。logo 必须是透明背景 PNG/WebP；"
-                    "tags 会按每日主题生成，不写进配置文件。"
-                ),
-                copyable_reply=(
-                    "生成 LinkedIn 配图，"
-                    "活动文件夹：/path/to/campaign，"
-                    "源图：/path/to/source-image.png"
-                ),
-            )
-        try:
-            result = generate_linkedin_publishing_images(campaign_dir, logo_path, source_path)
-        except (RuntimeError, ValueError) as exc:
-            return _linkedin_operation_error_response(str(exc))
         return NaturalLanguageResponse(
-            intent="linkedin_image_assets",
-            executed=True,
-            needs_confirmation=False,
+            intent="linkedin_legacy_image_request_removed",
+            executed=False,
+            needs_confirmation=True,
             message=(
-                "已生成 30 张 LinkedIn 发布配图，并把每张图写回对应 daily/day-XX.md。"
-                f"配图目录：{Path(result.campaign_dir) / 'assets' / 'publishing-images'}。"
-                f"人工包每一天的发布图也已写入：{Path(result.campaign_dir) / 'Manual-Posting-Package'}。"
-                "如需调整某一天图片上的 tags，可以要求重新生成单日发布图。"
-                "这一步只生成文件，不会自动发布。"
+                "旧的批量 LinkedIn 配图入口已删除。"
+                "发布图必须按 Day 单独生成：先生成 Day 发布图选择单，"
+                "选择源图和 1-3 个风格类别后，再由 Codex 调用图片模型生成。"
             ),
             copyable_reply=(
-                "重新生成 LinkedIn Day 01 发布图，"
-                f"活动文件夹：{result.campaign_dir}，"
-                "tags：1000°C Heat Resistance, No Itching, No Smoke"
+                "生成 LinkedIn Day 01 发布图，活动文件夹：/path/to/campaign"
             ),
-            details=result.to_dict(),
         )
 
     if is_linkedin_campaign_request(utterance):
         try:
             result = create_linkedin_campaign_plan(paths, utterance, output_root=_linkedin_output_root())
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError, FileExistsError) as exc:
             return _linkedin_operation_error_response(str(exc))
         return NaturalLanguageResponse(
             intent="linkedin_campaign_plan",
@@ -328,9 +373,9 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             message=(
                 "已生成 LinkedIn 30 天宣传策划包。"
                 f"请先检查策划文件：{Path(result.campaign_dir) / '01_中文策划.md'}。"
-                "确认策划后才会生成 30 天中文贴文总稿；不会自动发布。"
+                "你可以先进行营销策划审阅，也可以跳过审阅直接确认策划；不会自动发布。"
             ),
-            copyable_reply=f"确认策划，活动文件夹：{result.campaign_dir}",
+            copyable_reply=f"进行营销策划审阅，活动文件夹：{result.campaign_dir}",
             details=result.to_dict(),
         )
 
@@ -729,6 +774,16 @@ def _linkedin_output_root() -> Path | None:
     return Path(configured).expanduser()
 
 
+def _linkedin_desktop_root() -> Path | None:
+    configured = os.environ.get("TUOLIN_LINKEDIN_DESKTOP_ROOT")
+    if configured:
+        return Path(configured).expanduser()
+    configured = os.environ.get("TUOLIN_LINKEDIN_OUTPUT_ROOT")
+    if configured:
+        return Path(configured).expanduser()
+    return None
+
+
 def _is_linkedin_confirm_plan_request(utterance: str) -> bool:
     return "确认策划" in utterance and _mentions_linkedin_context(utterance)
 
@@ -739,19 +794,47 @@ def _is_linkedin_confirm_chinese_draft_request(utterance: str) -> bool:
     )
 
 
+def _is_linkedin_marketing_review_request(utterance: str) -> bool:
+    if "采纳" in utterance or "不采纳" in utterance:
+        return False
+    return "营销策划审阅" in utterance or "进行营销审阅" in utterance or "进行智能审阅" in utterance
+
+
+def _is_linkedin_marketing_review_decision_request(utterance: str) -> bool:
+    return ("审阅" in utterance and ("采纳" in utterance or "不采纳" in utterance)) and _mentions_linkedin_context(
+        utterance
+    )
+
+
+def _accepts_marketing_review(utterance: str) -> bool:
+    return "不采纳" not in utterance and "采纳" in utterance
+
+
+def _is_linkedin_desktop_copy_request(utterance: str) -> bool:
+    return "复制到桌面" in utterance and ("30天" in utterance or "发帖计划" in utterance or "LinkedIn" in utterance)
+
+
 def _is_linkedin_image_request(utterance: str) -> bool:
     image_words = ["生成配图", "生成发布图", "生成图片", "生成 LinkedIn 配图", "生成领英配图"]
     return any(word in utterance for word in image_words) and _mentions_linkedin_context(utterance)
 
 
-def _is_linkedin_single_day_image_request(utterance: str) -> bool:
+def _is_linkedin_day_image_selection_request(utterance: str) -> bool:
     if not _mentions_linkedin_context(utterance):
         return False
+    if _is_linkedin_image_generation_choice_request(utterance):
+        return False
     mentions_day = _extract_linkedin_day_number(utterance) is not None
-    mentions_regenerate = "重新生成" in utterance or "重生成" in utterance or "调整" in utterance or "修改" in utterance
     mentions_image = "发布图" in utterance or "配图" in utterance or "图片" in utterance
-    mentions_tags = "tag" in utterance.lower() or "标签" in utterance
-    return mentions_day and mentions_regenerate and mentions_image and mentions_tags
+    return mentions_day and mentions_image and "生成" in utterance
+
+
+def _is_linkedin_image_generation_choice_request(utterance: str) -> bool:
+    return (
+        _extract_linkedin_day_number(utterance) is not None
+        and _extract_linkedin_source_index(utterance) is not None
+        and bool(_extract_linkedin_image_categories(utterance))
+    )
 
 
 def _mentions_linkedin_context(utterance: str) -> bool:
@@ -798,6 +881,24 @@ def _extract_linkedin_tags(utterance: str) -> list[str]:
     if not value:
         return []
     parts = re.split(r"[,，;；|/]+", value)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _extract_linkedin_source_index(utterance: str) -> int | None:
+    match = re.search(r"源图\s*选\s*([0-9]+)", utterance)
+    if not match:
+        match = re.search(r"source\s*(?:image)?\s*([0-9]+)", utterance, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def _extract_linkedin_image_categories(utterance: str) -> list[str]:
+    match = re.search(r"(?:风格选|类别选|风格类别|类别)\s*[：:=]\s*(.+?)(?=\s*(?:，|,)\s*活动文件夹\s*[：:=]|$)", utterance)
+    if not match:
+        return []
+    value = match.group(1).strip().strip("'\"")
+    if not value:
+        return []
+    parts = re.split(r"[,，;；|/、]+", value)
     return [part.strip() for part in parts if part.strip()]
 
 
