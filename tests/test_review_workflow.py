@@ -119,6 +119,32 @@ class ReviewWorkflowTests(unittest.TestCase):
             self.assertTrue((paths.generated_dir / "reports" / "REVIEW_REPORT.md").exists())
             self.assertIn("复核处理", (paths.knowledge_dir / "变更记录.md").read_text(encoding="utf-8"))
 
+    def test_apply_review_records_human_confirmed_statement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_quartz_review_fixture(paths)
+            statement = "石英纤维隔热带耐高温1000度，直接接触不刺痒，使用过程中不冒烟。"
+            preview = create_review_preview(paths, "review_item/quartz_fiber_tape/product_facts_pending", "approve_external")
+
+            apply_review_decision(
+                paths,
+                "review_item/quartz_fiber_tape/product_facts_pending",
+                "approve_external",
+                preview.confirmation_token,
+                reviewer="kkid",
+                confirmed_statement=statement,
+            )
+
+            product_text = (paths.knowledge_dir / "产品" / "石英纤维隔热带.md").read_text(encoding="utf-8")
+            review_text = (
+                paths.knowledge_dir / "复核项" / "quartz_fiber_tape" / "product_facts_pending.md"
+            ).read_text(encoding="utf-8")
+            report_text = (paths.generated_dir / "reports" / "REVIEW_REPORT.md").read_text(encoding="utf-8")
+            self.assertIn("# 人工确认口径", product_text)
+            self.assertIn(statement, product_text)
+            self.assertIn(statement, review_text)
+            self.assertIn(statement, report_text)
+
     def test_apply_review_recovers_corrupt_changelog_before_appending(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

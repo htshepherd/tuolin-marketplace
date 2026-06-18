@@ -221,7 +221,85 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertEqual(response.intent, "review_list")
             self.assertTrue(response.needs_confirmation)
             self.assertEqual(len(response.details), 1)
-            self.assertEqual(response.copyable_reply, "请先生成知识卡片修改预览，不要直接写入。")
+            self.assertIn("正确口径", response.copyable_reply)
+
+    def test_review_decision_updates_knowledge_from_natural_language_statement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            report.write_text("fake report", encoding="utf-8")
+            route_natural_language(paths, "确认，开始整理石英纤维隔热带资料。")
+
+            statement = "石英纤维隔热带耐高温1000度，直接接触不刺痒，使用过程中不冒烟。"
+            response = route_natural_language(
+                paths,
+                f"这条确认，可以对外使用。正确口径是：{statement}请更新知识库。",
+            )
+
+            self.assertEqual(response.intent, "review_decision_applied")
+            self.assertTrue(response.executed)
+            self.assertFalse(response.needs_confirmation)
+            self.assertIn("确认并设为可对外使用", response.message)
+            product_path = paths.knowledge_dir / "产品" / "石英纤维隔热带.md"
+            product_text = product_path.read_text(encoding="utf-8")
+            self.assertIn("# 人工确认口径", product_text)
+            self.assertIn(statement, product_text)
+            self.assertEqual(response.details["updated_cards"], ("product/quartz_fiber_tape",))
+            product_json = json.loads(
+                (paths.generated_dir / "agent-interface" / "cards" / "product.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(product_json[0]["status"], "official")
+
+    def test_review_decision_requires_selection_when_multiple_reviews_are_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            report.write_text("fake report", encoding="utf-8")
+            route_natural_language(paths, "确认，开始整理石英纤维隔热带资料。")
+            extra = paths.knowledge_dir / "复核项" / "extra" / "other.md"
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "card_template_version: review-item-card-v1",
+                        "type: review_item",
+                        "id: review_item/extra/other",
+                        "title: 其他待确认内容",
+                        "aliases: []",
+                        "status: review_required",
+                        "usage_scope: internal_only",
+                        "raw_partitions: []",
+                        "tags:",
+                        "  - 复核",
+                        "updated_at: 2026-06-18T00:00:00+08:00",
+                        "last_reviewed_at: \"\"",
+                        "evidence_refs: []",
+                        "review_refs: []",
+                        "review_reason: 需要人工确认",
+                        "affected_cards: []",
+                        "decision_options:",
+                        "  - 确认",
+                        "blocking_level: medium",
+                        "---",
+                        "",
+                        "待确认。",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            response = route_natural_language(
+                paths,
+                "这条确认，可以对外使用。正确口径是：确认内容。请更新知识库。",
+            )
+
+            self.assertEqual(response.intent, "review_decision_needs_review_selection")
+            self.assertFalse(response.executed)
+            self.assertIn("第几条", response.message)
 
     def test_linkedin_campaign_routes_through_manual_confirmation_steps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

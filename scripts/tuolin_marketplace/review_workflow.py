@@ -120,6 +120,7 @@ def apply_review_decision(
     decision: str,
     confirmation_token: str,
     reviewer: str = "human",
+    confirmed_statement: str | None = None,
 ) -> ApplyReviewResult:
     preview = create_review_preview(paths, review_id, decision)
     if confirmation_token != preview.confirmation_token:
@@ -138,14 +139,15 @@ def apply_review_decision(
                 evidence_refs=preview.evidence_refs,
                 external=(decision == "approve_external"),
                 reviewer=reviewer,
+                confirmed_statement=confirmed_statement,
             )
             updated_cards.append(card_id)
 
-    archived_review_path = _archive_review_item(review_path, review_frontmatter, decision, reviewer)
-    changelog_path = _append_changelog(paths, review_id, decision, updated_cards, reviewer)
-    _write_review_report(paths, review_id, decision, updated_cards, archived_review_path)
+    archived_review_path = _archive_review_item(review_path, review_frontmatter, decision, reviewer, confirmed_statement)
+    changelog_path = _append_changelog(paths, review_id, decision, updated_cards, reviewer, confirmed_statement)
     refresh_navigation(paths, reason="apply_review")
     generated_summary = rebuild_generated_indexes(paths)
+    _write_review_report(paths, review_id, decision, updated_cards, archived_review_path, confirmed_statement)
     return ApplyReviewResult(
         review_id=review_id,
         decision=decision,
@@ -241,6 +243,7 @@ def _apply_approved_card_update(
     evidence_refs: tuple[str, ...],
     external: bool,
     reviewer: str,
+    confirmed_statement: str | None = None,
 ) -> None:
     frontmatter, body = _read_card(card_path)
     if frontmatter.get("status") == "official":
@@ -251,27 +254,45 @@ def _apply_approved_card_update(
     frontmatter["updated_at"] = _now()
     frontmatter["evidence_refs"] = _merged_list(frontmatter.get("evidence_refs", []), evidence_refs)
     frontmatter["review_refs"] = [item for item in frontmatter.get("review_refs", []) if item != review_id]
-    body = body.rstrip() + _decision_note(review_id, "confirmed", reviewer)
+    body = body.rstrip()
+    if confirmed_statement:
+        body += _confirmed_statement_note(confirmed_statement, external)
+    body += _decision_note(review_id, "confirmed", reviewer, confirmed_statement)
     _write_card(card_path, frontmatter, body)
 
 
-def _archive_review_item(review_path: Path, frontmatter: dict[str, Any], decision: str, reviewer: str) -> Path:
+def _archive_review_item(
+    review_path: Path,
+    frontmatter: dict[str, Any],
+    decision: str,
+    reviewer: str,
+    confirmed_statement: str | None = None,
+) -> Path:
     current_frontmatter, body = _read_card(review_path)
     current_frontmatter["status"] = "archived"
     current_frontmatter["updated_at"] = _now()
     current_frontmatter["last_reviewed_at"] = _now()
-    body = body.rstrip() + _decision_note(current_frontmatter["id"], decision, reviewer)
+    body = body.rstrip() + _decision_note(current_frontmatter["id"], decision, reviewer, confirmed_statement)
     _write_card(review_path, current_frontmatter, body)
     return review_path
 
 
-def _append_changelog(paths: ProjectPaths, review_id: str, decision: str, updated_cards: list[str], reviewer: str) -> Path:
+def _append_changelog(
+    paths: ProjectPaths,
+    review_id: str,
+    decision: str,
+    updated_cards: list[str],
+    reviewer: str,
+    confirmed_statement: str | None = None,
+) -> Path:
     entries = [
         f"- 复核项：`{review_id}`",
         f"- 处理方式：`{decision}`",
         f"- 确认人：{reviewer}",
         f"- 更新卡片：{', '.join(f'`{card_id}`' for card_id in updated_cards) if updated_cards else '无'}",
     ]
+    if confirmed_statement:
+        entries.append(f"- 人工确认口径：{confirmed_statement}")
     return append_changelog_entry(paths, "复核处理", entries, reason="apply_review")
 
 
@@ -281,6 +302,7 @@ def _write_review_report(
     decision: str,
     updated_cards: list[str],
     archived_review_path: Path,
+    confirmed_statement: str | None = None,
 ) -> None:
     path = paths.generated_dir / "reports" / "REVIEW_REPORT.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,6 +314,7 @@ def _write_review_report(
         f"- decision: {decision}",
         f"- archived_review_path: {archived_review_path}",
         f"- updated_cards: {', '.join(updated_cards) if updated_cards else 'none'}",
+        f"- confirmed_statement: {confirmed_statement or 'none'}",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -365,14 +388,31 @@ def _merged_list(existing: Any, additions: tuple[str, ...]) -> list[str]:
     return values
 
 
-def _decision_note(review_id: str, decision: str, reviewer: str) -> str:
+def _confirmed_statement_note(confirmed_statement: str, external: bool) -> str:
+    scope = "可对外使用" if external else "仅内部使用"
     return (
+        "\n\n# 人工确认口径\n\n"
+        f"- 使用范围：{scope}\n"
+        f"- 口径：{confirmed_statement}\n"
+    )
+
+
+def _decision_note(
+    review_id: str,
+    decision: str,
+    reviewer: str,
+    confirmed_statement: str | None = None,
+) -> str:
+    note = (
         "\n\n# 复核记录\n\n"
         f"- 时间：{_now()}\n"
         f"- 复核项：`{review_id}`\n"
         f"- 处理方式：`{decision}`\n"
         f"- 确认人：{reviewer}\n"
     )
+    if confirmed_statement:
+        note += f"- 人工确认口径：{confirmed_statement}\n"
+    return note
 
 
 def _safe_id(value: str) -> str:

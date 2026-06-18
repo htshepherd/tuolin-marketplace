@@ -24,7 +24,7 @@ from .partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_p
 from .partition_organizer import organize_partition
 from .project_layout import ProjectPaths
 from .question_answering import answer_question
-from .review_workflow import list_review_items
+from .review_workflow import apply_review_decision, create_review_preview, list_review_items
 
 
 ACTION_LABELS = {
@@ -81,6 +81,9 @@ def route_natural_language(paths: ProjectPaths, text: str) -> NaturalLanguageRes
     linkedin_response = _linkedin_response(paths, utterance)
     if linkedin_response is not None:
         return linkedin_response
+
+    if _is_review_decision_request(utterance):
+        return _review_decision_response(paths, utterance)
 
     if _is_status_request(utterance):
         return _status_response(paths)
@@ -521,9 +524,90 @@ def _review_list_response(paths: ProjectPaths, utterance: str) -> NaturalLanguag
         intent="review_list",
         executed=False,
         needs_confirmation=True,
-        message=f"当前有 {len(reviews)} 条内容需要你确认。确认前不会写入正式知识卡片。",
-        copyable_reply="请先生成知识卡片修改预览，不要直接写入。",
+        message=f"当前有 {len(reviews)} 条内容需要你确认。你可以直接在对话框里给出确认结果和正确口径。",
+        copyable_reply="这条确认，可以对外使用。正确口径是：<请填写确认后的内容>。请更新知识库。",
         details=[review.__dict__ for review in reviews],
+    )
+
+
+def _review_decision_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse:
+    decision = _extract_review_decision(utterance)
+    if decision is None:
+        return NaturalLanguageResponse(
+            intent="review_decision_unclear",
+            executed=False,
+            needs_confirmation=True,
+            message="我还不能判断这条复核是确认、仅内部使用、拒绝还是暂缓。请写清楚处理方式和正确口径。",
+            copyable_reply="这条确认，可以对外使用。正确口径是：<请填写确认后的内容>。请更新知识库。",
+        )
+
+    partition = _resolve_partition_from_text(utterance)
+    reviews = list_review_items(paths, partition.name if hasattr(partition, "name") else None)
+    selected = _select_review_item(reviews, utterance)
+    if selected is None:
+        if not reviews:
+            return NaturalLanguageResponse(
+                intent="review_decision_no_open_review",
+                executed=False,
+                needs_confirmation=True,
+                message="当前没有找到待确认的复核项。请先问“有哪些内容需要我确认？”。",
+                copyable_reply="有哪些内容需要我确认？",
+            )
+        return NaturalLanguageResponse(
+            intent="review_decision_needs_review_selection",
+            executed=False,
+            needs_confirmation=True,
+            message=f"当前有 {len(reviews)} 条待确认内容。请说明要处理第几条，或带上复核项标题/ID。",
+            copyable_reply="第1条确认，可以对外使用。正确口径是：<请填写确认后的内容>。请更新知识库。",
+            details=[review.__dict__ for review in reviews],
+        )
+
+    statement = _extract_review_statement(utterance)
+    if decision in {"approve_external", "approve_internal"} and not statement:
+        return NaturalLanguageResponse(
+            intent="review_decision_statement_required",
+            executed=False,
+            needs_confirmation=True,
+            message="确认复核项时需要提供正确口径，这样才能写入知识卡片。",
+            copyable_reply="这条确认，可以对外使用。正确口径是：<请填写确认后的内容>。请更新知识库。",
+            details=selected.__dict__,
+        )
+
+    try:
+        preview = create_review_preview(paths, selected.review_id, decision)
+        result = apply_review_decision(
+            paths,
+            selected.review_id,
+            decision,
+            preview.confirmation_token,
+            reviewer="human",
+            confirmed_statement=statement,
+        )
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        return NaturalLanguageResponse(
+            intent="review_decision_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=str(exc),
+            copyable_reply="有哪些内容需要我确认？",
+        )
+
+    action = {
+        "approve_external": "确认并设为可对外使用",
+        "approve_internal": "确认并设为仅内部使用",
+        "reject": "拒绝并归档",
+        "defer": "暂缓并归档为已记录决定",
+    }[decision]
+    updated = "、".join(result.updated_cards) if result.updated_cards else "无"
+    return NaturalLanguageResponse(
+        intent="review_decision_applied",
+        executed=True,
+        needs_confirmation=False,
+        message=(
+            f"已处理复核项：{selected.title}。处理方式：{action}。"
+            f"更新卡片：{updated}。generated Agent 读取接口已刷新。"
+        ),
+        details=result.__dict__,
     )
 
 
@@ -949,6 +1033,88 @@ def _is_full_rebuild_request(utterance: str) -> bool:
 
 def _is_review_request(utterance: str) -> bool:
     return "复核" in utterance or "需要我确认" in utterance or "有哪些内容需要我确认" in utterance
+
+
+def _is_review_decision_request(utterance: str) -> bool:
+    decision_terms = [
+        "正确口径",
+        "可以对外使用",
+        "可对外使用",
+        "仅内部使用",
+        "只允许内部",
+        "不要写入",
+        "不对",
+        "归档",
+        "暂缓",
+    ]
+    return any(term in utterance for term in decision_terms) and (
+        "更新知识库" in utterance
+        or "复核项" in utterance
+        or "这条" in utterance
+        or re.search(r"第\s*[0-9一二三四五六七八九十]+\s*条", utterance) is not None
+    )
+
+
+def _extract_review_decision(utterance: str) -> str | None:
+    if "暂缓" in utterance:
+        return "defer"
+    if any(term in utterance for term in ["不对", "不要写入", "拒绝", "归档"]):
+        return "reject"
+    if any(term in utterance for term in ["仅内部", "只允许内部", "内部使用"]):
+        return "approve_internal"
+    if any(term in utterance for term in ["可以对外", "可对外", "对外使用", "确认", "正确口径"]):
+        return "approve_external"
+    return None
+
+
+def _select_review_item(reviews: list[Any], utterance: str):
+    if not reviews:
+        return None
+    explicit_id = _extract_review_id(utterance)
+    if explicit_id:
+        for review in reviews:
+            if review.review_id == explicit_id:
+                return review
+        return None
+    index = _extract_review_index(utterance)
+    if index is not None:
+        if 1 <= index <= len(reviews):
+            return reviews[index - 1]
+        return None
+    if len(reviews) == 1:
+        return reviews[0]
+    return None
+
+
+def _extract_review_id(utterance: str) -> str | None:
+    match = re.search(r"(review_item/[A-Za-z0-9_./-]+)", utterance)
+    return match.group(1).rstrip("。，,") if match else None
+
+
+def _extract_review_index(utterance: str) -> int | None:
+    match = re.search(r"第\s*([0-9一二三四五六七八九十]+)\s*条", utterance)
+    if not match:
+        return None
+    value = match.group(1)
+    if value.isdigit():
+        return int(value)
+    digits = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+    return digits.get(value)
+
+
+def _extract_review_statement(utterance: str) -> str | None:
+    patterns = [
+        r"正确口径是\s*[：:]\s*(.+?)(?:\s*请|$)",
+        r"正确口径\s*[：:]\s*(.+?)(?:\s*请|$)",
+        r"原因是\s*[：:]\s*(.+?)(?:\s*请|$)",
+        r"原因\s*[：:]\s*(.+?)(?:\s*请|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, utterance)
+        if match:
+            value = match.group(1).strip().strip("；;，, ")
+            return value or None
+    return None
 
 
 def _is_core_request(utterance: str) -> bool:
