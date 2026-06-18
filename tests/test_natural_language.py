@@ -235,6 +235,8 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             _write_linkedin_official_cards(paths)
             rebuild_agent_interface(paths)
             logo_path, source_path = _write_linkedin_test_images(root)
+            default_logo = paths.project_dir / "assets" / "logo" / "tuolin-logo-transparent.png"
+            default_logo.write_bytes(logo_path.read_bytes())
             request = (
                 "请做一个30天在Linkedin上发贴宣传的计划。"
                 "要求：产品面向欧美市场；产品名称不叫石英纤维，改成特种玻璃纤维带；"
@@ -265,10 +267,12 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertTrue(english_response.executed)
             self.assertTrue((campaign_dir / "04_英文发布日历.csv").exists())
             self.assertEqual(len(list((campaign_dir / "daily").glob("day-*.md"))), 30)
+            self.assertNotIn("logo：", english_response.copyable_reply)
+            self.assertIn(str(default_logo), english_response.message)
 
             image_response = route_natural_language(
                 paths,
-                f"生成 LinkedIn 配图，活动文件夹：{campaign_dir}，logo：{logo_path}，源图：{source_path}",
+                f"生成 LinkedIn 配图，活动文件夹：{campaign_dir}，源图：{source_path}",
             )
 
             self.assertEqual(image_response.intent, "linkedin_image_assets")
@@ -277,6 +281,7 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertEqual(len(list((campaign_dir / "assets" / "publishing-images").glob("day-*.png"))), 30)
             manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "image_assets_ready")
+            self.assertEqual(manifest["files"]["transparent_logo"], str(default_logo.resolve()))
 
     def test_linkedin_confirmation_without_campaign_dir_asks_for_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

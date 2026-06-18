@@ -109,6 +109,7 @@ class ProjectPaths:
     raw_dir: Path
     knowledge_dir: Path
     generated_dir: Path
+    config: dict[str, Any] | None = None
 
 
 def load_config(config_path: Path | None) -> dict[str, Any]:
@@ -132,6 +133,7 @@ def resolve_paths(project_dir: Path, config: dict[str, Any]) -> ProjectPaths:
         raw_dir=raw_dir,
         knowledge_dir=knowledge_dir,
         generated_dir=generated_dir,
+        config=dict(config),
     )
     validate_path_boundaries(paths)
     return paths
@@ -162,6 +164,7 @@ def validate_path_boundaries(paths: ProjectPaths) -> None:
 def initialize_project(paths: ProjectPaths, include_raw_template: bool = True) -> list[Path]:
     created: list[Path] = []
     created.extend(_ensure_profile_config(paths.project_dir / "config" / "tuolin-okf-profile"))
+    created.extend(_ensure_dir(paths.project_dir / "assets" / "logo"))
     if include_raw_template:
         for relative in RAW_TEMPLATE_DIRS:
             created.extend(_ensure_dir(paths.raw_dir / relative))

@@ -310,6 +310,42 @@ class LinkedInAgentTests(unittest.TestCase):
             self.assertEqual(len(manifest["files"]["publishing_images"]), 30)
             self.assertEqual(manifest["files"]["transparent_logo"], str(logo_path.resolve()))
 
+    def test_generate_publishing_images_uses_configured_default_logo(self) -> None:
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow is not available")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = resolve_paths(
+                root / "knowledge-project",
+                {"linkedin": {"transparent_logo_path": "brand/tuolin-logo.png"}},
+            )
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+            created = create_linkedin_campaign_plan(
+                paths,
+                "请做一个30天在Linkedin上发贴宣传的计划。重点突出耐高温1000度、不刺痒、不冒烟。",
+                output_root=root / "Desktop",
+                now=datetime(2026, 6, 17, 15, 30),
+            )
+            confirm_linkedin_campaign_plan(Path(created.campaign_dir))
+            confirm_linkedin_chinese_draft(Path(created.campaign_dir))
+            logo_path, source_path = _write_test_images(root)
+            configured_logo = paths.project_dir / "brand" / "tuolin-logo.png"
+            configured_logo.parent.mkdir(parents=True, exist_ok=True)
+            configured_logo.write_bytes(logo_path.read_bytes())
+
+            result = generate_linkedin_publishing_images(Path(created.campaign_dir), None, source_path)
+
+            campaign_dir = Path(created.campaign_dir)
+            self.assertEqual(result.status, "image_assets_ready")
+            manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["files"]["default_transparent_logo"], str(configured_logo.resolve()))
+            self.assertEqual(manifest["files"]["transparent_logo"], str(configured_logo.resolve()))
+            self.assertEqual(len(list((campaign_dir / "assets" / "publishing-images").glob("day-*.png"))), 30)
+
     def test_generate_publishing_images_rejects_non_transparent_logo(self) -> None:
         try:
             from PIL import Image

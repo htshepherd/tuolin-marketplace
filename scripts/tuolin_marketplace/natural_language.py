@@ -12,6 +12,7 @@ from .linkedin_agent import (
     confirm_linkedin_campaign_plan,
     confirm_linkedin_chinese_draft,
     create_linkedin_campaign_plan,
+    default_linkedin_transparent_logo_path,
     generate_linkedin_publishing_images,
     is_linkedin_campaign_request,
 )
@@ -170,12 +171,14 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             message=(
                 "已根据确认后的中文总稿生成英文发布包。"
                 f"每日英文贴文在：{Path(result.campaign_dir) / 'daily'}。"
-                "下一步如需生成配图，请提供透明背景 logo 和产品源图路径；仍不会自动发布。"
+                "下一步如需生成配图，请提供产品源图路径；"
+                f"透明 logo 默认读取：{default_linkedin_transparent_logo_path(paths)}。"
+                "仍不会自动发布。"
             ),
             copyable_reply=(
                 "生成 LinkedIn 配图，"
                 f"活动文件夹：{result.campaign_dir}，"
-                "logo：/path/to/transparent-logo.png，源图：/path/to/source-image.png"
+                "源图：/path/to/source-image.png"
             ),
             details=result.to_dict(),
         )
@@ -208,8 +211,6 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
         missing = []
         if campaign_dir is None:
             missing.append("活动文件夹")
-        if logo_path is None:
-            missing.append("透明背景 logo")
         if source_path is None:
             missing.append("产品源图")
         if missing:
@@ -219,13 +220,15 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
                 needs_confirmation=True,
                 message=(
                     "生成 LinkedIn 配图还需要："
-                    f"{'、'.join(missing)}。logo 必须是透明背景 PNG/WebP；"
+                    f"{'、'.join(missing)}。透明 logo 默认读取："
+                    f"{default_linkedin_transparent_logo_path(paths)}；"
+                    "也可以在命令中指定 logo 路径。logo 必须是透明背景 PNG/WebP；"
                     "tags 会按每日主题生成，不写进配置文件。"
                 ),
                 copyable_reply=(
                     "生成 LinkedIn 配图，"
                     "活动文件夹：/path/to/campaign，"
-                    "logo：/path/to/transparent-logo.png，源图：/path/to/source-image.png"
+                    "源图：/path/to/source-image.png"
                 ),
             )
         try:

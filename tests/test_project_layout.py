@@ -26,6 +26,7 @@ class ProjectLayoutTests(unittest.TestCase):
                 self.assertTrue((paths.knowledge_dir / relative).is_dir(), relative)
             self.assertTrue((paths.generated_dir / "agent-interface" / "contexts").is_dir())
             self.assertTrue((paths.raw_dir / "01_产品" / "02_石英纤维隔热带").is_dir())
+            self.assertTrue((paths.project_dir / "assets" / "logo").is_dir())
             self.assertTrue((paths.project_dir / "config" / "tuolin-okf-profile" / "profile.yaml").is_file())
             self.assertTrue(
                 (

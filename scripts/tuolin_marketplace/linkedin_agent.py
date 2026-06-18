@@ -18,6 +18,7 @@ EXTERNAL_PRODUCT_NAME_ZH = "特种玻璃纤维带"
 EXTERNAL_PRODUCT_NAME_EN = "Specialty Glass Fiber Tape"
 DEFAULT_CONTACT_EMAIL = "tuolin@tuolintech.com"
 DEFAULT_CAMPAIGN_DAYS = 30
+DEFAULT_TRANSPARENT_LOGO_RELATIVE_PATH = Path("assets/logo/tuolin-logo-transparent.png")
 
 CONFIRMED_CLAIMS = [
     {"zh": "耐高温1000度", "en": "withstands temperatures up to 1000°C", "tokens": ["1000", "1000°", "1000度"]},
@@ -67,6 +68,19 @@ def validate_linkedin_project(paths: ProjectPaths) -> ProjectValidation:
     return ProjectValidation(valid=not errors, errors=tuple(errors))
 
 
+def default_linkedin_transparent_logo_path(paths: ProjectPaths) -> Path:
+    config = paths.config or {}
+    linkedin_config = config.get("linkedin")
+    configured = None
+    if isinstance(linkedin_config, dict):
+        configured = linkedin_config.get("transparent_logo_path")
+    if not configured:
+        configured = config.get("linkedin_transparent_logo_path")
+    if not configured:
+        configured = str(DEFAULT_TRANSPARENT_LOGO_RELATIVE_PATH)
+    return _resolve_project_path(paths.project_dir, str(configured))
+
+
 def create_linkedin_campaign_plan(
     paths: ProjectPaths,
     request_text: str,
@@ -95,7 +109,16 @@ def create_linkedin_campaign_plan(
 
     content_assets = _content_assets(context)
     plan_path.write_text(_render_chinese_plan(request_text, context, claim_sources, content_assets), encoding="utf-8")
-    manifest = _manifest(campaign_dir, plan_path, context, claim_sources, content_assets, request_text, timestamp)
+    manifest = _manifest(
+        campaign_dir,
+        plan_path,
+        context,
+        claim_sources,
+        content_assets,
+        request_text,
+        timestamp,
+        default_transparent_logo_path=default_linkedin_transparent_logo_path(paths),
+    )
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
@@ -104,6 +127,38 @@ def create_linkedin_campaign_plan(
         context_id=context["context_id"],
         status="planning_ready",
     )
+
+
+def _resolve_project_path(project_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = project_dir / path
+    return path.resolve()
+
+
+def _resolve_generation_logo_path(
+    campaign_dir: Path,
+    manifest: dict[str, Any],
+    explicit_logo_path: Path | None,
+) -> Path:
+    if explicit_logo_path is not None:
+        return explicit_logo_path.expanduser().resolve()
+
+    configured = (
+        manifest.get("files", {}).get("default_transparent_logo")
+        or manifest.get("image_policy", {}).get("default_transparent_logo_path")
+        or manifest.get("files", {}).get("transparent_logo")
+    )
+    if not configured:
+        raise ValueError(
+            "生成 LinkedIn 配图需要透明背景 logo。"
+            f"请把 logo 放到 {DEFAULT_TRANSPARENT_LOGO_RELATIVE_PATH}，"
+            "或在命令中提供 logo 路径。"
+        )
+    path = Path(str(configured)).expanduser()
+    if not path.is_absolute():
+        path = campaign_dir / path
+    return path.resolve()
 
 
 def confirm_linkedin_campaign_plan(campaign_dir: Path, overwrite: bool = False) -> LinkedInCampaignResult:
@@ -188,22 +243,26 @@ def confirm_linkedin_chinese_draft(campaign_dir: Path, overwrite: bool = False) 
 
 def generate_linkedin_publishing_images(
     campaign_dir: Path,
-    logo_path: Path,
+    logo_path: Path | None,
     source_image_path: Path,
     overwrite: bool = False,
 ) -> LinkedInCampaignResult:
     campaign_dir = campaign_dir.expanduser().resolve()
-    logo_path = logo_path.expanduser().resolve()
     source_image_path = source_image_path.expanduser().resolve()
     manifest_path = campaign_dir / "campaign-manifest.json"
     if not manifest_path.exists():
         raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
-    if not logo_path.exists():
-        raise ValueError(f"找不到透明 logo 文件：{logo_path}")
     if not source_image_path.exists():
         raise ValueError(f"找不到源图片文件：{source_image_path}")
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    resolved_logo_path = _resolve_generation_logo_path(campaign_dir, manifest, logo_path)
+    if not resolved_logo_path.exists():
+        logo_path_label = "指定路径" if logo_path is not None else "配置路径"
+        raise ValueError(
+            f"找不到透明 logo 文件：{resolved_logo_path}。"
+            f"请把透明背景 logo 放到{logo_path_label} {resolved_logo_path}，或在命令中提供 logo 路径。"
+        )
     status = manifest.get("status")
     if status not in {"english_package_ready", "image_assets_ready"}:
         raise ValueError(f"当前活动状态是 {status!r}，不能生成发布图。请先生成英文发布包。")
@@ -213,7 +272,7 @@ def generate_linkedin_publishing_images(
     except ImportError as exc:
         raise RuntimeError("生成发布图需要 Pillow 图片库。请先安装 Pillow，或只使用 image brief。") from exc
 
-    logo = Image.open(logo_path).convert("RGBA")
+    logo = Image.open(resolved_logo_path).convert("RGBA")
     if not _has_transparency(logo):
         raise ValueError("logo 文件必须是带透明通道的图片。请提供独立透明 logo，不要使用带背景的参考图。")
 
@@ -240,7 +299,7 @@ def generate_linkedin_publishing_images(
 
     manifest["status"] = "image_assets_ready"
     _append_status_history(manifest, "image_assets_ready")
-    manifest["files"]["transparent_logo"] = str(logo_path)
+    manifest["files"]["transparent_logo"] = str(resolved_logo_path)
     manifest["files"]["publishing_image_source"] = str(source_image_path)
     manifest["files"]["publishing_images"] = generated
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -402,6 +461,7 @@ def _manifest(
     content_assets: list[dict[str, Any]],
     request_text: str,
     timestamp: str,
+    default_transparent_logo_path: Path,
 ) -> dict[str, Any]:
     return {
         "schema_version": "linkedin-campaign-v1",
@@ -431,6 +491,8 @@ def _manifest(
             "content_assets_prove_product_facts": False,
             "missing_real_asset_behavior": "生成配图 brief 和 AI 作图提示，不伪装成产品实拍",
             "watermark_requires_transparent_logo": True,
+            "default_transparent_logo_path": str(default_transparent_logo_path),
+            "transparent_logo_config_key": "linkedin.transparent_logo_path",
         },
         "files": {
             "chinese_plan": str(plan_path),
@@ -439,6 +501,7 @@ def _manifest(
             "english_calendar": None,
             "daily_dir": str(campaign_dir / "daily"),
             "logo_dir": str(campaign_dir / "assets" / "logo"),
+            "default_transparent_logo": str(default_transparent_logo_path),
             "source_images_dir": str(campaign_dir / "assets" / "source-images"),
             "publishing_images_dir": str(campaign_dir / "assets" / "publishing-images"),
         },

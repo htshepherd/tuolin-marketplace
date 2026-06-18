@@ -21,7 +21,7 @@ This skill is part of `tuolin-marketplace`. It is an application-layer Agent: it
 - Use external product name `Specialty Glass Fiber Tape` in English publishing content.
 - Do not use `Quartz Fiber Tape` in user-copyable external publishing content.
 - Content assets may support image selection and image briefs only; they do not prove product performance facts.
-- The user must provide an independent transparent logo file before generating watermarked publishing images. Reference images are layout examples only.
+- Watermarked publishing images require an independent transparent logo file. Prefer `linkedin.transparent_logo_path` from config, defaulting to `assets/logo/tuolin-logo-transparent.png`; reference images are layout examples only.
 
 ## Natural Language Entry Points
 
@@ -30,6 +30,7 @@ Common user requests:
 - “请做一个30天在Linkedin上发贴宣传的计划。”
 - “确认策划，活动文件夹：<campaign-dir>”
 - “确认中文总稿，活动文件夹：<campaign-dir>”
+- “生成 LinkedIn 配图，活动文件夹：<campaign-dir>，源图：<approved-image.png>”
 - “生成 LinkedIn 配图，活动文件夹：<campaign-dir>，logo：<transparent-logo.png>，源图：<approved-image.png>”
 
 The natural-language router supports the full manual flow: Chinese plan, Chinese 30-day draft, English daily publishing package, and static image generation. Each step stops for user confirmation; no step publishes to LinkedIn.
@@ -60,7 +61,13 @@ After the user confirms the Chinese 30-day draft:
 python3 scripts/confirm_linkedin_chinese_draft.py --campaign-dir <campaign-dir>
 ```
 
-After the English package exists and the user provides a transparent logo plus an approved source image:
+After the English package exists and the user provides an approved source image, using the configured/default transparent logo:
+
+```bash
+python3 scripts/generate_linkedin_images.py --campaign-dir <campaign-dir> --source-image <approved-image.png>
+```
+
+To override the configured/default transparent logo:
 
 ```bash
 python3 scripts/generate_linkedin_images.py --campaign-dir <campaign-dir> --logo <transparent-logo.png> --source-image <approved-image.png>
@@ -75,8 +82,9 @@ When the user asks for a LinkedIn 30-day campaign:
 3. Create a desktop campaign folder named `拓霖领英30天_特种玻璃纤维带_YYYYMMDD_HHMM`.
 4. Write `01_中文策划.md`.
 5. Initialize `daily/`, `assets/logo/`, `assets/source-images/`, and `assets/publishing-images/`.
-6. Write `campaign-manifest.json` with status `planning_ready`.
-7. Stop and ask the user to confirm the Chinese plan before generating the Chinese 30-day draft.
+6. Write the resolved default transparent logo path into `campaign-manifest.json`.
+7. Write `campaign-manifest.json` with status `planning_ready`.
+8. Stop and ask the user to confirm the Chinese plan before generating the Chinese 30-day draft.
 
 When the user confirms the Chinese plan:
 
@@ -102,7 +110,7 @@ When the user confirms the Chinese draft:
 
 When the user provides image inputs:
 
-1. Require an independent transparent logo image.
+1. Resolve the transparent logo from explicit `logo`, then campaign manifest config/default path.
 2. Require a user-provided approved source image.
 3. Do not scan `raw/` for images.
 4. Generate `assets/publishing-images/day-01.png` through `day-30.png`.

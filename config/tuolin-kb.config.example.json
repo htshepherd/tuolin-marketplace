@@ -4,9 +4,11 @@
   "raw_dir": "raw",
   "knowledge_dir": "knowledge/okf",
   "generated_dir": "generated",
+  "linkedin": {
+    "transparent_logo_path": "assets/logo/tuolin-logo-transparent.png"
+  },
   "ffmpeg_path": "ffmpeg",
   "mineru_command": "mineru",
   "codex_client_only": true,
   "user_cli_supported": false
 }
-
