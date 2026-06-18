@@ -32,8 +32,9 @@ Common user requests:
 - “确认中文总稿，活动文件夹：<campaign-dir>”
 - “生成 LinkedIn 配图，活动文件夹：<campaign-dir>，源图：<approved-image.png>”
 - “生成 LinkedIn 配图，活动文件夹：<campaign-dir>，logo：<transparent-logo.png>，源图：<approved-image.png>”
+- “重新生成 LinkedIn Day 03 发布图，活动文件夹：<campaign-dir>，tags：1000°C Heat Resistance, No Itching, No Smoke”
 
-The natural-language router supports the full manual flow: Chinese plan, Chinese 30-day draft, English daily publishing package, and static image generation. Each step stops for user confirmation; no step publishes to LinkedIn.
+The natural-language router supports the full manual flow: Chinese plan, Chinese 30-day draft, English daily publishing package, static image generation, and single-day image regeneration with manually supplied tags. Each step stops for user confirmation; no step publishes to LinkedIn.
 
 ## Internal Tools
 
@@ -103,10 +104,14 @@ When the user confirms the Chinese draft:
 3. Write `03_英文发布总览.md`.
 4. Write `04_英文发布日历.csv`.
 5. Write `daily/day-01.md` through `daily/day-30.md`.
-6. Use Day 1 through Day 30, not calendar dates.
-7. Include 3-5 professional LinkedIn hashtags in every daily file.
-8. Keep all LinkedIn publishing manual; do not authorize, schedule, or auto-publish.
-9. Update manifest status to `english_package_ready`.
+6. Write `Manual-Posting-Package/Campaign Overview.md`.
+7. Write `Manual-Posting-Package/Publishing Calendar.csv`.
+8. Write `Manual-Posting-Package/Day 01/LinkedIn Post Content.md`, `Asset Notes.md`, and `assets/` through Day 30.
+9. Use Day 1 through Day 30, not calendar dates.
+10. Include 3-5 professional LinkedIn hashtags in every daily file.
+11. Keep all LinkedIn publishing manual; do not authorize, schedule, or auto-publish.
+12. Update manifest status to `english_package_ready`.
+13. Stop and ask the user to inspect or request edits before image generation.
 
 When the user provides image inputs:
 
@@ -114,6 +119,16 @@ When the user provides image inputs:
 2. Require a user-provided approved source image.
 3. Do not scan `raw/` for images.
 4. Generate `assets/publishing-images/day-01.png` through `day-30.png`.
-5. Overlay the logo and daily visual tags.
-6. Add publishing image references to the daily English files.
-7. Update manifest status to `image_assets_ready`.
+5. Also copy each final publishing image to `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png`.
+6. Overlay the logo and daily visual tags.
+7. Add publishing image references to the daily English files and each Day's `Asset Notes.md`.
+8. Update manifest status to `image_assets_ready`.
+
+When the user wants to adjust one day's image tags:
+
+1. Require a campaign folder, Day number, and manually supplied tags.
+2. Reuse the manifest's previous source image and transparent logo when present; otherwise require source image/logo paths.
+3. Regenerate only that day's publishing image.
+4. Update both `assets/publishing-images/day-XX.png` and `Manual-Posting-Package/Day XX/assets/linkedin-publishing-image.png`.
+5. Update that Day's `Asset Notes.md` and manifest `custom_visual_tags`.
+6. Do not modify other days and do not publish to LinkedIn.

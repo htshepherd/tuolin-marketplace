@@ -267,8 +267,12 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertTrue(english_response.executed)
             self.assertTrue((campaign_dir / "04_英文发布日历.csv").exists())
             self.assertEqual(len(list((campaign_dir / "daily").glob("day-*.md"))), 30)
+            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Campaign Overview.md").exists())
+            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Publishing Calendar.csv").exists())
+            self.assertTrue((campaign_dir / "Manual-Posting-Package" / "Day 01" / "LinkedIn Post Content.md").exists())
             self.assertNotIn("logo：", english_response.copyable_reply)
             self.assertIn(str(default_logo), english_response.message)
+            self.assertIn("人工发布包", english_response.message)
 
             image_response = route_natural_language(
                 paths,
@@ -279,9 +283,29 @@ class NaturalLanguageRoutingTests(unittest.TestCase):
             self.assertTrue(image_response.executed)
             self.assertFalse(image_response.needs_confirmation)
             self.assertEqual(len(list((campaign_dir / "assets" / "publishing-images").glob("day-*.png"))), 30)
+            self.assertTrue(
+                (campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "linkedin-publishing-image.png").exists()
+            )
+            self.assertIn("重新生成 LinkedIn Day 01 发布图", image_response.copyable_reply)
             manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "image_assets_ready")
             self.assertEqual(manifest["files"]["transparent_logo"], str(default_logo.resolve()))
+
+            single_day_response = route_natural_language(
+                paths,
+                (
+                    f"重新生成 LinkedIn Day 03 发布图，活动文件夹：{campaign_dir}，"
+                    "tags：Custom Heat, No Itch, Clean Install"
+                ),
+            )
+
+            self.assertEqual(single_day_response.intent, "linkedin_single_day_image")
+            self.assertTrue(single_day_response.executed)
+            self.assertIn("Day 03", single_day_response.message)
+            day_3_notes = (campaign_dir / "Manual-Posting-Package" / "Day 03" / "Asset Notes.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("Custom Heat, No Itch, Clean Install", day_3_notes)
 
     def test_linkedin_confirmation_without_campaign_dir_asks_for_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -15,6 +15,7 @@ from scripts.tuolin_marketplace.linkedin_agent import (
     create_linkedin_campaign_plan,
     generate_linkedin_publishing_images,
     is_linkedin_campaign_request,
+    regenerate_linkedin_publishing_image,
     validate_linkedin_project,
 )
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
@@ -178,6 +179,12 @@ class LinkedInAgentTests(unittest.TestCase):
             self.assertEqual(len(daily_files), 30)
             self.assertEqual(daily_files[0].name, "day-01.md")
             self.assertEqual(daily_files[-1].name, "day-30.md")
+            manual_dir = campaign_dir / "Manual-Posting-Package"
+            self.assertTrue((manual_dir / "Campaign Overview.md").exists())
+            self.assertTrue((manual_dir / "Publishing Calendar.csv").exists())
+            self.assertTrue((manual_dir / "Day 01" / "LinkedIn Post Content.md").exists())
+            self.assertTrue((manual_dir / "Day 01" / "Asset Notes.md").exists())
+            self.assertTrue((manual_dir / "Day 01" / "assets").is_dir())
 
             overview_text = overview_path.read_text(encoding="utf-8")
             self.assertIn(EXTERNAL_PRODUCT_NAME_EN, overview_text)
@@ -215,6 +222,8 @@ class LinkedInAgentTests(unittest.TestCase):
             self.assertEqual(manifest["files"]["english_overview"], str(overview_path))
             self.assertEqual(manifest["files"]["english_calendar"], str(calendar_path))
             self.assertEqual(len(manifest["files"]["daily_files"]), 30)
+            self.assertEqual(manifest["files"]["manual_package_dir"], str(manual_dir))
+            self.assertEqual(len(manifest["files"]["manual_day_dirs"]), 30)
 
     def test_confirm_chinese_draft_does_not_silently_overwrite_english_package(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -297,18 +306,70 @@ class LinkedInAgentTests(unittest.TestCase):
             self.assertEqual(len(publishing_images), 30)
             self.assertEqual(publishing_images[0].name, "day-01.png")
             self.assertGreater(publishing_images[0].stat().st_size, 0)
+            manual_day_1_image = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "linkedin-publishing-image.png"
+            self.assertTrue(manual_day_1_image.exists())
             with Image.open(publishing_images[0]) as generated:
                 self.assertEqual(generated.size, (1200, 675))
 
             day_1 = (campaign_dir / "daily" / "day-01.md").read_text(encoding="utf-8")
             self.assertIn("## Publishing Image", day_1)
             self.assertIn(str(publishing_images[0]), day_1)
+            asset_notes = (campaign_dir / "Manual-Posting-Package" / "Day 01" / "Asset Notes.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("Generated Publishing Image", asset_notes)
+            self.assertIn("Specialty Glass Fiber Tape", asset_notes)
 
             manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "image_assets_ready")
             self.assertEqual(manifest["status_history"][-1]["status"], "image_assets_ready")
             self.assertEqual(len(manifest["files"]["publishing_images"]), 30)
+            self.assertEqual(len(manifest["files"]["manual_publishing_images"]), 30)
             self.assertEqual(manifest["files"]["transparent_logo"], str(logo_path.resolve()))
+
+    def test_regenerate_single_day_publishing_image_with_custom_tags(self) -> None:
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow is not available")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = resolve_paths(root / "knowledge-project", {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+            created = create_linkedin_campaign_plan(
+                paths,
+                "请做一个30天在Linkedin上发贴宣传的计划。重点突出耐高温1000度、不刺痒、不冒烟。",
+                output_root=root / "Desktop",
+                now=datetime(2026, 6, 17, 15, 30),
+            )
+            confirm_linkedin_campaign_plan(Path(created.campaign_dir))
+            confirm_linkedin_chinese_draft(Path(created.campaign_dir))
+            logo_path, source_path = _write_test_images(root)
+            generate_linkedin_publishing_images(Path(created.campaign_dir), logo_path, source_path)
+
+            result = regenerate_linkedin_publishing_image(
+                Path(created.campaign_dir),
+                3,
+                ["Custom Heat", "No Itch", "Clean Install"],
+            )
+
+            campaign_dir = Path(created.campaign_dir)
+            self.assertEqual(result.status, "image_assets_ready")
+            standard_path = campaign_dir / "assets" / "publishing-images" / "day-03.png"
+            manual_path = campaign_dir / "Manual-Posting-Package" / "Day 03" / "assets" / "linkedin-publishing-image.png"
+            self.assertEqual(Path(result.plan_path), standard_path)
+            self.assertTrue(standard_path.exists())
+            self.assertTrue(manual_path.exists())
+            asset_notes = (campaign_dir / "Manual-Posting-Package" / "Day 03" / "Asset Notes.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("Custom Heat, No Itch, Clean Install", asset_notes)
+            manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["custom_visual_tags"]["day-03"], ["Custom Heat", "No Itch", "Clean Install"])
+            self.assertEqual(manifest["files"]["publishing_images"][2], str(standard_path))
+            self.assertEqual(manifest["files"]["manual_publishing_images"][2], str(manual_path))
 
     def test_generate_publishing_images_uses_configured_default_logo(self) -> None:
         try:

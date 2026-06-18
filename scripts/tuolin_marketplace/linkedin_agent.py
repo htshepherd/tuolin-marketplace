@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import shutil
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -145,9 +146,9 @@ def _resolve_generation_logo_path(
         return explicit_logo_path.expanduser().resolve()
 
     configured = (
-        manifest.get("files", {}).get("default_transparent_logo")
+        manifest.get("files", {}).get("transparent_logo")
+        or manifest.get("files", {}).get("default_transparent_logo")
         or manifest.get("image_policy", {}).get("default_transparent_logo_path")
-        or manifest.get("files", {}).get("transparent_logo")
     )
     if not configured:
         raise ValueError(
@@ -224,6 +225,7 @@ def confirm_linkedin_chinese_draft(campaign_dir: Path, overwrite: bool = False) 
     _write_english_calendar(calendar_path, english_posts)
     for post, path in zip(english_posts, daily_paths):
         path.write_text(_render_daily_english_file(post, manifest), encoding="utf-8")
+    manual_files = _write_manual_posting_package(campaign_dir, english_posts, manifest)
 
     _append_status_history(manifest, "chinese_draft_confirmed")
     manifest["status"] = "english_package_ready"
@@ -231,6 +233,7 @@ def confirm_linkedin_chinese_draft(campaign_dir: Path, overwrite: bool = False) 
     manifest["files"]["english_overview"] = str(overview_path)
     manifest["files"]["english_calendar"] = str(calendar_path)
     manifest["files"]["daily_files"] = [str(path) for path in daily_paths]
+    manifest["files"].update(manual_files)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
@@ -287,25 +290,109 @@ def generate_linkedin_publishing_images(
     font_large = _load_font(ImageFont, 34)
     font_small = _load_font(ImageFont, 22)
     generated = []
+    manual_generated = []
     for day, output_path in zip(_campaign_days(), output_paths):
-        image = _canvas_from_source(source)
-        draw = ImageDraw.Draw(image)
         tags = [str(tag) for tag in day["tags"][:3]]
-        _draw_visual_tags(draw, tags, font_large, font_small)
-        _paste_logo(image, logo)
+        image = _compose_publishing_image(source, logo, tags, font_large, font_small)
         image.save(output_path)
         generated.append(str(output_path))
+        manual_path = _manual_day_assets_dir(campaign_dir, int(day["day"])) / "linkedin-publishing-image.png"
+        manual_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(output_path, manual_path)
+        manual_generated.append(str(manual_path))
         _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{int(day['day']):02d}.md", output_path)
+        _upsert_manual_asset_note(campaign_dir, int(day["day"]), output_path, manual_path, tags)
 
     manifest["status"] = "image_assets_ready"
     _append_status_history(manifest, "image_assets_ready")
     manifest["files"]["transparent_logo"] = str(resolved_logo_path)
     manifest["files"]["publishing_image_source"] = str(source_image_path)
     manifest["files"]["publishing_images"] = generated
+    manifest["files"]["manual_publishing_images"] = manual_generated
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
         plan_path=generated[0],
+        manifest_path=str(manifest_path),
+        context_id=manifest["context"]["context_id"],
+        status="image_assets_ready",
+    )
+
+
+def regenerate_linkedin_publishing_image(
+    campaign_dir: Path,
+    day_number: int,
+    tags: list[str],
+    logo_path: Path | None = None,
+    source_image_path: Path | None = None,
+) -> LinkedInCampaignResult:
+    campaign_dir = campaign_dir.expanduser().resolve()
+    manifest_path = campaign_dir / "campaign-manifest.json"
+    if not manifest_path.exists():
+        raise ValueError(f"找不到 LinkedIn 活动 manifest：{manifest_path}")
+    if day_number < 1 or day_number > DEFAULT_CAMPAIGN_DAYS:
+        raise ValueError(f"Day 必须在 1 到 {DEFAULT_CAMPAIGN_DAYS} 之间：{day_number}")
+    clean_tags = [tag.strip() for tag in tags if tag.strip()]
+    if not clean_tags:
+        raise ValueError("重新生成单日发布图需要至少 1 个 tag。")
+    if len(clean_tags) > 3:
+        clean_tags = clean_tags[:3]
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    status = manifest.get("status")
+    if status not in {"english_package_ready", "image_assets_ready"}:
+        raise ValueError(f"当前活动状态是 {status!r}，不能重新生成发布图。请先生成英文发布包。")
+
+    resolved_source = source_image_path
+    if resolved_source is None:
+        configured_source = manifest.get("files", {}).get("publishing_image_source")
+        if configured_source:
+            resolved_source = Path(str(configured_source))
+    if resolved_source is None:
+        raise ValueError("重新生成单日发布图需要源图。请先生成整套配图，或在命令中提供源图路径。")
+    resolved_source = resolved_source.expanduser().resolve()
+    if not resolved_source.exists():
+        raise ValueError(f"找不到源图片文件：{resolved_source}")
+
+    resolved_logo_path = _resolve_generation_logo_path(campaign_dir, manifest, logo_path)
+    if not resolved_logo_path.exists():
+        raise ValueError(f"找不到透明 logo 文件：{resolved_logo_path}")
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError as exc:
+        raise RuntimeError("生成发布图需要 Pillow 图片库。请先安装 Pillow，或只使用 image brief。") from exc
+
+    logo = Image.open(resolved_logo_path).convert("RGBA")
+    if not _has_transparency(logo):
+        raise ValueError("logo 文件必须是带透明通道的图片。请提供独立透明 logo，不要使用带背景的参考图。")
+    source = Image.open(resolved_source).convert("RGB")
+    font_large = _load_font(ImageFont, 34)
+    font_small = _load_font(ImageFont, 22)
+    image = _compose_publishing_image(source, logo, clean_tags, font_large, font_small)
+
+    output_dir = Path(manifest["files"]["publishing_images_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"day-{day_number:02d}.png"
+    image.save(output_path)
+
+    manual_path = _manual_day_assets_dir(campaign_dir, day_number) / "linkedin-publishing-image.png"
+    manual_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(output_path, manual_path)
+    _upsert_daily_image_reference(campaign_dir / "daily" / f"day-{day_number:02d}.md", output_path)
+    _upsert_manual_asset_note(campaign_dir, day_number, output_path, manual_path, clean_tags)
+
+    manifest["status"] = "image_assets_ready"
+    _append_status_history(manifest, f"day_{day_number:02d}_image_regenerated")
+    manifest["files"]["transparent_logo"] = str(resolved_logo_path)
+    manifest["files"]["publishing_image_source"] = str(resolved_source)
+    manifest.setdefault("custom_visual_tags", {})[f"day-{day_number:02d}"] = clean_tags
+    _upsert_manifest_file_list(manifest, "publishing_images", str(output_path), day_number)
+    _upsert_manifest_file_list(manifest, "manual_publishing_images", str(manual_path), day_number)
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return LinkedInCampaignResult(
+        campaign_dir=str(campaign_dir),
+        plan_path=str(output_path),
         manifest_path=str(manifest_path),
         context_id=manifest["context"]["context_id"],
         status="image_assets_ready",
@@ -792,6 +879,216 @@ def _render_daily_english_file(post: dict[str, Any], manifest: dict[str, Any]) -
             f"- Contact email, when needed: {manifest.get('contact_email', DEFAULT_CONTACT_EMAIL)}",
         ]
     ) + "\n"
+
+
+def _manual_package_dir(campaign_dir: Path) -> Path:
+    return campaign_dir / "Manual-Posting-Package"
+
+
+def _manual_day_dir(campaign_dir: Path, day_number: int) -> Path:
+    return _manual_package_dir(campaign_dir) / f"Day {day_number:02d}"
+
+
+def _manual_day_assets_dir(campaign_dir: Path, day_number: int) -> Path:
+    return _manual_day_dir(campaign_dir, day_number) / "assets"
+
+
+def _write_manual_posting_package(
+    campaign_dir: Path,
+    posts: list[dict[str, Any]],
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    package_dir = _manual_package_dir(campaign_dir)
+    package_dir.mkdir(parents=True, exist_ok=True)
+    overview_path = package_dir / "Campaign Overview.md"
+    calendar_path = package_dir / "Publishing Calendar.csv"
+    overview_path.write_text(_render_manual_campaign_overview(posts, manifest), encoding="utf-8")
+    _write_manual_calendar(calendar_path, posts)
+
+    day_dirs = []
+    post_content_files = []
+    asset_note_files = []
+    for post in posts:
+        day_number = int(post["day"])
+        day_dir = _manual_day_dir(campaign_dir, day_number)
+        assets_dir = _manual_day_assets_dir(campaign_dir, day_number)
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        post_path = day_dir / "LinkedIn Post Content.md"
+        asset_path = day_dir / "Asset Notes.md"
+        post_path.write_text(_render_manual_post_content(post), encoding="utf-8")
+        asset_path.write_text(_render_manual_asset_notes(post), encoding="utf-8")
+        day_dirs.append(str(day_dir))
+        post_content_files.append(str(post_path))
+        asset_note_files.append(str(asset_path))
+
+    return {
+        "manual_package_dir": str(package_dir),
+        "manual_overview": str(overview_path),
+        "manual_calendar": str(calendar_path),
+        "manual_day_dirs": day_dirs,
+        "manual_post_content_files": post_content_files,
+        "manual_asset_note_files": asset_note_files,
+    }
+
+
+def _render_manual_campaign_overview(posts: list[dict[str, Any]], manifest: dict[str, Any]) -> str:
+    lines = [
+        "# Manual LinkedIn Posting Package Overview",
+        "",
+        f"- Product name: {EXTERNAL_PRODUCT_NAME_EN}",
+        f"- Chinese external name: {EXTERNAL_PRODUCT_NAME_ZH}",
+        "- Market: Europe and North America",
+        "- Publishing mode: manual review and manual LinkedIn posting only.",
+        "- Core claims to review before posting: 1000°C heat resistance, no itching sensation, and no smoke during use.",
+        "- Product images and content assets support visual layout only; they do not prove product performance claims.",
+        f"- Contact: {manifest.get('contact_email', DEFAULT_CONTACT_EMAIL)}",
+        "",
+        "## Daily Index",
+        "",
+    ]
+    for post in posts:
+        lines.append(
+            f"- Day {post['day']:02d}: {post['theme']} | "
+            f"Post: Day {post['day']:02d}/LinkedIn Post Content.md | "
+            f"Assets: Day {post['day']:02d}/assets/linkedin-publishing-image.png"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _write_manual_calendar(path: Path, posts: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "day",
+                "theme",
+                "post_content_file",
+                "asset_notes_file",
+                "publishing_image_file",
+                "hashtags",
+                "manual_review_status",
+            ],
+        )
+        writer.writeheader()
+        for post in posts:
+            day = int(post["day"])
+            writer.writerow(
+                {
+                    "day": f"Day {day:02d}",
+                    "theme": post["theme"],
+                    "post_content_file": f"Day {day:02d}/LinkedIn Post Content.md",
+                    "asset_notes_file": f"Day {day:02d}/Asset Notes.md",
+                    "publishing_image_file": f"Day {day:02d}/assets/linkedin-publishing-image.png",
+                    "hashtags": " ".join(post["hashtags"]),
+                    "manual_review_status": "unchecked",
+                }
+            )
+
+
+def _render_manual_post_content(post: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            f"# {post['title']}",
+            "",
+            "## Copy For LinkedIn",
+            "",
+            post["body"],
+            "",
+            "## Hashtags",
+            "",
+            " ".join(post["hashtags"]),
+            "",
+            "## Manual Review",
+            "",
+            "- Check product name before posting: Specialty Glass Fiber Tape.",
+            "- Check the 1000°C, no itching, and no smoke wording before posting.",
+            "- Post manually from the LinkedIn account; do not schedule automatically from this package.",
+        ]
+    ) + "\n"
+
+
+def _render_manual_asset_notes(post: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            f"# Day {post['day']:02d} Asset Notes",
+            "",
+            "## Publishing Image",
+            "",
+            "assets/linkedin-publishing-image.png",
+            "",
+            "## Image Brief",
+            "",
+            post["image_brief"],
+            "",
+            "## Visual Tags",
+            "",
+            ", ".join(post["visual_tags"]),
+            "",
+            "## Boundary",
+            "",
+            "- Use approved source images or generated image briefs only.",
+            "- Do not present AI-generated imagery as a real product photo.",
+            "- Visual assets do not prove product performance claims.",
+            "",
+            "## Regeneration",
+            "",
+            (
+                f"To adjust this day's image tags, ask Codex to regenerate Day {post['day']:02d} "
+                "with the new tags."
+            ),
+        ]
+    ) + "\n"
+
+
+def _compose_publishing_image(source, logo, tags: list[str], font_large, font_small):
+    from PIL import ImageDraw
+
+    image = _canvas_from_source(source)
+    draw = ImageDraw.Draw(image)
+    _draw_visual_tags(draw, tags, font_large, font_small)
+    _paste_logo(image, logo)
+    return image
+
+
+def _upsert_manual_asset_note(
+    campaign_dir: Path,
+    day_number: int,
+    standard_image_path: Path,
+    manual_image_path: Path,
+    tags: list[str],
+) -> None:
+    note_path = _manual_day_dir(campaign_dir, day_number) / "Asset Notes.md"
+    if not note_path.exists():
+        return
+    text = note_path.read_text(encoding="utf-8")
+    section = "\n".join(
+        [
+            "## Generated Publishing Image",
+            "",
+            f"- Standard path: {standard_image_path}",
+            f"- Manual package path: {manual_image_path}",
+            f"- Current visual tags: {', '.join(tags)}",
+            "",
+        ]
+    )
+    marker = "\n## Generated Publishing Image\n"
+    if marker not in text:
+        note_path.write_text(text.rstrip() + "\n\n" + section, encoding="utf-8")
+        return
+    before, _marker, after = text.partition(marker)
+    next_section_index = after.find("\n## ")
+    tail = "" if next_section_index == -1 else after[next_section_index:]
+    note_path.write_text(before.rstrip() + "\n\n" + section.rstrip() + "\n" + tail, encoding="utf-8")
+
+
+def _upsert_manifest_file_list(manifest: dict[str, Any], key: str, value: str, day_number: int) -> None:
+    files = manifest.setdefault("files", {})
+    values = list(files.get(key) or [])
+    index = day_number - 1
+    while len(values) <= index:
+        values.append("")
+    values[index] = value
+    files[key] = values
 
 
 def _has_transparency(image) -> bool:

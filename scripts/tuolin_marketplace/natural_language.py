@@ -15,6 +15,7 @@ from .linkedin_agent import (
     default_linkedin_transparent_logo_path,
     generate_linkedin_publishing_images,
     is_linkedin_campaign_request,
+    regenerate_linkedin_publishing_image,
 )
 from .partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_partitions, scan_partition
 from .partition_organizer import organize_partition
@@ -156,6 +157,65 @@ def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:
 
 
 def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse | None:
+    if _is_linkedin_single_day_image_request(utterance):
+        campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
+        logo_path = _extract_linkedin_path(utterance, ["logo", "Logo", "透明logo", "透明背景logo"])
+        source_path = _extract_linkedin_path(utterance, ["源图", "产品源图", "source-image", "source_image"])
+        day_number = _extract_linkedin_day_number(utterance)
+        tags = _extract_linkedin_tags(utterance)
+        missing = []
+        if campaign_dir is None:
+            missing.append("活动文件夹")
+        if day_number is None:
+            missing.append("Day 编号")
+        if not tags:
+            missing.append("tags")
+        if missing:
+            return NaturalLanguageResponse(
+                intent="linkedin_single_day_image",
+                executed=False,
+                needs_confirmation=True,
+                message=(
+                    "重新生成单日 LinkedIn 发布图还需要："
+                    f"{'、'.join(missing)}。如果此前已经生成过整套发布图，可以不再提供源图和 logo；"
+                    "系统会复用 manifest 里记录的源图和透明 logo。"
+                ),
+                copyable_reply=(
+                    "重新生成 LinkedIn Day 01 发布图，"
+                    "活动文件夹：/path/to/campaign，"
+                    "tags：1000°C Heat Resistance, No Itching, No Smoke"
+                ),
+            )
+        try:
+            result = regenerate_linkedin_publishing_image(
+                campaign_dir,
+                day_number,
+                tags,
+                logo_path=logo_path,
+                source_image_path=source_path,
+            )
+        except (RuntimeError, ValueError) as exc:
+            return _linkedin_operation_error_response(str(exc))
+        manual_image_path = (
+            Path(result.campaign_dir)
+            / "Manual-Posting-Package"
+            / f"Day {day_number:02d}"
+            / "assets"
+            / "linkedin-publishing-image.png"
+        )
+        return NaturalLanguageResponse(
+            intent="linkedin_single_day_image",
+            executed=True,
+            needs_confirmation=False,
+            message=(
+                f"已重新生成 Day {day_number:02d} 的 LinkedIn 发布图。"
+                f"标准路径：{Path(result.plan_path)}；"
+                f"人工包路径：{manual_image_path}。"
+                "这一步只更新单日图片和 Asset Notes，不会自动发布。"
+            ),
+            details=result.to_dict(),
+        )
+
     if _is_linkedin_confirm_chinese_draft_request(utterance):
         campaign_dir = _extract_linkedin_path(utterance, ["活动文件夹", "campaign-dir", "campaign_dir"])
         if campaign_dir is None:
@@ -171,6 +231,8 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             message=(
                 "已根据确认后的中文总稿生成英文发布包。"
                 f"每日英文贴文在：{Path(result.campaign_dir) / 'daily'}。"
+                f"人工发布包在：{Path(result.campaign_dir) / 'Manual-Posting-Package'}。"
+                "请人工检查 Campaign Overview、Publishing Calendar 和 Day 01-Day 30 内容；"
                 "下一步如需生成配图，请提供产品源图路径；"
                 f"透明 logo 默认读取：{default_linkedin_transparent_logo_path(paths)}。"
                 "仍不会自动发布。"
@@ -242,7 +304,14 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             message=(
                 "已生成 30 张 LinkedIn 发布配图，并把每张图写回对应 daily/day-XX.md。"
                 f"配图目录：{Path(result.campaign_dir) / 'assets' / 'publishing-images'}。"
+                f"人工包每一天的发布图也已写入：{Path(result.campaign_dir) / 'Manual-Posting-Package'}。"
+                "如需调整某一天图片上的 tags，可以要求重新生成单日发布图。"
                 "这一步只生成文件，不会自动发布。"
+            ),
+            copyable_reply=(
+                "重新生成 LinkedIn Day 01 发布图，"
+                f"活动文件夹：{result.campaign_dir}，"
+                "tags：1000°C Heat Resistance, No Itching, No Smoke"
             ),
             details=result.to_dict(),
         )
@@ -675,6 +744,16 @@ def _is_linkedin_image_request(utterance: str) -> bool:
     return any(word in utterance for word in image_words) and _mentions_linkedin_context(utterance)
 
 
+def _is_linkedin_single_day_image_request(utterance: str) -> bool:
+    if not _mentions_linkedin_context(utterance):
+        return False
+    mentions_day = _extract_linkedin_day_number(utterance) is not None
+    mentions_regenerate = "重新生成" in utterance or "重生成" in utterance or "调整" in utterance or "修改" in utterance
+    mentions_image = "发布图" in utterance or "配图" in utterance or "图片" in utterance
+    mentions_tags = "tag" in utterance.lower() or "标签" in utterance
+    return mentions_day and mentions_regenerate and mentions_image and mentions_tags
+
+
 def _mentions_linkedin_context(utterance: str) -> bool:
     return (
         "LinkedIn" in utterance
@@ -690,7 +769,7 @@ def _mentions_linkedin_context(utterance: str) -> bool:
 def _extract_linkedin_path(utterance: str, labels: list[str]) -> Path | None:
     label_pattern = "|".join(re.escape(label) for label in labels)
     stop_labels = (
-        "活动文件夹|campaign-dir|campaign_dir|logo|Logo|透明logo|透明背景logo|源图|产品源图|source-image|source_image"
+        "活动文件夹|campaign-dir|campaign_dir|logo|Logo|透明logo|透明背景logo|源图|产品源图|source-image|source_image|tags|Tags|标签|画面tags|画面 tags"
     )
     match = re.search(
         rf"(?:{label_pattern})\s*[：:=]\s*(.+?)(?=\s*(?:，|,)\s*(?:{stop_labels})\s*[：:=]|$)",
@@ -702,6 +781,24 @@ def _extract_linkedin_path(utterance: str, labels: list[str]) -> Path | None:
     if not value:
         return None
     return Path(value).expanduser()
+
+
+def _extract_linkedin_day_number(utterance: str) -> int | None:
+    match = re.search(r"(?:Day|day|第)\s*0?([1-9]|[12][0-9]|30)\s*(?:天|日)?", utterance)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _extract_linkedin_tags(utterance: str) -> list[str]:
+    match = re.search(r"(?:tags|Tags|标签|画面tags|画面 tags)\s*[：:=]\s*(.+)$", utterance)
+    if not match:
+        return []
+    value = match.group(1).strip().strip("'\"")
+    if not value:
+        return []
+    parts = re.split(r"[,，;；|/]+", value)
+    return [part.strip() for part in parts if part.strip()]
 
 
 def _linkedin_missing_campaign_dir_response(action: str) -> NaturalLanguageResponse:
