@@ -220,7 +220,7 @@ def _linkedin_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageRe
             executed=True,
             needs_confirmation=False,
             message=(
-                "已复制 30 天发帖计划到桌面交付目录。"
+                "已复制完整 30 天发帖计划到桌面交付目录，包含每日贴文内容、人工发布包和源目录中已有的发布图。"
                 f"桌面目录：{result.plan_path}。"
                 "后续单日生成发布图时，会同步复制到这个桌面副本。"
             ),

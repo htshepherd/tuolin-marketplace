@@ -407,13 +407,26 @@ class LinkedInAgentTests(unittest.TestCase):
             confirm_linkedin_campaign_plan(Path(created.campaign_dir))
             confirm_linkedin_chinese_draft(Path(created.campaign_dir))
             campaign_dir = Path(created.campaign_dir)
+            source_path = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "main_product.jpg"
+            source_path.write_bytes(b"image")
+            existing_publish_image = (
+                campaign_dir
+                / "Manual-Posting-Package"
+                / "Day 01"
+                / "Publish-Images"
+                / "legacy-generated"
+                / "day-01.png"
+            )
+            existing_publish_image.parent.mkdir(parents=True, exist_ok=True)
+            existing_publish_image.write_bytes(b"publish-image")
+            legacy_publish_image = campaign_dir / "Publish-Images-With-Tags-Logo" / "day-01.png"
+            legacy_publish_image.parent.mkdir(parents=True, exist_ok=True)
+            legacy_publish_image.write_bytes(b"legacy-image")
             desktop_result = copy_linkedin_campaign_to_desktop(
                 campaign_dir,
                 desktop_dir=root / "DesktopReview",
                 now=datetime(2026, 6, 18, 10, 30, 0),
             )
-            source_path = campaign_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "main_product.jpg"
-            source_path.write_bytes(b"image")
             create_linkedin_image_selection_sheet(campaign_dir, 1)
 
             result = prepare_linkedin_image_generation(campaign_dir, 1, 1, ["原图轻量增强型"])
@@ -421,6 +434,20 @@ class LinkedInAgentTests(unittest.TestCase):
             desktop_dir = Path(desktop_result.plan_path)
             self.assertTrue(desktop_dir.exists())
             self.assertTrue((desktop_dir / "02_中文30天贴文总稿.md").exists())
+            self.assertTrue((desktop_dir / "Manual-Posting-Package" / "Day 01" / "LinkedIn Post Content.md").exists())
+            self.assertTrue((desktop_dir / "Manual-Posting-Package" / "Day 30" / "LinkedIn Post Content.md").exists())
+            self.assertTrue((desktop_dir / "Manual-Posting-Package" / "Day 01" / "assets" / "main_product.jpg").exists())
+            self.assertTrue(
+                (
+                    desktop_dir
+                    / "Manual-Posting-Package"
+                    / "Day 01"
+                    / "Publish-Images"
+                    / "legacy-generated"
+                    / "day-01.png"
+                ).exists()
+            )
+            self.assertTrue((desktop_dir / "Publish-Images-With-Tags-Logo" / "day-01.png").exists())
             self.assertEqual(len(result.desktop_output_dirs), 1)
             self.assertTrue(Path(result.desktop_output_dirs[0]).is_dir())
             self.assertEqual(
@@ -429,6 +456,10 @@ class LinkedInAgentTests(unittest.TestCase):
             )
             manifest = json.loads((campaign_dir / "campaign-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["desktop_delivery"]["path"], str(desktop_dir))
+            self.assertEqual(manifest["desktop_delivery"]["source_inventory"]["manual_post_content_files"], 30)
+            self.assertEqual(manifest["desktop_delivery"]["copied_inventory"]["manual_post_content_files"], 30)
+            self.assertEqual(manifest["desktop_delivery"]["copied_inventory"]["manual_publish_images"], 1)
+            self.assertEqual(manifest["desktop_delivery"]["copied_inventory"]["legacy_publish_images"], 1)
 
     def test_copy_to_desktop_requires_chinese_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -445,6 +476,24 @@ class LinkedInAgentTests(unittest.TestCase):
             )
 
             with self.assertRaises(ValueError):
+                copy_linkedin_campaign_to_desktop(Path(created.campaign_dir), desktop_dir=root / "DesktopReview")
+
+    def test_copy_to_desktop_requires_manual_posting_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = resolve_paths(root / "knowledge-project", {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+            created = create_linkedin_campaign_plan(
+                paths,
+                "请做一个30天在Linkedin上发贴宣传的计划。重点突出耐高温1000度、不刺痒、不冒烟。",
+                output_root=root / "Desktop",
+                now=datetime(2026, 6, 17, 15, 30),
+            )
+            confirm_linkedin_campaign_plan(Path(created.campaign_dir))
+
+            with self.assertRaisesRegex(ValueError, "Manual-Posting-Package"):
                 copy_linkedin_campaign_to_desktop(Path(created.campaign_dir), desktop_dir=root / "DesktopReview")
 
     def test_configured_default_logo_path_is_recorded_for_image_skill(self) -> None:

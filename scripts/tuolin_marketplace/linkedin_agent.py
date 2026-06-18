@@ -1091,6 +1091,8 @@ def copy_linkedin_campaign_to_desktop(
     draft_path = Path(manifest.get("files", {}).get("chinese_draft") or campaign_dir / "02_中文30天贴文总稿.md")
     if not draft_path.exists():
         raise ValueError("复制到桌面前，请先生成详细 30 天发帖内容（02_中文30天贴文总稿.md）。")
+    source_inventory = _desktop_delivery_inventory(campaign_dir)
+    _validate_desktop_delivery_source(source_inventory)
 
     root = (desktop_dir or Path.home() / "Desktop").expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -1103,9 +1105,15 @@ def copy_linkedin_campaign_to_desktop(
         "path": str(destination),
         "created_at": stamp,
         "source_campaign_dir": str(campaign_dir),
+        "source_inventory": source_inventory,
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     shutil.copytree(campaign_dir, destination)
+    copied_inventory = _desktop_delivery_inventory(destination)
+    _validate_desktop_delivery_copy(source_inventory, copied_inventory)
+    manifest["desktop_delivery"]["copied_inventory"] = copied_inventory
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    shutil.copy2(manifest_path, destination / "campaign-manifest.json")
     return LinkedInCampaignResult(
         campaign_dir=str(campaign_dir),
         plan_path=str(destination),
@@ -1113,6 +1121,62 @@ def copy_linkedin_campaign_to_desktop(
         context_id=manifest["context"]["context_id"],
         status=manifest["status"],
     )
+
+
+def _desktop_delivery_inventory(root: Path) -> dict[str, Any]:
+    image_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    manual_dir = root / "Manual-Posting-Package"
+    day_dirs = sorted(path for path in manual_dir.glob("Day [0-9][0-9]") if path.is_dir())
+    return {
+        "daily_files": len(list((root / "daily").glob("day-*.md"))),
+        "manual_package_exists": manual_dir.is_dir(),
+        "manual_day_dirs": len(day_dirs),
+        "manual_post_content_files": sum(1 for day_dir in day_dirs if (day_dir / "LinkedIn Post Content.md").exists()),
+        "manual_asset_note_files": sum(1 for day_dir in day_dirs if (day_dir / "Asset Notes.md").exists()),
+        "manual_source_images": _count_images(manual_dir, image_suffixes, include_segment="assets"),
+        "manual_publish_images": _count_images(manual_dir, image_suffixes, include_segment="Publish-Images"),
+        "legacy_publish_images": _count_images(root / "Publish-Images-With-Tags-Logo", image_suffixes),
+    }
+
+
+def _count_images(root: Path, suffixes: set[str], include_segment: str | None = None) -> int:
+    if not root.exists():
+        return 0
+    count = 0
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in suffixes:
+            continue
+        if include_segment and include_segment not in path.parts:
+            continue
+        count += 1
+    return count
+
+
+def _validate_desktop_delivery_source(inventory: dict[str, Any]) -> None:
+    if not inventory["manual_package_exists"]:
+        raise ValueError("复制到桌面前，请先生成英文发布包和人工发布包（Manual-Posting-Package）。")
+    if inventory["manual_day_dirs"] < DEFAULT_CAMPAIGN_DAYS:
+        raise ValueError(f"人工发布包不完整：只找到 {inventory['manual_day_dirs']} 个 Day 目录。")
+    if inventory["manual_post_content_files"] < DEFAULT_CAMPAIGN_DAYS:
+        raise ValueError(f"人工发布包不完整：只找到 {inventory['manual_post_content_files']} 个每日贴文文件。")
+    if inventory["manual_asset_note_files"] < DEFAULT_CAMPAIGN_DAYS:
+        raise ValueError(f"人工发布包不完整：只找到 {inventory['manual_asset_note_files']} 个素材说明文件。")
+
+
+def _validate_desktop_delivery_copy(source: dict[str, Any], copied: dict[str, Any]) -> None:
+    keys = [
+        "daily_files",
+        "manual_day_dirs",
+        "manual_post_content_files",
+        "manual_asset_note_files",
+        "manual_source_images",
+        "manual_publish_images",
+        "legacy_publish_images",
+    ]
+    missing = [key for key in keys if copied.get(key, 0) < source.get(key, 0)]
+    if missing:
+        details = "；".join(f"{key}: source={source.get(key, 0)}, copied={copied.get(key, 0)}" for key in missing)
+        raise RuntimeError(f"桌面交付副本不完整：{details}")
 
 
 def _write_manual_posting_package(
