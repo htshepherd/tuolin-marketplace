@@ -1,0 +1,7 @@
+card_template_version: sales-material-card-v1
+type: sales_material
+required_fields:
+  - material_type
+  - language
+  - related_products
+

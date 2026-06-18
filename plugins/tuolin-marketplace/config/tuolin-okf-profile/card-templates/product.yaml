@@ -1,0 +1,6 @@
+card_template_version: product-card-v1
+type: product
+required_fields:
+  - product_line
+  - related_refs
+

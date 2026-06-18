@@ -1,0 +1,10 @@
+[project]
+name = "tuolin-marketplace"
+version = "0.1.0"
+description = "Tuolin Codex plugin marketplace."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+

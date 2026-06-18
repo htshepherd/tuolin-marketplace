@@ -1,0 +1,8 @@
+card_template_version: evidence-card-v1
+type: evidence
+required_fields:
+  - evidence_type
+  - source_paths
+  - proves
+  - confidence
+

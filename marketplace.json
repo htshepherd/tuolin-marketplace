@@ -8,7 +8,7 @@
       "name": "tuolin-marketplace",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/tuolin-marketplace"
       },
       "policy": {
         "installation": "AVAILABLE",
