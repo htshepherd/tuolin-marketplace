@@ -1,7 +1,7 @@
 {
   "name": "tuolin-marketplace",
   "version": "0.1.0",
-  "description": "Tuolin Agent marketplace for Codex, starting with the local knowledge base agent.",
+  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent and controlled LinkedIn campaign workflows.",
   "author": {
     "name": "Tianjin Tuolin"
   },
@@ -16,8 +16,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Tuolin Marketplace",
-    "shortDescription": "Tuolin business agents for Codex.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace.",
+    "shortDescription": "Tuolin business agents for knowledge base and LinkedIn workflows.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes controlled LinkedIn 30-day campaign workflows: campaign planning, marketing review, manual publishing packages, package repair, desktop delivery, and single-day publishing image selection. For requests like \"生成 LinkedIn Day 01 发布图\", Codex must first generate the Day publishing image selection sheet and ask the user to choose source image and style category; it must not directly compose or save a publishing image before the user chooses.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [
@@ -27,7 +27,8 @@
     "defaultPrompt": [
       "整理一下拓霖知识库。",
       "查看当前还有哪些资料需要继续整理。",
-      "有哪些内容需要我确认？"
+      "有哪些内容需要我确认？",
+      "生成 LinkedIn Day 01 发布图"
     ],
     "brandColor": "#2563EB"
   }
