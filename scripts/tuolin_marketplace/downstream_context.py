@@ -18,7 +18,12 @@ TASK_TYPES = {
     },
     "outreach_email": {"audience": "external", "card_types": ["product", "application_scenario", "sales_material"]},
     "follow_up_email": {"audience": "external", "card_types": ["product", "sales_material", "customer_question"]},
-    "video_script": {"audience": "external", "card_types": ["product", "application_scenario", "content_asset"]},
+    "video_creation": {
+        "audience": "external",
+        "card_types": ["product", "content_asset"],
+        "fixed_product_id": "product/quartz_fiber_tape",
+        "no_keyword_expansion": True,
+    },
     "customer_support": {"audience": "internal", "card_types": ["product", "customer_question", "sales_material"]},
 }
 
@@ -34,11 +39,31 @@ def build_downstream_context(
         raise ValueError(f"Unsupported downstream task type: {task_type}")
 
     config = TASK_TYPES[task_type]
+    fixed_product_id = config.get("fixed_product_id")
+    if fixed_product_id:
+        if product_id and product_id != fixed_product_id:
+            raise ValueError(f"{task_type} only supports {fixed_product_id}")
+        product_id = fixed_product_id
+
     audience = config["audience"]
-    selected = _select_cards(paths, config["card_types"], audience, product_id, query)
+    selected = _select_cards(
+        paths,
+        config["card_types"],
+        audience,
+        product_id,
+        query,
+        allow_query_expansion=not config.get("no_keyword_expansion", False),
+    )
     evidence = _collect_evidence(paths, selected)
     risks = _review_risks(paths, selected, product_id) if include_review_items else []
-    excluded_summary = _excluded_summary(paths, config["card_types"], audience, product_id, query)
+    excluded_summary = _excluded_summary(
+        paths,
+        config["card_types"],
+        audience,
+        product_id,
+        query,
+        allow_query_expansion=not config.get("no_keyword_expansion", False),
+    )
     status = knowledge_status(paths)
     context_id = _context_id(task_type, product_id, query)
     context = {
@@ -62,6 +87,8 @@ def build_downstream_context(
             "review_items_are_facts": False,
             "contexts_are_formal_knowledge": False,
             "content_assets_prove_product_facts": False,
+            "no_keyword_expansion": bool(config.get("no_keyword_expansion", False)),
+            "fixed_product_scope": fixed_product_id,
         },
         "note": "下游任务上下文只用于本次任务，不是正式知识；不得扫描 raw，也不得把上下文结论写回 knowledge/okf/。",
     }
@@ -75,6 +102,7 @@ def _select_cards(
     audience: str,
     product_id: str | None,
     query: str | None,
+    allow_query_expansion: bool = True,
 ) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for card_type in card_types:
@@ -87,7 +115,7 @@ def _select_cards(
                 continue
             cards.append(card)
 
-    if query:
+    if query and allow_query_expansion:
         for card in search_cards(paths, query, include_non_official=True, limit=20):
             if card["type"] in card_types and _usable_for_audience(card, audience):
                 if product_id and not _relates_to_product(card, product_id):
@@ -122,13 +150,14 @@ def _excluded_summary(
     audience: str,
     product_id: str | None,
     query: str | None,
+    allow_query_expansion: bool = True,
 ) -> dict[str, int]:
     counts = {"draft": 0, "review_required": 0, "archived": 0, "usage_scope_blocked": 0}
     for card_type in card_types:
         for card in read_cards_by_type(paths, card_type, include_non_official=True):
             if product_id and not _relates_to_product(card, product_id):
                 continue
-            if query and _query_sensitive(card_type) and not _matches_query(card, query):
+            if allow_query_expansion and query and _query_sensitive(card_type) and not _matches_query(card, query):
                 continue
             status = card.get("status")
             if status in counts:

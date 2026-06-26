@@ -12,7 +12,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build a Tuolin downstream-agent task context.")
     parser.add_argument(
         "task_type",
-        choices=["youtube_video", "linkedin_post", "outreach_email", "follow_up_email", "video_script", "customer_support"],
+        choices=["youtube_video", "linkedin_post", "outreach_email", "follow_up_email", "video_creation", "customer_support"],
     )
     parser.add_argument("--product-id", help="Optional product card id, e.g. product/quartz_fiber_tape.")
     parser.add_argument("--query", help="Optional scenario, customer question, or task keyword.")

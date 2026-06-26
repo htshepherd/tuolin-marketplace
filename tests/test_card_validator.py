@@ -62,7 +62,7 @@ TYPE_FIELDS = {
         "asset_category": "安装教程",
         "media_types": ["video"],
         "related_products": [],
-        "usable_for": ["video_script"],
+        "usable_for": ["video_creation"],
     },
     "evidence": {
         "evidence_type": "检测报告",

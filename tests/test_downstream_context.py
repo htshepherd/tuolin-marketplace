@@ -76,7 +76,7 @@ class DownstreamContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
-            context = build_downstream_context(paths, "video_script", product_id="product/quartz_fiber_tape")
+            context = build_downstream_context(paths, "video_creation", product_id="product/quartz_fiber_tape")
             context_path = paths.generated_dir / "agent-interface" / "contexts" / f"{context['context_id']}.json"
 
             product_path = paths.knowledge_dir / "产品" / "石英纤维隔热带.md"
@@ -87,6 +87,52 @@ class DownstreamContextTests(unittest.TestCase):
             invalidated = json.loads(context_path.read_text(encoding="utf-8"))
             self.assertFalse(invalidated["valid"])
             self.assertEqual(invalidated["invalidated_reason"], "agent interface revision changed")
+
+    def test_video_creation_context_reads_only_quartz_product_and_related_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            _write_other_product(paths)
+            _write_unrelated_content_asset(paths)
+            rebuild_agent_interface(paths)
+
+            context = build_downstream_context(
+                paths,
+                "video_creation",
+                product_id="product/quartz_fiber_tape",
+                query="排气管 玄武岩 车间",
+            )
+
+            self.assertEqual(context["task_type"], "video_creation")
+            self.assertEqual(context["product_id"], "product/quartz_fiber_tape")
+            self.assertFalse(context["raw_access"])
+            self.assertTrue(context["policy"]["no_keyword_expansion"])
+            self.assertEqual(context["policy"]["fixed_product_scope"], "product/quartz_fiber_tape")
+            self.assertEqual({card["id"] for card in context["cards_by_type"]["product"]}, {"product/quartz_fiber_tape"})
+            self.assertEqual(
+                {card["id"] for card in context["cards_by_type"]["content_asset"]},
+                {"content_asset/quartz_product_photo"},
+            )
+            self.assertNotIn("application_scenario", context["cards_by_type"])
+            self.assertNotIn("sales_material", context["cards_by_type"])
+            self.assertNotIn("customer_question", context["cards_by_type"])
+            self.assertFalse(context["policy"]["content_assets_prove_product_facts"])
+
+    def test_video_creation_rejects_other_product_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+
+            with self.assertRaisesRegex(ValueError, "video_creation only supports product/quartz_fiber_tape"):
+                build_downstream_context(paths, "video_creation", product_id="product/basalt_fiber_tape")
+
+    def test_video_script_is_not_primary_video_creation_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+
+            with self.assertRaisesRegex(ValueError, "Unsupported downstream task type: video_script"):
+                build_downstream_context(paths, "video_script", product_id="product/quartz_fiber_tape")
 
 
 def _create_fixture(paths, leave_open_review: bool = False) -> None:
@@ -228,6 +274,63 @@ def _write_content_asset(paths) -> None:
             "  - LinkedIn配图",
         ],
         "可用于 LinkedIn 配图的产品素材；不能单独证明产品性能事实。",
+    )
+
+
+def _write_other_product(paths) -> None:
+    _write_card(
+        paths.knowledge_dir / "产品" / "玄武岩纤维隔热带.md",
+        [
+            "card_template_version: product-card-v1",
+            "type: product",
+            "id: product/basalt_fiber_tape",
+            "title: 玄武岩纤维隔热带",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/01_产品/03_玄武岩纤维隔热带/",
+            "tags:",
+            "  - 产品",
+            "updated_at: 2026-06-15T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-15T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "product_line: 耐高温隔热带",
+            "related_refs: []",
+        ],
+        "玄武岩纤维隔热带不应进入首期视频创作上下文。",
+    )
+
+
+def _write_unrelated_content_asset(paths) -> None:
+    _write_card(
+        paths.knowledge_dir / "内容素材" / "basalt_product_photo.md",
+        [
+            "card_template_version: content-asset-card-v1",
+            "type: content_asset",
+            "id: content_asset/basalt_product_photo",
+            "title: 玄武岩纤维隔热带产品图片",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/01_产品/03_玄武岩纤维隔热带/02_产品图片/",
+            "tags:",
+            "  - 产品图片",
+            "updated_at: 2026-06-15T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-15T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "asset_category: 产品图片",
+            "media_types:",
+            "  - image",
+            "related_products:",
+            "  - product/basalt_fiber_tape",
+            "usable_for:",
+            "  - video_creation",
+        ],
+        "不应进入石英纤维隔热带视频创作上下文的素材。",
     )
 
 

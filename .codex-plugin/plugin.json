@@ -1,7 +1,7 @@
 {
   "name": "tuolin-marketplace",
-  "version": "0.1.13",
-  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent and controlled LinkedIn campaign workflows.",
+  "version": "0.1.14",
+  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn campaign workflows, and quartz-fiber-tape video creation workflows.",
   "author": {
     "name": "Tianjin Tuolin"
   },
@@ -13,13 +13,15 @@
     "knowledge-base",
     "agents",
     "linkedin",
-    "publishing-image"
+    "publishing-image",
+    "video",
+    "dreamina"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Tuolin Agent 2.0",
-    "shortDescription": "Tuolin business agents for knowledge base and LinkedIn workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes controlled LinkedIn 30-day campaign workflows: campaign planning, marketing review, manual publishing packages, package repair, desktop delivery, and single-day publishing image selection. For requests like \"生成 LinkedIn Day 01 发布图\", Codex must first generate the Day publishing image selection sheet and ask the user to choose source image and style category; it must not directly compose or save a publishing image before the user chooses.",
+    "shortDescription": "Tuolin business agents for knowledge base, LinkedIn, and video creation workflows.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn 30-day campaign workflows, and the quartz-fiber-tape video creation workflow. Video creation is an application-layer Agent that uses the generated Agent interface only, confirms language/version/platform/creative direction before planning, and does not expose internal Dreamina, narration, music, subtitle, or assembly tools as ordinary user steps.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [
@@ -30,7 +32,8 @@
       "整理一下拓霖知识库。",
       "查看当前还有哪些资料需要继续整理。",
       "有哪些内容需要我确认？",
-      "生成 LinkedIn Day 01 发布图"
+      "生成 LinkedIn Day 01 发布图",
+      "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。"
     ],
     "brandColor": "#2563EB"
   }
