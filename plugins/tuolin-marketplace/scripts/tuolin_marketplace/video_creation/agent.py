@@ -24,6 +24,23 @@ DEFAULT_VIDEO_DURATION_SECONDS = 60
 DEFAULT_DREAMINA_MODEL = "seedance2.0_vip"
 DEFAULT_RESOLUTION = "1080P"
 DEFAULT_ASPECT_RATIO = "9:16"
+DEFAULT_DREAMINA_CAPABILITY_PROFILE = {
+    "model": DEFAULT_DREAMINA_MODEL,
+    "resolution": DEFAULT_RESOLUTION,
+    "aspect_ratio": DEFAULT_ASPECT_RATIO,
+    "min_duration_seconds": 4,
+    "max_duration_seconds": 15,
+    "max_images": 9,
+    "max_videos": 3,
+    "max_audios": 3,
+    "max_total_files": 12,
+    "max_image_mb": 30,
+    "max_video_mb": 50,
+    "max_audio_mb": 15,
+    "min_video_reference_duration_seconds": 2,
+    "max_video_reference_duration_seconds": 15,
+    "max_audio_reference_duration_seconds": 15,
+}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -115,6 +132,81 @@ INDUSTRIAL_VIDEO_STYLE_MATRIX = {
         "visual_language": "buyer checklist rhythm, specification-oriented cuts, restrained CTA and contact logic",
         "best_for": {"procurement_guide", "specification_customization", "faq", "inquiry_conversion"},
     },
+}
+
+INDUSTRIAL_CAMERA_LANGUAGE = {
+    "opening_environment": "稳定慢推，前两秒建立工业隔热语境，不使用快速摇镜。",
+    "product_hero": "产品卷装 hero 慢推，轻微环绕，保持产品形态稳定。",
+    "product_detail": "织纹微距和局部特写，轻微横移展示边缘、厚度和柔性。",
+    "benefit_visual": "克制说明型镜头，轻微滑动或后拉，不做夸张测试结果。",
+    "application_context": "包覆动作跟随镜头，展示已确认应用逻辑，不伪装真实客户现场。",
+    "closing_cta": "干净收束镜头，产品定格，CTA 安全留白，避开平台 UI 区域。",
+}
+
+PRODUCT_DISPLAY_TEMPLATES = {
+    "opening_environment": "industrial need setup, no specific product claim unless product reference is provided",
+    "product_hero": "quartz fiber tape roll hero display, stable product silhouette, clean edge and woven surface visible",
+    "product_detail": "woven texture macro, edge thickness detail, flexible tape form, no itchy handling claim beyond confirmed narration",
+    "benefit_visual": "controlled industrial benefit visual, no exaggerated flame result, no fake certification",
+    "application_context": "wrapping or sealing application explanation based only on confirmed use context, AI scenes labeled as visual explanation",
+    "closing_cta": "product freeze-frame style closing, light B2B CTA composition, no generated subtitles or platform UI",
+}
+
+FORBIDDEN_ENTERTAINMENT_PROMPT_PATTERNS = [
+    "short drama",
+    "dance",
+    "xianxia",
+    "fantasy battle",
+    "emotional acting",
+    "medical cgi",
+]
+
+PROMPT_CONFLICT_RULES = [
+    {
+        "code": "fixed_camera_conflicts_with_dynamic_camera",
+        "left_terms": ["fixed camera", "static camera", "locked-off camera", "tripod locked"],
+        "right_terms": ["orbit", "surround", "360", "fast pan", "whip pan", "tracking shot", "follow shot"],
+        "message": "Prompt 同时要求固定镜头和明显动态运镜。",
+    },
+    {
+        "code": "no_text_conflicts_with_generated_text",
+        "left_terms": ["no subtitles", "no readable subtitles", "no generated subtitles", "no karaoke text", "no text overlay"],
+        "right_terms": ["add text overlay", "show text overlay", "display text overlay", "text overlay appears", "onscreen text", "on-screen text", "large text appears", "words appear", "title card", "caption appears"],
+        "message": "Prompt 同时禁止字幕/文字，又要求生成画面文字。",
+    },
+    {
+        "code": "no_fake_customer_site_conflicts_with_real_site_claim",
+        "left_terms": ["no fake customer site", "not a real case claim", "visual explanation"],
+        "right_terms": ["at a real customer site", "at an actual customer site", "real factory case", "authentic customer case"],
+        "message": "Prompt 同时禁止伪装真实现场，又要求真实客户现场表达。",
+    },
+    {
+        "code": "no_exaggerated_test_conflicts_with_proof_claim",
+        "left_terms": ["no exaggerated test", "no exaggerated testing", "no unsupported temperature result", "no fake certification"],
+        "right_terms": ["prove 1000", "certified result", "official certification", "guaranteed performance", "will not fail"],
+        "message": "Prompt 同时禁止夸大测试/认证，又要求未经确认的证明性表达。",
+    },
+]
+
+PROMPT_DURATION_COMPLEXITY_POLICY = {
+    "max_time_segments_for_5s": 3,
+    "max_time_segments_for_8s": 4,
+    "max_time_segments_for_15s": 5,
+    "max_scene_change_terms_for_5s": 3,
+    "max_scene_change_terms_for_8s": 4,
+    "max_scene_change_terms_for_15s": 6,
+    "scene_change_terms": [
+        "cut to",
+        "then cut",
+        "scene changes",
+        "new scene",
+        "montage",
+        "split screen",
+        "rapid transition",
+        "fast transition",
+        "whip pan",
+        "explosion",
+    ],
 }
 
 CREATIVE_DIRECTION_QUALITY_MATRIX = {
@@ -802,7 +894,7 @@ def confirm_dreamina_generation(run_dir: Path, now: datetime | None = None) -> V
     if state.get("phase") != "awaiting_dreamina_generation_confirmation":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认即梦生成。")
     jobs = _load_json_file(jobs_json_path, "dreamina_jobs.json")
-    if any(job.get("job_type") == "blocked" for job in jobs.get("jobs", [])):
+    if any(job.get("job_type") == "blocked" or job.get("status") == "blocked" or job.get("validation", {}).get("status") == "blocked" for job in jobs.get("jobs", [])):
         raise ValueError("存在 blocked 即梦任务，不能确认即梦生成。请先修改分镜或补充素材。")
 
     timestamp = _timestamp(now)
@@ -1793,6 +1885,22 @@ def normalize_duration(value: int) -> int:
     return duration
 
 
+def _positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _non_negative_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
 def normalize_creative_direction(value: str | None) -> dict[str, str]:
     if not value:
         raise ValueError("必须选择 1 个视频主创意方向")
@@ -1875,6 +1983,7 @@ def _initial_workflow_state(
     change_log_path: Path,
     timestamp: str,
 ) -> dict[str, Any]:
+    capability_profile = _dreamina_capability_profile(config)
     return {
         "schema_version": "video-creation-workflow-v1",
         "status": "requirements_confirmed",
@@ -1924,11 +2033,12 @@ def _initial_workflow_state(
         "status_history": [{"status": "requirements_confirmed", "at": timestamp}],
         "outputs": {
             "final_filename": f"{RUN_DIR_PRODUCT_SLUG}_{requirements['language_version']}_9x16.mp4",
-            "aspect_ratio": DEFAULT_ASPECT_RATIO,
+            "aspect_ratio": capability_profile["aspect_ratio"],
             "resolution": "1080x1920",
-            "dreamina_model": DEFAULT_DREAMINA_MODEL,
-            "dreamina_resolution": DEFAULT_RESOLUTION,
+            "dreamina_model": capability_profile["model"],
+            "dreamina_resolution": capability_profile["resolution"],
         },
+        "dreamina_capability_profile": capability_profile,
         "adapters": _video_adapter_config(config),
     }
 
@@ -2002,6 +2112,42 @@ def _video_adapter_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _dreamina_capability_profile(config: dict[str, Any]) -> dict[str, Any]:
+    video_config = config.get("video_creation", {}) if isinstance(config.get("video_creation", {}), dict) else {}
+    configured = video_config.get("dreamina_capability_profile")
+    if not isinstance(configured, dict):
+        configured = config.get("dreamina_capability_profile")
+    if not isinstance(configured, dict):
+        configured = {}
+    return _normalize_dreamina_capability_profile(configured)
+
+
+def _state_dreamina_capability_profile(state: dict[str, Any]) -> dict[str, Any]:
+    configured = state.get("dreamina_capability_profile")
+    return _normalize_dreamina_capability_profile(configured if isinstance(configured, dict) else {})
+
+
+def _normalize_dreamina_capability_profile(configured: dict[str, Any]) -> dict[str, Any]:
+    profile = dict(DEFAULT_DREAMINA_CAPABILITY_PROFILE)
+    profile.update({key: value for key, value in configured.items() if value not in (None, "")})
+    for key in ["max_images", "max_videos", "max_audios", "max_total_files"]:
+        profile[key] = _non_negative_int(profile.get(key), int(DEFAULT_DREAMINA_CAPABILITY_PROFILE[key]))
+    for key in [
+        "min_duration_seconds",
+        "max_duration_seconds",
+        "max_image_mb",
+        "max_video_mb",
+        "max_audio_mb",
+        "min_video_reference_duration_seconds",
+        "max_video_reference_duration_seconds",
+        "max_audio_reference_duration_seconds",
+    ]:
+        profile[key] = _positive_int(profile.get(key), int(DEFAULT_DREAMINA_CAPABILITY_PROFILE[key]))
+    for key in ["model", "resolution", "aspect_ratio"]:
+        profile[key] = str(profile.get(key) or DEFAULT_DREAMINA_CAPABILITY_PROFILE[key])
+    return profile
+
+
 def _state_adapter_command(state: dict[str, Any], key: str, default: str) -> str:
     value = state.get("adapters", {}).get(key)
     return str(value).strip() if value else default
@@ -2016,6 +2162,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     language = state["language_version"]
     duration = state["duration_seconds"]
     duration_min, duration_max = _duration_tolerance(duration)
+    capability_profile = _state_dreamina_capability_profile(state)
     external_names = _external_names_from_product(product)
     primary = state["creative_direction"]["primary"]
     supporting = state["creative_direction"].get("supporting")
@@ -2032,7 +2179,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         "language_version": language,
         "platforms": state["platforms"],
         "format": {
-            "aspect_ratio": DEFAULT_ASPECT_RATIO,
+            "aspect_ratio": capability_profile["aspect_ratio"],
             "resolution": "1080x1920",
             "duration_seconds": duration,
             "duration_tolerance_seconds": {"min": duration_min, "max": duration_max},
@@ -2059,19 +2206,27 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         "production_style": _production_style_profile(primary, supporting),
         "creative_quality": _direction_quality_profile(primary),
         "external_skill_absorption": EXTERNAL_VIDEO_SKILL_ABSORPTION,
+        "dreamina_capability_profile": capability_profile,
         "prompt_policy": {
             "structure": [
                 "timebox",
                 "subject",
                 "reference_material",
+                "time_segments",
                 "motion_and_camera",
                 "environment",
                 "material_texture",
+                "product_display_template",
                 "safety_and_negative_constraints",
             ],
             "visible_product_requires_real_reference": True,
             "no_subtitles_in_generation_prompt": True,
             "no_unverified_claims": True,
+            "industrial_camera_language_required": True,
+            "product_display_template_required": True,
+            "forbidden_entertainment_patterns": FORBIDDEN_ENTERTAINMENT_PROMPT_PATTERNS,
+            "conflict_rules": PROMPT_CONFLICT_RULES,
+            "duration_complexity_policy": PROMPT_DURATION_COMPLEXITY_POLICY,
             "sources_absorbed": [
                 "dexhunter/seedance2-skill",
                 "songguoxs/seedance-prompt-skill",
@@ -2240,6 +2395,11 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
             "selected_material": selected_material,
             "ai_generated": ai_generated,
             "requires_real_product_reference": product_visible and ai_generated,
+            "first_frame_reference_id": _first_frame_reference_id(role, selected_material),
+            "last_frame_reference_id": _last_frame_reference_id(role, selected_material),
+            "frame_control_risk": _frame_control_risk(role, product_visible, selected_material),
+            "human_face_risk": _material_human_face_risk(selected_material),
+            "human_face_policy": "allow_partial_hands_or_back_view_only",
             "risk_notes": _shot_risk_notes(material_mode, product_visible, bool(product_asset)),
             "narration_intent": _shot_narration_intent(role, external_name),
             "creative_quality_checks": _shot_creative_quality_checks(role, primary, plan["creative_quality"]),
@@ -2269,33 +2429,45 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
 
 
 def _build_prompts_payload(storyboard: dict[str, Any], plan: dict[str, Any], now: datetime) -> dict[str, Any]:
+    capability_profile = _normalize_dreamina_capability_profile(plan.get("dreamina_capability_profile", {}))
+    material_reference_map = _build_material_reference_map(storyboard, capability_profile)
     prompts = []
     for shot in storyboard["shots"]:
-        components = _dreamina_prompt_components_for_shot(shot, plan)
+        material_reference = _material_reference_for_shot(shot, material_reference_map)
+        components = _dreamina_prompt_components_for_shot(shot, plan, material_reference)
         prompt = _render_dreamina_prompt_components(components)
-        prompts.append(
-            {
-                "shot_id": shot["shot_id"],
-                "duration_seconds": shot["duration_seconds"],
-                "material_mode": shot["material_mode"],
-                "prompt_language": "en",
-                "prompt_standard": "tuolin-industrial-seedance-v1",
-                "prompt_components": components,
-                "prompt": prompt,
-                "negative_prompt": "No unsupported certifications, no exaggerated test claims, no fake customer site, no readable subtitles, no karaoke text, no watermark.",
-                "reference_required": bool(shot["requires_real_product_reference"]),
-                "reference_material_id": shot["selected_material"]["id"] if shot.get("selected_material") else None,
-            }
-        )
+        prompt_item = {
+            "shot_id": shot["shot_id"],
+            "duration_seconds": shot["duration_seconds"],
+            "material_mode": shot["material_mode"],
+            "prompt_language": "en",
+            "prompt_standard": "tuolin-industrial-seedance-v2",
+            "prompt_components": components,
+            "prompt": prompt,
+            "negative_prompt": "No unsupported certifications, no exaggerated test claims, no fake customer site, no readable subtitles, no karaoke text, no watermark.",
+            "reference_required": bool(shot["requires_real_product_reference"]),
+            "reference_material_id": shot["selected_material"]["id"] if shot.get("selected_material") else None,
+            "numbered_reference_label": material_reference.get("label"),
+            "reference_usage": material_reference.get("usage"),
+            "first_frame_reference_id": shot.get("first_frame_reference_id"),
+            "last_frame_reference_id": shot.get("last_frame_reference_id"),
+            "frame_control_risk": shot.get("frame_control_risk", ""),
+            "human_face_risk": shot.get("human_face_risk", "none"),
+            "human_face_policy": shot.get("human_face_policy", "allow_partial_hands_or_back_view_only"),
+        }
+        prompt_item["prompt_quality_checks"] = _prompt_quality_checks(prompt_item)
+        prompts.append(prompt_item)
     return {
         "schema_version": "dreamina-prompts-v1",
         "generated_at": now.isoformat(),
         "status": "draft_pending_storyboard_confirmation",
-        "model": DEFAULT_DREAMINA_MODEL,
-        "resolution": DEFAULT_RESOLUTION,
-        "aspect_ratio": DEFAULT_ASPECT_RATIO,
+        "model": capability_profile["model"],
+        "resolution": capability_profile["resolution"],
+        "aspect_ratio": capability_profile["aspect_ratio"],
         "prompts_are_subtitles": False,
         "prompt_policy": plan["prompt_policy"],
+        "dreamina_capability_profile": capability_profile,
+        "material_reference_map": material_reference_map,
         "prompts": prompts,
     }
 
@@ -2327,6 +2499,10 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
                 f"- 素材模式：{shot['material_mode']}",
                 f"- 匹配素材：{material}",
                 f"- 需要真实产品参考：{'是' if shot['requires_real_product_reference'] else '否'}",
+                f"- 首帧参考：{shot.get('first_frame_reference_id') or '无'}",
+                f"- 尾帧参考：{shot.get('last_frame_reference_id') or '无'}",
+                f"- 帧控制风险：{shot.get('frame_control_risk') or '无'}",
+                f"- 人脸风险：{shot.get('human_face_risk') or 'none'}｜策略：{shot.get('human_face_policy') or 'allow_partial_hands_or_back_view_only'}",
                 f"- AI 生成：{'是' if shot['ai_generated'] else '否'}",
                 f"- 风险提示：{shot['risk_notes']}",
                 f"- 创意质量要求：{'; '.join(shot['creative_quality_checks'])}",
@@ -2357,7 +2533,18 @@ def _render_prompts(prompts: dict[str, Any]) -> str:
         f"- 画幅：{prompts['aspect_ratio']}",
         "- 说明：以下英文 Prompt 是给即梦使用，不是视频字幕。",
         "",
+        "## 素材编号引用",
+        "",
     ]
+    references = prompts.get("material_reference_map", {}).get("references", [])
+    if references:
+        for reference in references:
+            usages = "；".join(reference.get("usages", []))
+            paths = "；".join(reference.get("local_paths", [])) or "未记录本地路径"
+            lines.append(f"- {reference['label']}｜{reference['material_id']}｜用途：{usages}｜路径：{paths}")
+    else:
+        lines.append("- 无")
+    lines.append("")
     for item in prompts["prompts"]:
         lines.extend(
             [
@@ -2367,6 +2554,12 @@ def _render_prompts(prompts: dict[str, Any]) -> str:
                 f"- 素材模式：{item['material_mode']}",
                 f"- 需要参考素材：{'是' if item['reference_required'] else '否'}",
                 f"- 参考素材 ID：{item['reference_material_id'] or '无'}",
+                f"- 编号引用：{item.get('numbered_reference_label') or '无'}",
+                f"- 引用用途：{item.get('reference_usage') or '无'}",
+                f"- 首帧参考：{item.get('first_frame_reference_id') or '无'}",
+                f"- 尾帧参考：{item.get('last_frame_reference_id') or '无'}",
+                f"- 帧控制风险：{item.get('frame_control_risk') or '无'}",
+                f"- 人脸风险：{item.get('human_face_risk') or 'none'}｜策略：{item.get('human_face_policy') or 'allow_partial_hands_or_back_view_only'}",
                 f"- Prompt 标准：{item['prompt_standard']}",
                 "",
                 "Prompt:",
@@ -2450,6 +2643,41 @@ def _shot_risk_notes(material_mode: str, product_visible: bool, has_asset: bool)
     return "按内容素材卡使用；素材不证明产品性能事实。"
 
 
+def _first_frame_reference_id(role: str, selected_material: dict[str, Any] | None) -> str | None:
+    if not selected_material:
+        return None
+    if role in {"product_hero", "product_detail", "application_context"}:
+        return str(selected_material.get("id") or "")
+    return None
+
+
+def _last_frame_reference_id(role: str, selected_material: dict[str, Any] | None) -> str | None:
+    if not selected_material:
+        return None
+    if role == "closing_cta":
+        return str(selected_material.get("id") or "")
+    return None
+
+
+def _frame_control_risk(role: str, product_visible: bool, selected_material: dict[str, Any] | None) -> str:
+    if not product_visible:
+        return ""
+    if not selected_material:
+        return "产品可见镜头缺少真实素材，无法指定首帧或尾帧。"
+    if role in {"product_hero", "product_detail", "application_context"}:
+        return "" if _first_frame_reference_id(role, selected_material) else "产品镜头未指定首帧，产品形态一致性风险较高。"
+    if role == "closing_cta":
+        return "" if _last_frame_reference_id(role, selected_material) else "CTA 镜头未指定尾帧，结尾产品定格一致性风险较高。"
+    return ""
+
+
+def _material_human_face_risk(material: dict[str, Any] | None) -> str:
+    if not material:
+        return "none"
+    value = str(material.get("human_face_risk") or "none").strip().lower()
+    return value if value in {"none", "unclear", "clear_face"} else "unclear"
+
+
 def _shot_narration_intent(role: str, product_name: str) -> str:
     if role == "opening_environment":
         return "用一句话提出工业隔热或施工痛点。"
@@ -2464,28 +2692,280 @@ def _shot_narration_intent(role: str, product_name: str) -> str:
     return "提示联系或索取规格信息。"
 
 
+def _build_material_reference_map(storyboard: dict[str, Any], capability_profile: dict[str, Any]) -> dict[str, Any]:
+    counters = {"image": 0, "video": 0, "audio": 0}
+    references_by_material_id: dict[str, dict[str, Any]] = {}
+    references: list[dict[str, Any]] = []
+    for shot in storyboard.get("shots", []):
+        material = shot.get("selected_material") or {}
+        material_id = str(material.get("id") or "")
+        if not material_id:
+            continue
+        media_kind = _seedance_media_kind(material)
+        if media_kind not in counters:
+            continue
+        usage = _material_reference_usage(shot, media_kind)
+        if material_id in references_by_material_id:
+            existing = references_by_material_id[material_id]
+            if usage not in existing["usages"]:
+                existing["usages"].append(usage)
+            continue
+        counters[media_kind] += 1
+        label_prefix = {"image": "@图片", "video": "@视频", "audio": "@音频"}[media_kind]
+        reference = {
+            "label": f"{label_prefix}{counters[media_kind]}",
+            "material_id": material_id,
+            "title": material.get("title", ""),
+            "media_kind": media_kind,
+            "media_types": material.get("media_types", []),
+            "asset_category": material.get("asset_category", ""),
+            "local_paths": _material_local_paths(material),
+            "usages": [usage],
+            "product_visible": bool(shot.get("product_visible")),
+            "human_face_risk": _material_human_face_risk(material),
+            "human_face_policy": "allow_partial_hands_or_back_view_only",
+            "execution_strategy": _material_reference_execution_strategy(media_kind),
+        }
+        references_by_material_id[material_id] = reference
+        references.append(reference)
+    counts = {
+        "images": counters["image"],
+        "videos": counters["video"],
+        "audios": counters["audio"],
+        "total_files": sum(counters.values()),
+    }
+    return {
+        "schema_version": "seedance-material-reference-map-v1",
+        "capability_limits": {
+            "max_images": capability_profile["max_images"],
+            "max_videos": capability_profile["max_videos"],
+            "max_audios": capability_profile["max_audios"],
+            "max_total_files": capability_profile["max_total_files"],
+        },
+        "counts": counts,
+        "references": references,
+    }
+
+
+def _material_reference_for_shot(shot: dict[str, Any], material_reference_map: dict[str, Any]) -> dict[str, Any]:
+    material = shot.get("selected_material") or {}
+    material_id = str(material.get("id") or "")
+    if not material_id:
+        return {}
+    for reference in material_reference_map.get("references", []):
+        if reference.get("material_id") == material_id:
+            usage = _material_reference_usage(shot, str(reference.get("media_kind") or "image"))
+            return {
+                "label": reference.get("label"),
+                "usage": usage,
+                "reference": reference,
+            }
+    return {}
+
+
+def _seedance_media_kind(material: dict[str, Any]) -> str:
+    media_types = {str(item).lower() for item in material.get("media_types", [])}
+    if "video" in media_types:
+        return "video"
+    if "audio" in media_types:
+        return "audio"
+    return "image"
+
+
+def _material_reference_usage(shot: dict[str, Any], media_kind: str) -> str:
+    role = str(shot.get("role") or "")
+    if media_kind == "video":
+        return "真实产品视频参考，用于产品外观、动作和运镜节奏"
+    if media_kind == "audio":
+        return "音频节奏或 BGM 参考；当前流程优先作为后处理音乐策略记录"
+    if role == "product_hero":
+        return "真实产品首帧参考"
+    if role == "product_detail":
+        return "织纹、边缘和材料细节参考"
+    if role == "closing_cta":
+        return "产品定格或尾帧参考"
+    if role == "application_context":
+        return "已确认应用场景中的产品外观参考"
+    return "真实产品外观参考"
+
+
+def _material_reference_execution_strategy(media_kind: str) -> str:
+    if media_kind == "audio":
+        return "record_for_bgm_or_future_audio_reference"
+    return "pass_to_dreamina_cli_input"
+
+
+def _material_local_paths(material: dict[str, Any]) -> list[str]:
+    values = material.get("files") or material.get("file_paths") or material.get("paths") or material.get("raw_partitions") or []
+    if isinstance(values, str):
+        return [values]
+    return [str(item) for item in values if str(item).strip()]
+
+
+def _material_reference_limit_blockers(material_reference_map: dict[str, Any], capability_profile: dict[str, Any]) -> list[str]:
+    counts = material_reference_map.get("counts", {})
+    checks = [
+        ("images", "图片", "max_images"),
+        ("videos", "视频", "max_videos"),
+        ("audios", "音频", "max_audios"),
+        ("total_files", "总文件数", "max_total_files"),
+    ]
+    blockers = []
+    for count_key, label, limit_key in checks:
+        count = int(counts.get(count_key, 0))
+        limit = int(capability_profile.get(limit_key, DEFAULT_DREAMINA_CAPABILITY_PROFILE[limit_key]))
+        if count > limit:
+            blockers.append(f"Seedance 多模态输入超限：{label} {count} 个，配置上限 {limit} 个。")
+    for reference in material_reference_map.get("references", []):
+        if not reference.get("label"):
+            blockers.append(f"素材 {reference.get('material_id')} 缺少编号引用。")
+        if not reference.get("usages"):
+            blockers.append(f"素材 {reference.get('material_id')} 缺少用途说明。")
+    return blockers
+
+
+def _forbidden_entertainment_terms_in_prompt(prompt: str) -> list[str]:
+    normalized = prompt.lower()
+    return [term for term in FORBIDDEN_ENTERTAINMENT_PROMPT_PATTERNS if term in normalized]
+
+
+def _prompt_quality_checks(prompt_item: dict[str, Any]) -> dict[str, Any]:
+    components = prompt_item.get("prompt_components", {})
+    prompt_text = _prompt_quality_text(prompt_item)
+    blockers = _prompt_instruction_conflict_issues(prompt_text)
+    blockers.extend(_prompt_duration_complexity_issues(prompt_item, prompt_text))
+    warnings: list[dict[str, str]] = []
+    duration = int(prompt_item.get("duration_seconds") or 0)
+    metrics = {
+        "duration_seconds": duration,
+        "time_segment_count": _time_segment_count(str(components.get("time_segments") or "")),
+        "scene_change_term_count": _scene_change_term_count(prompt_text),
+        "reference_count": len(set(re.findall(r"@(?:图片|视频|音频)\d+", prompt_text))),
+    }
+    return {
+        "status": "blocked" if blockers else "warning" if warnings else "ok",
+        "blockers": blockers,
+        "warnings": warnings,
+        "metrics": metrics,
+    }
+
+
+def _prompt_quality_text(prompt_item: dict[str, Any]) -> str:
+    components = prompt_item.get("prompt_components", {})
+    values = [str(prompt_item.get("prompt") or ""), str(prompt_item.get("negative_prompt") or "")]
+    values.extend(str(value) for value in components.values())
+    return " ".join(values).lower()
+
+
+def _prompt_instruction_conflict_issues(prompt_text: str) -> list[dict[str, str]]:
+    issues = []
+    for rule in PROMPT_CONFLICT_RULES:
+        left = _matched_terms(prompt_text, rule["left_terms"])
+        right = _matched_terms(prompt_text, rule["right_terms"])
+        if left and right:
+            issues.append(
+                {
+                    "code": str(rule["code"]),
+                    "message": f"{rule['message']} 冲突词：{', '.join(left + right)}",
+                }
+            )
+    return issues
+
+
+def _prompt_duration_complexity_issues(prompt_item: dict[str, Any], prompt_text: str) -> list[dict[str, str]]:
+    duration = int(prompt_item.get("duration_seconds") or 0)
+    components = prompt_item.get("prompt_components", {})
+    segment_count = _time_segment_count(str(components.get("time_segments") or ""))
+    scene_change_count = _scene_change_term_count(prompt_text)
+    max_segments = _max_time_segments_for_duration(duration)
+    max_scene_changes = _max_scene_change_terms_for_duration(duration)
+    issues = []
+    if segment_count > max_segments:
+        issues.append(
+            {
+                "code": "time_segment_count_exceeds_duration",
+                "message": f"{duration} 秒镜头包含 {segment_count} 个分时段，超过建议上限 {max_segments} 个。",
+            }
+        )
+    if scene_change_count > max_scene_changes:
+        issues.append(
+            {
+                "code": "scene_change_complexity_exceeds_duration",
+                "message": f"{duration} 秒镜头包含 {scene_change_count} 个场景/转场复杂度词，超过建议上限 {max_scene_changes} 个。",
+            }
+        )
+    return issues
+
+
+def _matched_terms(text: str, terms: list[str]) -> list[str]:
+    return [term for term in terms if term in text]
+
+
+def _time_segment_count(text: str) -> int:
+    return len(re.findall(r"\b\d+\s*-\s*\d+\s*s", text.lower()))
+
+
+def _scene_change_term_count(text: str) -> int:
+    return sum(text.count(term) for term in PROMPT_DURATION_COMPLEXITY_POLICY["scene_change_terms"])
+
+
+def _max_time_segments_for_duration(duration: int) -> int:
+    if duration <= 5:
+        return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_time_segments_for_5s"])
+    if duration <= 8:
+        return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_time_segments_for_8s"])
+    return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_time_segments_for_15s"])
+
+
+def _max_scene_change_terms_for_duration(duration: int) -> int:
+    if duration <= 5:
+        return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_scene_change_terms_for_5s"])
+    if duration <= 8:
+        return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_scene_change_terms_for_8s"])
+    return int(PROMPT_DURATION_COMPLEXITY_POLICY["max_scene_change_terms_for_15s"])
+
+
+def _prompt_frame_control_instruction(shot: dict[str, Any], reference_label: str | None) -> str:
+    if not reference_label:
+        return ""
+    if shot.get("first_frame_reference_id"):
+        return f"Use {reference_label} as the first-frame reference to keep the product shape consistent."
+    if shot.get("last_frame_reference_id"):
+        return f"Use {reference_label} as the last-frame reference for a stable product freeze-frame ending."
+    return ""
+
+
 def _dreamina_prompt_for_shot(shot: dict[str, Any], plan: dict[str, Any]) -> str:
-    return _render_dreamina_prompt_components(_dreamina_prompt_components_for_shot(shot, plan))
+    material_reference_map = _build_material_reference_map({"shots": [shot]}, _normalize_dreamina_capability_profile(plan.get("dreamina_capability_profile", {})))
+    return _render_dreamina_prompt_components(_dreamina_prompt_components_for_shot(shot, plan, _material_reference_for_shot(shot, material_reference_map)))
 
 
-def _dreamina_prompt_components_for_shot(shot: dict[str, Any], plan: dict[str, Any]) -> dict[str, str]:
+def _dreamina_prompt_components_for_shot(shot: dict[str, Any], plan: dict[str, Any], material_reference: dict[str, Any] | None = None) -> dict[str, str]:
     product_name = _display_product_name(plan)
     style = plan.get("production_style", {})
+    material_reference = material_reference or {}
+    reference_label = material_reference.get("label")
+    reference_usage = material_reference.get("usage")
     if shot["material_mode"] in {"image2video", "reuse_image"}:
-        reference = "Use @Image as the real product reference; preserve product identity, tape shape, woven surface, and material texture."
+        reference = f"Use {reference_label} as {reference_usage}; preserve product identity, tape shape, woven surface, and material texture." if reference_label and reference_usage else "BLOCKED: this image-based product shot needs a numbered real product reference and usage."
     elif shot["material_mode"] == "reuse_video":
-        reference = "Use @Video as the real product footage reference; keep product identity unchanged."
+        reference = f"Use {reference_label} as {reference_usage}; keep product identity unchanged." if reference_label and reference_usage else "BLOCKED: this video-based product shot needs a numbered real footage reference and usage."
     elif shot["material_mode"] == "blocked":
         reference = "BLOCKED: this shot needs a real product reference before generation."
     else:
         reference = "No specific Tuolin product depiction unless a real product reference is provided."
+    frame_control = _prompt_frame_control_instruction(shot, reference_label)
+    if frame_control:
+        reference = f"{reference} {frame_control}"
     return {
         "timebox": f"0-{int(shot['duration_seconds'])} seconds, one continuous vertical 9:16 short-video shot.",
         "subject": f"{shot['visual_description']} Product context: {product_name}.",
         "reference_material": reference,
+        "time_segments": _prompt_time_segments_for_shot(shot, product_name),
         "motion_and_camera": _prompt_motion_for_role(shot["role"]),
         "environment": f"{style.get('visual_language', 'credible industrial B2B product framing')}. Avoid platform UI areas.",
         "material_texture": "Show realistic woven fiber tape texture, clean edges, flexible tape form, and industrial product credibility when the product is visible.",
+        "product_display_template": PRODUCT_DISPLAY_TEMPLATES.get(shot["role"], PRODUCT_DISPLAY_TEMPLATES["product_hero"]),
         "safety_and_negative_constraints": "No subtitles, no karaoke text, no watermark, no fake certification, no unsupported temperature result, no fake customer site, no competitor attack.",
     }
 
@@ -2495,35 +2975,91 @@ def _render_dreamina_prompt_components(components: dict[str, str]) -> str:
         "timebox",
         "subject",
         "reference_material",
+        "time_segments",
         "motion_and_camera",
         "environment",
         "material_texture",
+        "product_display_template",
         "safety_and_negative_constraints",
     ]
     labels = {
         "timebox": "Timebox",
         "subject": "Subject",
         "reference_material": "Reference material",
+        "time_segments": "Time segments",
         "motion_and_camera": "Motion and camera",
         "environment": "Environment",
         "material_texture": "Material texture",
+        "product_display_template": "Product display template",
         "safety_and_negative_constraints": "Safety and negative constraints",
     }
     return " ".join(f"{labels[key]}: {components[key]}" for key in order if components.get(key))
 
 
-def _prompt_motion_for_role(role: str) -> str:
+def _prompt_time_segments_for_shot(shot: dict[str, Any], product_name: str) -> str:
+    duration = int(shot.get("duration_seconds", 5))
+    role = str(shot.get("role") or "product_hero")
+    if duration <= 5:
+        ranges = [("0-2s", _segment_opening_action(role, product_name)), ("2-4s", _segment_detail_action(role, product_name)), (f"4-{duration}s", _segment_closing_action(role, product_name))]
+    elif duration <= 8:
+        midpoint = max(3, duration // 2)
+        ranges = [("0-2s", _segment_opening_action(role, product_name)), (f"2-{midpoint}s", _segment_detail_action(role, product_name)), (f"{midpoint}-{duration}s", _segment_closing_action(role, product_name))]
+    else:
+        first = 3
+        second = max(6, duration - 4)
+        ranges = [("0-3s", _segment_opening_action(role, product_name)), (f"3-{second}s", _segment_detail_action(role, product_name)), (f"{second}-{duration}s", _segment_closing_action(role, product_name))]
+    return " ".join(f"{label}: {text}" for label, text in ranges if label.split("-")[0] != label.split("-")[-1])
+
+
+def _segment_opening_action(role: str, product_name: str) -> str:
     if role == "opening_environment":
-        return "Fast but stable opening move, subtle push-in, immediate industrial context within the first two seconds."
-    if role == "product_hero":
-        return "Slow push-in around the product roll or tape surface, smooth B2B product reveal."
+        return "show a clean industrial insulation problem context without text overlays"
     if role == "product_detail":
-        return "Macro close-up with slight lateral movement to reveal woven texture, edge, and thickness."
-    if role == "benefit_visual":
-        return "Controlled explanatory motion, light camera slide, no exaggerated flame or test outcome."
+        return f"start from a stable macro view of {product_name} woven surface"
     if role == "application_context":
-        return "Practical installation-context camera move, show application logic without claiming a real customer site."
-    return "Clean closing movement with product and CTA-safe composition, leave room away from TikTok and Shorts UI zones."
+        return "start with a confirmed wrapping or sealing context, no fake customer-site claim"
+    if role == "closing_cta":
+        return f"bring {product_name} into a clean product closing composition"
+    return f"reveal {product_name} as the main product with stable shape"
+
+
+def _segment_detail_action(role: str, product_name: str) -> str:
+    if role == "product_detail":
+        return "move laterally across texture, edge thickness, and flexible tape form"
+    if role == "benefit_visual":
+        return "show one controlled industrial benefit visual without exaggerated testing"
+    if role == "application_context":
+        return "follow a simple wrapping or installation motion using only confirmed application logic"
+    if role == "closing_cta":
+        return "hold product clearly with safe blank space for later CTA overlay"
+    return "slowly push in to show product silhouette, clean edge, and woven material credibility"
+
+
+def _segment_closing_action(role: str, product_name: str) -> str:
+    if role == "opening_environment":
+        return f"transition visually toward {product_name} as the material solution"
+    if role == "product_detail":
+        return "end on a sharp close-up of clean edge and woven fiber detail"
+    if role == "application_context":
+        return "end with the application remaining clearly illustrative, not a real case claim"
+    if role == "closing_cta":
+        return "end on a product freeze-frame style composition with no generated subtitles"
+    return "end with a stable product-focused frame ready for the next shot"
+
+
+def _prompt_motion_for_role(role: str) -> str:
+    industrial_language = INDUSTRIAL_CAMERA_LANGUAGE.get(role)
+    if role == "opening_environment":
+        return f"{industrial_language} Fast but stable opening move, subtle push-in, immediate industrial context within the first two seconds."
+    if role == "product_hero":
+        return f"{industrial_language} Slow push-in around the product roll or tape surface, smooth B2B product reveal."
+    if role == "product_detail":
+        return f"{industrial_language} Macro close-up with slight lateral movement to reveal woven texture, edge, and thickness."
+    if role == "benefit_visual":
+        return f"{industrial_language} Controlled explanatory motion, light camera slide, no exaggerated flame or test outcome."
+    if role == "application_context":
+        return f"{industrial_language} Practical installation-context camera move, show application logic without claiming a real customer site."
+    return f"{industrial_language or ''} Clean closing movement with product and CTA-safe composition, leave room away from TikTok and Shorts UI zones."
 
 
 def _build_narration_script_payload(state: dict[str, Any], plan: dict[str, Any], storyboard: dict[str, Any], now: datetime) -> dict[str, Any]:
@@ -2729,28 +3265,40 @@ def _build_dreamina_jobs_payload(
 ) -> dict[str, Any]:
     prompt_by_shot = {item["shot_id"]: item for item in prompts.get("prompts", [])}
     timing_by_shot = {item["shot_id"]: item for item in timing.get("sentence_timing", [])}
+    capability_profile = _state_dreamina_capability_profile(state)
+    material_reference_map = prompts.get("material_reference_map") or _build_material_reference_map(storyboard, capability_profile)
+    material_limit_blockers = _material_reference_limit_blockers(material_reference_map, capability_profile)
     jobs = []
     for shot in storyboard.get("shots", []):
         prompt = prompt_by_shot.get(shot["shot_id"], {})
         sentence_timing = timing_by_shot.get(shot["shot_id"], {})
         job_type = _dreamina_job_type_for_shot(shot)
         blocked_reason = _dreamina_blocked_reason(shot, job_type)
-        validation = _validate_dreamina_job(shot, prompt, job_type, blocked_reason)
+        validation = _validate_dreamina_job(shot, prompt, job_type, blocked_reason, capability_profile, material_limit_blockers)
         estimated_credits = _estimate_dreamina_credits(job_type, int(shot["duration_seconds"]))
+        job_status = "blocked" if job_type == "blocked" or validation.get("status") == "blocked" else "planned"
         jobs.append(
             {
                 "job_id": f"shot_{shot['shot_id']}",
                 "shot_id": shot["shot_id"],
                 "job_type": job_type,
-                "status": "planned" if job_type != "blocked" else "blocked",
+                "status": job_status,
                 "duration_seconds": int(shot["duration_seconds"]),
-                "model": DEFAULT_DREAMINA_MODEL,
-                "resolution": DEFAULT_RESOLUTION,
-                "aspect_ratio": DEFAULT_ASPECT_RATIO,
+                "model": capability_profile["model"],
+                "resolution": capability_profile["resolution"],
+                "aspect_ratio": capability_profile["aspect_ratio"],
                 "prompt": prompt.get("prompt", ""),
                 "negative_prompt": prompt.get("negative_prompt", ""),
                 "reference_required": bool(prompt.get("reference_required")),
                 "reference_material_id": prompt.get("reference_material_id"),
+                "numbered_reference_label": prompt.get("numbered_reference_label"),
+                "reference_usage": prompt.get("reference_usage"),
+                "first_frame_reference_id": prompt.get("first_frame_reference_id"),
+                "last_frame_reference_id": prompt.get("last_frame_reference_id"),
+                "frame_control_risk": prompt.get("frame_control_risk", ""),
+                "human_face_risk": prompt.get("human_face_risk", "none"),
+                "human_face_policy": prompt.get("human_face_policy", "allow_partial_hands_or_back_view_only"),
+                "prompt_quality_checks": prompt.get("prompt_quality_checks") or _prompt_quality_checks(prompt),
                 "selected_material": shot.get("selected_material"),
                 "product_visible": bool(shot.get("product_visible")),
                 "ai_generated": bool(shot.get("ai_generated")),
@@ -2770,16 +3318,18 @@ def _build_dreamina_jobs_payload(
         "language_version": state["language_version"],
         "platforms": state["platforms"],
         "format": {
-            "aspect_ratio": DEFAULT_ASPECT_RATIO,
+            "aspect_ratio": capability_profile["aspect_ratio"],
             "resolution": "1080x1920",
-            "dreamina_resolution": DEFAULT_RESOLUTION,
-            "model": DEFAULT_DREAMINA_MODEL,
+            "dreamina_resolution": capability_profile["resolution"],
+            "model": capability_profile["model"],
+            "capability_profile": capability_profile,
         },
         "source_files": {
             "storyboard_json": state["files"]["storyboard_json"],
             "prompts_json": state["files"]["prompts_json"],
             "narration_timing": state["files"]["narration_timing"],
         },
+        "material_reference_map": material_reference_map,
         "estimated_total_credits": estimated_total,
         "submit_requires_confirmation": "确认即梦生成",
         "jobs": jobs,
@@ -2816,6 +3366,12 @@ def _render_dreamina_jobs(jobs_payload: dict[str, Any]) -> str:
                 f"- 时长：{job['duration_seconds']} 秒",
                 f"- 预计额度：{job['estimated_credits']}",
                 f"- 参考素材：{job['reference_material_id'] or '无'}",
+                f"- 编号引用：{job.get('numbered_reference_label') or '无'}",
+                f"- 引用用途：{job.get('reference_usage') or '无'}",
+                f"- 首帧参考：{job.get('first_frame_reference_id') or '无'}",
+                f"- 尾帧参考：{job.get('last_frame_reference_id') or '无'}",
+                f"- 帧控制风险：{job.get('frame_control_risk') or '无'}",
+                f"- 人脸风险：{job.get('human_face_risk') or 'none'}｜策略：{job.get('human_face_policy') or 'allow_partial_hands_or_back_view_only'}",
                 f"- 展示产品：{'是' if job['product_visible'] else '否'}",
                 f"- AI 生成：{'是' if job['ai_generated'] else '否'}",
                 f"- 风险提示：{job['risk_notes'] or '无'}",
@@ -3515,9 +4071,15 @@ def _video_creation_planning_quality_issues(state: dict[str, Any]) -> dict[str, 
                 blockers.append({"code": "blocked_shot_design", "message": f"镜头 {shot.get('shot_id')} 设计验证未通过：{'; '.join(validation.get('messages', []))}"})
             if not shot.get("creative_quality_checks"):
                 blockers.append({"code": "missing_shot_creative_quality", "message": f"镜头 {shot.get('shot_id')} 缺少创意质量要求。"})
+            if shot.get("frame_control_risk"):
+                warnings.append({"code": "frame_control_risk", "message": f"镜头 {shot.get('shot_id')}：{shot.get('frame_control_risk')}"})
+            if shot.get("human_face_risk") == "clear_face":
+                blockers.append({"code": "clear_human_face_reference", "message": f"镜头 {shot.get('shot_id')} 使用了清晰可辨识真人脸部素材。"})
+            elif shot.get("human_face_risk") == "unclear":
+                warnings.append({"code": "unclear_human_face_reference", "message": f"镜头 {shot.get('shot_id')} 素材人脸风险不明确，建议裁切、打码或替换。"})
     if prompts:
         for item in prompts.get("prompts", []):
-            if item.get("prompt_standard") != "tuolin-industrial-seedance-v1":
+            if item.get("prompt_standard") not in {"tuolin-industrial-seedance-v1", "tuolin-industrial-seedance-v2"}:
                 blockers.append({"code": "invalid_prompt_standard", "message": f"镜头 {item.get('shot_id')} 未使用拓霖工业即梦 Prompt 标准。"})
             components = item.get("prompt_components", {})
             required = set(prompts.get("prompt_policy", {}).get("structure", []))
@@ -3526,6 +4088,23 @@ def _video_creation_planning_quality_issues(state: dict[str, Any]) -> dict[str, 
                 blockers.append({"code": "missing_prompt_components", "message": f"镜头 {item.get('shot_id')} Prompt 组件缺失：{', '.join(missing)}"})
             if item.get("reference_required") and not item.get("reference_material_id"):
                 blockers.append({"code": "missing_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但未绑定素材 ID。"})
+            if item.get("reference_required") and not item.get("numbered_reference_label"):
+                blockers.append({"code": "missing_numbered_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少 @图片/@视频 编号引用。"})
+            if item.get("reference_required") and not str(item.get("reference_usage") or "").strip():
+                blockers.append({"code": "missing_prompt_reference_usage", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少用途说明。"})
+            if item.get("prompt_standard") == "tuolin-industrial-seedance-v2":
+                if not str(components.get("time_segments") or "").strip():
+                    blockers.append({"code": "missing_prompt_time_segments", "message": f"镜头 {item.get('shot_id')} 缺少分时段 Prompt。"})
+                if not str(components.get("product_display_template") or "").strip():
+                    blockers.append({"code": "missing_product_display_template", "message": f"镜头 {item.get('shot_id')} 缺少工业产品展示模板。"})
+                forbidden = _forbidden_entertainment_terms_in_prompt(item.get("prompt", ""))
+                if forbidden:
+                    blockers.append({"code": "forbidden_entertainment_prompt_pattern", "message": f"镜头 {item.get('shot_id')} Prompt 包含不允许的娱乐化表达：{', '.join(forbidden)}"})
+            quality_checks = item.get("prompt_quality_checks") or _prompt_quality_checks(item)
+            for issue in quality_checks.get("blockers", []):
+                blockers.append({"code": str(issue.get("code", "prompt_quality_blocker")), "message": f"镜头 {item.get('shot_id')}：{issue.get('message', '')}"})
+            for issue in quality_checks.get("warnings", []):
+                warnings.append({"code": str(issue.get("code", "prompt_quality_warning")), "message": f"镜头 {item.get('shot_id')}：{issue.get('message', '')}"})
     if jobs:
         for job in jobs.get("jobs", []):
             validation = job.get("validation", {})
@@ -3597,6 +4176,7 @@ def _render_quality_report(report: dict[str, Any]) -> str:
 
 def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: datetime) -> dict[str, Any]:
     adapters = state.get("adapters", {})
+    capability_profile = _state_dreamina_capability_profile(state)
     dreamina_command = str(adapters.get("dreamina_command") or "dreamina")
     ffmpeg_command = str(adapters.get("ffmpeg_command") or "ffmpeg")
     tts_provider = str(adapters.get("tts_provider") or "mock")
@@ -3609,6 +4189,7 @@ def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: 
         _command_check("tts_command", tts_command, required=tts_provider == "external_command"),
         _optional_path_check("bgm_library_dir", bgm_library_dir, must_be_dir=True),
         _optional_project_path_check("logo_path", logo_path, run_dir),
+        _capability_profile_check(capability_profile),
     ]
     blocking = [item for item in checks if item["severity"] == "blocking" and item["status"] != "ok"]
     warnings = [item for item in checks if item["severity"] == "warning" and item["status"] != "ok"]
@@ -3618,6 +4199,7 @@ def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: 
         "run_dir": str(run_dir),
         "status": "failed" if blocking else "passed_with_warnings" if warnings else "passed",
         "adapters": adapters,
+        "dreamina_capability_profile": capability_profile,
         "checks": checks,
         "blocking_count": len(blocking),
         "warning_count": len(warnings),
@@ -3634,9 +4216,29 @@ def _render_adapter_inspection(report: dict[str, Any]) -> str:
         f"- 警告项：{report['warning_count']}",
         "- 说明：只检查配置，不提交即梦任务、不消耗额度。",
         "",
-        "## 检查项",
+        "## Seedance 能力配置",
         "",
     ]
+    profile = report.get("dreamina_capability_profile", {})
+    for key in [
+        "model",
+        "resolution",
+        "aspect_ratio",
+        "min_duration_seconds",
+        "max_duration_seconds",
+        "max_images",
+        "max_videos",
+        "max_audios",
+        "max_total_files",
+    ]:
+        lines.append(f"- {key}: {profile.get(key)}")
+    lines.extend(
+        [
+            "",
+        "## 检查项",
+        "",
+        ]
+    )
     for item in report["checks"]:
         lines.append(f"- {item['name']}：{item['status']}｜{item['message']}")
     lines.append("")
@@ -3848,6 +4450,32 @@ def _optional_project_path_check(name: str, value: str, run_dir: Path) -> dict[s
     return {"name": name, "status": "ok" if path.exists() else "not_found", "severity": "warning", "message": str(path)}
 
 
+def _capability_profile_check(profile: dict[str, Any]) -> dict[str, str]:
+    min_duration = int(profile.get("min_duration_seconds", 0))
+    max_duration = int(profile.get("max_duration_seconds", 0))
+    max_total_files = int(profile.get("max_total_files", 0))
+    max_images = int(profile.get("max_images", 0))
+    max_videos = int(profile.get("max_videos", 0))
+    max_audios = int(profile.get("max_audios", 0))
+    issues: list[str] = []
+    if min_duration > max_duration:
+        issues.append(f"min_duration_seconds {min_duration} 大于 max_duration_seconds {max_duration}")
+    if max_total_files < max(max_images, max_videos, max_audios):
+        issues.append("max_total_files 小于单类素材上限")
+    if not str(profile.get("model", "")).strip():
+        issues.append("model 为空")
+    if not str(profile.get("resolution", "")).strip():
+        issues.append("resolution 为空")
+    if not str(profile.get("aspect_ratio", "")).strip():
+        issues.append("aspect_ratio 为空")
+    return {
+        "name": "dreamina_capability_profile",
+        "status": "invalid" if issues else "ok",
+        "severity": "blocking",
+        "message": "；".join(issues) if issues else "Seedance 能力配置可用。",
+    }
+
+
 def _resolve_logo_path(value: str, run_dir: Path) -> Path | None:
     if not value.strip():
         return None
@@ -3899,30 +4527,56 @@ def _validate_dreamina_job(
     prompt: dict[str, Any],
     job_type: str,
     blocked_reason: str | None,
+    capability_profile: dict[str, Any] | None = None,
+    material_limit_blockers: list[str] | None = None,
 ) -> dict[str, Any]:
     blockers: list[str] = []
     warnings: list[str] = []
+    profile = _normalize_dreamina_capability_profile(capability_profile or {})
+    duration = int(shot.get("duration_seconds", 0))
+    min_duration = int(profile["min_duration_seconds"])
+    max_duration = int(profile["max_duration_seconds"])
     if blocked_reason:
         blockers.append(blocked_reason)
+    blockers.extend(material_limit_blockers or [])
+    human_face_risk = str(shot.get("human_face_risk") or "none")
+    if human_face_risk == "clear_face":
+        blockers.append("素材包含清晰可辨识真人脸部，不能作为真实即梦参考。")
+    elif human_face_risk == "unclear":
+        warnings.append("素材人脸风险不明确，建议裁切、打码或替换为手部/设备局部素材。")
+    if not min_duration <= duration <= max_duration:
+        blockers.append(f"镜头时长 {duration} 秒超出 Seedance 能力配置范围 {min_duration}-{max_duration} 秒。")
     if shot.get("product_visible") and job_type == "text2video":
         blockers.append("可见产品镜头不能规划为 text2video。")
     if prompt.get("reference_required") and not prompt.get("reference_material_id"):
         blockers.append("Prompt 要求参考素材，但任务缺少 reference_material_id。")
-    if prompt.get("prompt_standard") != "tuolin-industrial-seedance-v1":
+    if prompt.get("reference_required") and not prompt.get("numbered_reference_label"):
+        blockers.append("Prompt 要求参考素材，但缺少 @图片/@视频 编号引用。")
+    if prompt.get("reference_required") and not str(prompt.get("reference_usage") or "").strip():
+        blockers.append("Prompt 要求参考素材，但缺少素材用途说明。")
+    if prompt.get("prompt_standard") not in {"tuolin-industrial-seedance-v1", "tuolin-industrial-seedance-v2"}:
         warnings.append("Prompt 未声明拓霖工业即梦标准。")
     components = prompt.get("prompt_components", {})
     required_components = [
         "timebox",
         "subject",
         "reference_material",
+        "time_segments",
         "motion_and_camera",
         "environment",
         "material_texture",
+        "product_display_template",
         "safety_and_negative_constraints",
     ]
     missing = [key for key in required_components if not str(components.get(key, "")).strip()]
     if missing:
         blockers.append("Prompt 结构缺少字段：" + ", ".join(missing))
+    forbidden = _forbidden_entertainment_terms_in_prompt(prompt.get("prompt", ""))
+    if forbidden:
+        blockers.append("Prompt 包含不允许的娱乐化表达：" + ", ".join(forbidden))
+    prompt_quality_checks = prompt.get("prompt_quality_checks") or _prompt_quality_checks(prompt)
+    blockers.extend(str(issue.get("message", "")) for issue in prompt_quality_checks.get("blockers", []))
+    warnings.extend(str(issue.get("message", "")) for issue in prompt_quality_checks.get("warnings", []))
     messages = blockers or warnings or ["任务类型、素材引用和 Prompt 结构可执行。"]
     return {
         "status": "blocked" if blockers else "warning" if warnings else "ok",
@@ -3978,12 +4632,16 @@ def _usable_product_knowledge(product: dict[str, Any]) -> list[str]:
 
 def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any]:
     frontmatter = card.get("frontmatter", {})
+    raw_partitions = card.get("raw_partitions", [])
+    files = frontmatter.get("files") or frontmatter.get("file_paths") or frontmatter.get("paths") or raw_partitions
     return {
         "id": card["id"],
         "title": card.get("title", ""),
         "media_types": frontmatter.get("media_types", []),
         "asset_category": frontmatter.get("asset_category", ""),
-        "raw_partitions": card.get("raw_partitions", []),
+        "raw_partitions": raw_partitions,
+        "files": files,
+        "human_face_risk": str(frontmatter.get("human_face_risk") or "none"),
         "usage_note": "内容素材只用于素材选择、画面描述、Prompt 参考和镜头生成约束，不能证明产品事实。",
     }
 
@@ -4054,6 +4712,8 @@ def _validate_shot_design(shot: dict[str, Any]) -> dict[str, Any]:
         blockers.append("展示具体产品的 AI 镜头必须有真实产品参考素材。")
     if shot.get("material_mode") == "blocked":
         blockers.append("当前镜头素材缺失，必须补充素材或改分镜。")
+    if shot.get("human_face_risk") == "clear_face":
+        blockers.append("素材包含清晰可辨识真人脸部，不能作为即梦参考。")
     if not blockers:
         messages.append("镜头可进入即梦任务规划。")
     else:

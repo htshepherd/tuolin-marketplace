@@ -12,6 +12,23 @@
   "video_creation": {
     "dreamina_command": "dreamina",
     "dreamina_execute_default": false,
+    "dreamina_capability_profile": {
+      "model": "seedance2.0_vip",
+      "resolution": "1080P",
+      "aspect_ratio": "9:16",
+      "min_duration_seconds": 4,
+      "max_duration_seconds": 15,
+      "max_images": 9,
+      "max_videos": 3,
+      "max_audios": 3,
+      "max_total_files": 12,
+      "max_image_mb": 30,
+      "max_video_mb": 50,
+      "max_audio_mb": 15,
+      "min_video_reference_duration_seconds": 2,
+      "max_video_reference_duration_seconds": 15,
+      "max_audio_reference_duration_seconds": 15
+    },
     "ffmpeg_command": "ffmpeg",
     "tts_provider": "mock",
     "tts_command": "",
