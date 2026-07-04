@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 import wave
@@ -15,6 +16,7 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     confirm_narration,
     confirm_dreamina_generation,
     confirm_final_video,
+    confirm_creative_direction,
     confirm_narration_script,
     confirm_shot_retry,
     confirm_shots,
@@ -156,6 +158,73 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(plan["knowledge_boundary"]["draft_only_until_external_review"])
             self.assertFalse(plan["knowledge_boundary"]["external_publication_ready"])
             self.assertEqual(plan["content_assets"][0]["id"], "content_asset/quartz_legacy_product_photo")
+
+    def test_video_creation_run_requires_user_creative_direction_confirmation_before_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。",
+                language_version="en",
+                platforms=["youtube_shorts", "tiktok"],
+                duration_seconds=60,
+                target_audience="欧美工业采购商",
+                core_objective="突出隔热、易施工和采购判断",
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+            self.assertEqual(result.status, "creative_direction_selection_ready")
+            requirements = (run_dir / "requirements.md").read_text(encoding="utf-8")
+            self.assertIn("主创意方向：待用户确认", requirements)
+            self.assertIn("## 固定视频创意方向全集", requirements)
+            self.assertIn("## 动态推荐", requirements)
+            with self.assertRaisesRegex(ValueError, "创意方向尚未确认|当前阶段"):
+                generate_video_plan(run_dir)
+
+            confirmed = confirm_creative_direction(
+                run_dir,
+                primary_direction="采购指南型",
+                supporting_direction="产品细节型",
+                now=datetime(2026, 6, 25, 14, 35, 0),
+            )
+            self.assertEqual(confirmed.status, "requirements_confirmed")
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertTrue(state["confirmations"]["creative_direction"])
+            self.assertEqual(state["creative_direction"]["primary"]["id"], "procurement_guide")
+            self.assertEqual(state["creative_direction"]["supporting"]["id"], "product_detail")
+
+            plan_result = generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+            self.assertEqual(plan_result.status, "video_plan_ready")
+
+    def test_video_creation_reply_can_confirm_creative_direction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个60秒石英纤维隔热带产品介绍视频",
+                language_version="en",
+                platforms=["tiktok"],
+                duration_seconds=60,
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+            reply_result = handle_video_creation_reply(
+                run_dir,
+                "主方向：采购指南型，辅助方向：产品细节型",
+                now=datetime(2026, 6, 25, 14, 35, 0),
+            )
+
+            self.assertEqual(reply_result.status, "requirements_confirmed")
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["creative_direction"]["primary"]["id"], "procurement_guide")
 
     def test_video_creation_run_captures_adapter_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -728,6 +797,37 @@ class VideoCreationAgentTests(unittest.TestCase):
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["narration"])
             self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
+
+    def test_external_command_tts_generates_voice_samples_and_full_narration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_narration_script_confirmed_run(Path(tmp), tts_provider="external_command", tts_command="/opt/tts")
+            calls = []
+
+            def fake_tts_runner(command, capture_output, text, check):
+                calls.append(command)
+                output_path = Path(command[command.index("--output") + 1])
+                _write_test_wav(output_path)
+                return _completed(command)
+
+            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0), runner=fake_tts_runner)
+            samples = json.loads((run_dir / "narration" / "voice_samples.json").read_text(encoding="utf-8"))
+            self.assertEqual({sample["provider"] for sample in samples["samples"]}, {"external_command"})
+            self.assertTrue(all("--voice-id" in call for call in calls))
+
+            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
+            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0), runner=fake_tts_runner)
+            timing = json.loads((run_dir / "narration" / "timing.json").read_text(encoding="utf-8"))
+            self.assertEqual(timing["tts_provider"], "external_command")
+            self.assertTrue((run_dir / "narration" / "narration.wav").exists())
+
+    def test_confirmed_narration_script_cannot_be_modified_before_tts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_narration_script_confirmed_run(Path(tmp))
+            script_md = run_dir / "narration" / "script.md"
+            script_md.write_text(script_md.read_text(encoding="utf-8") + "\nAI rewrite\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "旁白文案已确认后被修改"):
+                generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
 
     def test_cannot_generate_voice_samples_before_script_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1518,8 +1618,11 @@ def _write_card(path: Path, frontmatter_lines: list[str], body: str) -> None:
     path.write_text("---\n" + "\n".join(frontmatter_lines) + "\n---\n\n" + body + "\n", encoding="utf-8")
 
 
-def _create_ready_run(root: Path) -> Path:
-    paths = resolve_paths(root, {})
+def _create_ready_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
+    config = {}
+    if tts_provider != "mock" or tts_command:
+        config = {"video_creation": {"tts_provider": tts_provider, "tts_command": tts_command}}
+    paths = resolve_paths(root, config)
     initialize_project(paths)
     _write_official_cards(paths)
     rebuild_agent_interface(paths)
@@ -1538,22 +1641,22 @@ def _create_ready_run(root: Path) -> Path:
     return Path(result.run_dir)
 
 
-def _create_plan_confirmed_run(root: Path) -> Path:
-    run_dir = _create_ready_run(root)
+def _create_plan_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
+    run_dir = _create_ready_run(root, tts_provider=tts_provider, tts_command=tts_command)
     generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
     confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
     return run_dir
 
 
-def _create_storyboard_confirmed_run(root: Path) -> Path:
-    run_dir = _create_plan_confirmed_run(root)
+def _create_storyboard_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
+    run_dir = _create_plan_confirmed_run(root, tts_provider=tts_provider, tts_command=tts_command)
     generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
     confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
     return run_dir
 
 
-def _create_narration_script_confirmed_run(root: Path) -> Path:
-    run_dir = _create_storyboard_confirmed_run(root)
+def _create_narration_script_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
+    run_dir = _create_storyboard_confirmed_run(root, tts_provider=tts_provider, tts_command=tts_command)
     generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
     confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
     return run_dir
@@ -1666,6 +1769,19 @@ def _write_product_card_only(paths) -> None:
         ],
         "石英纤维隔热带是首期视频创作产品。",
     )
+
+
+def _write_test_wav(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(8000)
+        handle.writeframes(b"\x00\x00" * 800)
+
+
+def _completed(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
 
 
 if __name__ == "__main__":

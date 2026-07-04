@@ -22,7 +22,7 @@ def main() -> int:
     parser.add_argument("--duration", type=int, default=60, help="Video duration: 60, 90, or 120 seconds.")
     parser.add_argument("--audience", default="", help="Target audience.")
     parser.add_argument("--objective", default="", help="Core objective.")
-    parser.add_argument("--primary-direction", required=True, help="Primary video creative direction id, name, or number.")
+    parser.add_argument("--primary-direction", default="", help="Primary video creative direction id, name, or number.")
     parser.add_argument("--supporting-direction", help="Optional supporting video creative direction id, name, or number.")
     parser.add_argument("--project-dir", default=".", help="Knowledge project directory.")
     parser.add_argument("--config", help="Optional config JSON path.")

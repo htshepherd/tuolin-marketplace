@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 import re
+import shlex
 import shutil
 import subprocess
 import wave
@@ -382,9 +385,9 @@ def create_video_creation_run(
     language = normalize_language_version(language_version)
     platform_values = normalize_platforms(platforms)
     duration = normalize_duration(duration_seconds)
-    primary = normalize_creative_direction(primary_direction)
+    primary = normalize_creative_direction(primary_direction) if primary_direction else None
     supporting = normalize_creative_direction(supporting_direction) if supporting_direction else None
-    if supporting and supporting["id"] == primary["id"]:
+    if primary and supporting and supporting["id"] == primary["id"]:
         raise ValueError("辅助创意方向不能与主创意方向相同")
 
     context = build_downstream_context(
@@ -435,8 +438,9 @@ def create_video_creation_run(
         timestamp,
     )
     workflow_state_path.write_text(json.dumps(workflow_state, ensure_ascii=False, indent=2), encoding="utf-8")
+    status_note = "等待确认创意方向" if workflow_state["phase"] == "awaiting_creative_direction_confirmation" else "等待生成视频策划"
     change_log_path.write_text(
-        f"# 视频创作变更记录\n\n- {timestamp}: 创建视频创作运行，等待生成视频策划。\n",
+        f"# 视频创作变更记录\n\n- {timestamp}: 创建视频创作运行，{status_note}。\n",
         encoding="utf-8",
     )
     return VideoCreationRunResult(
@@ -448,12 +452,62 @@ def create_video_creation_run(
     )
 
 
+def confirm_creative_direction(
+    run_dir: Path,
+    primary_direction: str,
+    supporting_direction: str | None = None,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_creative_direction_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认创意方向。")
+    primary = normalize_creative_direction(primary_direction)
+    supporting = normalize_creative_direction(supporting_direction) if supporting_direction else None
+    if supporting and supporting["id"] == primary["id"]:
+        raise ValueError("辅助创意方向不能与主创意方向相同")
+
+    requirements_path = Path(state["files"]["requirements"])
+    requirements = dict(state.get("requirements_payload") or {})
+    if not requirements:
+        raise ValueError("workflow_state 缺少 requirements_payload，不能安全确认创意方向。")
+    requirements["primary_direction"] = primary
+    requirements["supporting_direction"] = supporting
+    requirements_path.write_text(_render_requirements(requirements), encoding="utf-8")
+
+    timestamp = _timestamp(now)
+    state["status"] = "requirements_confirmed"
+    state["phase"] = "ready_for_video_plan"
+    state["current_pending_confirmation"] = "生成视频策划"
+    state["updated_at"] = timestamp
+    state["creative_direction"] = {"primary": primary, "supporting": supporting, "confirmed": True}
+    state["requirements_payload"] = requirements
+    state["confirmations"]["creative_direction"] = True
+    _append_status_history(state, "requirements_confirmed", timestamp)
+    _write_state(state_path, state)
+    _append_change(
+        run_dir,
+        timestamp,
+        f"确认创意方向：主方向={primary['name']}，辅助方向={supporting['name'] if supporting else '无'}。",
+    )
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(requirements_path),),
+    )
+
+
 def generate_video_plan(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
     if state.get("phase") not in {"ready_for_video_plan", "awaiting_video_plan_confirmation"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成视频策划。")
+    if not state.get("confirmations", {}).get("creative_direction"):
+        raise ValueError("创意方向尚未确认，不能生成视频策划。请先确认主方向和辅助方向。")
 
     plan_md_path = run_dir / "video_plan.md"
     plan_json_path = run_dir / "video_plan.json"
@@ -666,6 +720,14 @@ def confirm_narration_script(run_dir: Path, now: datetime | None = None) -> Vide
     state["current_pending_confirmation"] = "生成声音样本"
     state["updated_at"] = timestamp
     state["confirmations"]["narration_script"] = True
+    state["narration_script_lock"] = {
+        "locked_at": timestamp,
+        "md_path": str(script_md_path),
+        "json_path": str(script_json_path),
+        "md_sha256": _sha256_file(script_md_path),
+        "json_sha256": _sha256_file(script_json_path),
+        "policy": "已确认旁白文案后不得由 Agent 自动改写；如需修改，必须回到分镜/旁白文案阶段重新生成并重新确认。",
+    }
     _append_status_history(state, "narration_script_confirmed", timestamp)
     _write_state(state_path, state)
     _append_change(run_dir, timestamp, "确认旁白文案，进入声音样本阶段。")
@@ -679,7 +741,12 @@ def confirm_narration_script(run_dir: Path, now: datetime | None = None) -> Vide
     )
 
 
-def generate_voice_samples(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
+def generate_voice_samples(
+    run_dir: Path,
+    overwrite: bool = False,
+    now: datetime | None = None,
+    runner: Runner = subprocess.run,
+) -> VideoCreationStepResult:
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -687,6 +754,7 @@ def generate_voice_samples(run_dir: Path, overwrite: bool = False, now: datetime
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成声音样本。")
     if not state.get("confirmations", {}).get("narration_script"):
         raise ValueError("旁白文案尚未确认，不能生成声音样本。")
+    _assert_narration_script_locked(state)
 
     script = _load_json_file(Path(state["files"]["narration_script_json"]), "narration/script.json")
     samples_dir = run_dir / "narration" / "voice_samples"
@@ -700,14 +768,22 @@ def generate_voice_samples(run_dir: Path, overwrite: bool = False, now: datetime
         sample_path = samples_dir / f"sample_{index}.wav"
         if sample_path.exists() and not overwrite:
             raise FileExistsError(f"声音样本已存在，未覆盖：{sample_path}")
-        _write_mock_wav(sample_path, duration_seconds=2.0 + index * 0.15)
+        provider = _generate_tts_audio(
+            state,
+            text=excerpt,
+            output_path=sample_path,
+            voice_profile=profile,
+            mode="sample",
+            runner=runner,
+            fallback_duration_seconds=2.0 + index * 0.15,
+        )
         samples.append(
             {
                 "sample_id": index,
                 "voice_profile": profile,
                 "excerpt": excerpt,
                 "audio_path": str(sample_path),
-                "provider": "mock_narration_provider",
+                "provider": provider,
             }
         )
     samples_json_path.write_text(json.dumps({"samples": samples, "excerpt": excerpt}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -765,7 +841,12 @@ def select_voice(run_dir: Path, sample_id: int, now: datetime | None = None) -> 
     )
 
 
-def generate_full_narration(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
+def generate_full_narration(
+    run_dir: Path,
+    overwrite: bool = False,
+    now: datetime | None = None,
+    runner: Runner = subprocess.run,
+) -> VideoCreationStepResult:
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -773,6 +854,7 @@ def generate_full_narration(run_dir: Path, overwrite: bool = False, now: datetim
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成完整旁白。")
     if not state.get("confirmations", {}).get("voice"):
         raise ValueError("尚未选择声音，不能生成完整旁白。")
+    _assert_narration_script_locked(state)
 
     script = _load_json_file(Path(state["files"]["narration_script_json"]), "narration/script.json")
     narration_path = run_dir / "narration" / "narration.wav"
@@ -781,8 +863,17 @@ def generate_full_narration(run_dir: Path, overwrite: bool = False, now: datetim
     if (narration_path.exists() or timing_path.exists()) and not overwrite:
         raise FileExistsError(f"完整旁白已存在，未覆盖：{narration_path}")
     duration = int(state["duration_seconds"])
-    _write_mock_wav(narration_path, duration_seconds=float(duration))
+    provider = _generate_tts_audio(
+        state,
+        text=script.get("full_text", ""),
+        output_path=narration_path,
+        voice_profile=state.get("selected_voice", {}).get("voice_profile", {}),
+        mode="full",
+        runner=runner,
+        fallback_duration_seconds=float(duration),
+    )
     timing = _build_sentence_timing(script, duration, state.get("selected_voice", {}), now or datetime.now())
+    timing["tts_provider"] = provider
     timing_path.write_text(json.dumps(timing, ensure_ascii=False, indent=2), encoding="utf-8")
     preview_path.write_text(_render_narration_preview(script, timing, state.get("selected_voice", {})), encoding="utf-8")
 
@@ -1616,6 +1707,10 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
     if not normalized:
         raise ValueError("没有识别到有效回复。")
 
+    direction_selection = _parse_creative_direction_selection(reply)
+    if direction_selection:
+        primary_direction, supporting_direction = direction_selection
+        return confirm_creative_direction(run_dir, primary_direction, supporting_direction, now=now)
     plan_revision = _parse_plan_revision_request(normalized, reply)
     if plan_revision:
         return revise_video_plan(run_dir, plan_revision, now=now)
@@ -1987,11 +2082,15 @@ def _initial_workflow_state(
     timestamp: str,
 ) -> dict[str, Any]:
     capability_profile = _dreamina_capability_profile(config)
+    creative_confirmed = bool(requirements.get("primary_direction"))
+    initial_status = "requirements_confirmed" if creative_confirmed else "creative_direction_selection_ready"
+    initial_phase = "ready_for_video_plan" if creative_confirmed else "awaiting_creative_direction_confirmation"
+    initial_pending = "生成视频策划" if creative_confirmed else "确认创意方向"
     return {
         "schema_version": "video-creation-workflow-v1",
-        "status": "requirements_confirmed",
-        "phase": "ready_for_video_plan",
-        "current_pending_confirmation": "生成视频策划",
+        "status": initial_status,
+        "phase": initial_phase,
+        "current_pending_confirmation": initial_pending,
         "created_at": timestamp,
         "updated_at": timestamp,
         "run_dir": str(run_dir),
@@ -2006,14 +2105,16 @@ def _initial_workflow_state(
         "duration_seconds": requirements["duration_seconds"],
         "target_audience": requirements["target_audience"],
         "core_objective": requirements["core_objective"],
+        "requirements_payload": requirements,
         "creative_direction": {
             "primary": requirements["primary_direction"],
             "supporting": requirements["supporting_direction"],
+            "confirmed": creative_confirmed,
         },
         "confirmations": {
             "language_version": True,
             "platform_duration_audience_objective": True,
-            "creative_direction": True,
+            "creative_direction": creative_confirmed,
             "video_plan": False,
             "storyboard": False,
             "narration_script": False,
@@ -2037,7 +2138,7 @@ def _initial_workflow_state(
             "context": str(context_path),
             "change_log": str(change_log_path),
         },
-        "status_history": [{"status": "requirements_confirmed", "at": timestamp}],
+        "status_history": [{"status": initial_status, "at": timestamp}],
         "outputs": {
             "final_filename": f"{RUN_DIR_PRODUCT_SLUG}_{requirements['language_version']}_9x16.mp4",
             "aspect_ratio": capability_profile["aspect_ratio"],
@@ -2054,6 +2155,8 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
     platforms = ", ".join(requirements["platforms"])
     primary = requirements["primary_direction"]
     supporting = requirements["supporting_direction"]
+    primary_text = f"{primary['name']}（{primary['id']}）" if primary else "待用户确认"
+    supporting_text = f"{supporting['name']}（{supporting['id']}）" if supporting else "待用户确认或选择无"
     lines = [
         "# 视频创作需求确认",
         "",
@@ -2063,8 +2166,8 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
         f"- 时长：{requirements['duration_seconds']} 秒",
         f"- 受众：{requirements['target_audience'] or '未填写'}",
         f"- 核心目标：{requirements['core_objective'] or '未填写'}",
-        f"- 主创意方向：{primary['name']}（{primary['id']}）",
-        f"- 辅助创意方向：{supporting['name'] + '（' + supporting['id'] + '）' if supporting else '无'}",
+        f"- 主创意方向：{primary_text}",
+        f"- 辅助创意方向：{supporting_text}",
         "",
         "## 原始需求",
         "",
@@ -3236,6 +3339,74 @@ def _voice_sample_excerpt(script: dict[str, Any]) -> str:
     return text[:220]
 
 
+def _generate_tts_audio(
+    state: dict[str, Any],
+    *,
+    text: str,
+    output_path: Path,
+    voice_profile: dict[str, Any],
+    mode: str,
+    runner: Runner,
+    fallback_duration_seconds: float,
+) -> str:
+    provider = str(state.get("adapters", {}).get("tts_provider") or "mock")
+    if provider == "mock":
+        _write_mock_wav(output_path, duration_seconds=fallback_duration_seconds)
+        return "mock_narration_provider"
+    if provider != "external_command":
+        raise ValueError(f"不支持的 TTS provider：{provider}。当前支持 mock 或 external_command。")
+    command_value = str(state.get("adapters", {}).get("tts_command") or "").strip()
+    if not command_value:
+        raise ValueError("tts_provider=external_command 时必须配置 video_creation.tts_command。")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        *_split_command(command_value),
+        "--mode",
+        mode,
+        "--language",
+        str(state.get("language_version") or ""),
+        "--voice-id",
+        str(voice_profile.get("voice_id") or ""),
+        "--voice-description",
+        str(voice_profile.get("description") or ""),
+        "--text",
+        text,
+        "--output",
+        str(output_path),
+    ]
+    completed = runner(command, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        stderr = (completed.stderr or completed.stdout or "").strip()
+        raise RuntimeError(f"TTS 外部命令失败：{stderr or completed.returncode}")
+    if not output_path.exists():
+        raise RuntimeError(f"TTS 外部命令未生成音频文件：{output_path}")
+    return "external_command"
+
+
+def _split_command(command: str) -> list[str]:
+    return shlex.split(command, posix=(os.name != "nt")) if command else []
+
+
+def _assert_narration_script_locked(state: dict[str, Any]) -> None:
+    lock = state.get("narration_script_lock")
+    if not isinstance(lock, dict):
+        raise ValueError("旁白文案尚未锁定，不能继续生成声音或完整旁白。")
+    md_path = Path(lock.get("md_path", ""))
+    json_path = Path(lock.get("json_path", ""))
+    if not md_path.exists() or not json_path.exists():
+        raise ValueError("已确认的旁白文案文件缺失，不能继续。")
+    if _sha256_file(md_path) != lock.get("md_sha256") or _sha256_file(json_path) != lock.get("json_sha256"):
+        raise ValueError("旁白文案已确认后被修改。请不要让 Agent 自动改写脚本；如需修改，必须重新生成并重新确认旁白文案。")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _write_mock_wav(path: Path, duration_seconds: float = 1.0, sample_rate: int = 8000) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame_count = max(1, int(duration_seconds * sample_rate))
@@ -4363,6 +4534,7 @@ def _render_workflow_status(status: dict[str, Any]) -> str:
             "- 只从当前阶段继续，不重复已确认步骤。",
             "- 已确认的付费即梦动作不会因为恢复状态而自动重新提交。",
             "- 普通员工继续通过 `$tuolin-video-workflow` 或自然语言回复操作。",
+            "- 生成策划前必须先由用户确认主创意方向和辅助创意方向；Agent 不得代替用户自动选择。",
             "",
         ]
     )
@@ -4374,6 +4546,8 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
     phase = str(state.get("phase") or "")
     if pending.startswith(("确认重做镜头", "提交重做镜头", "查询重做镜头", "继续查询重做镜头")):
         return [pending]
+    if pending == "确认创意方向":
+        return ["主方向：采购指南型，辅助方向：产品细节型", "主方向：多卖点概览型，辅助方向：采购指南型"]
     if pending == "确认策划":
         return ["确认策划", "修改策划，开场更突出客户痛点"]
     if pending == "确认分镜":
@@ -4407,6 +4581,26 @@ def _parse_voice_selection(reply: str) -> int | None:
     if match:
         return int(match.group(1))
     return None
+
+
+def _parse_creative_direction_selection(reply: str) -> tuple[str, str | None] | None:
+    text = reply.strip()
+    if not text:
+        return None
+    primary_match = re.search(r"主方向\s*[：:为是]?\s*([^\n，,；;。]+)", text)
+    if not primary_match and not re.search(r"确认创意方向|选择创意方向|确认方向", text):
+        return None
+    supporting_match = re.search(r"辅助方向\s*[：:为是]?\s*([^\n，,；;。]+)", text)
+    if primary_match:
+        primary = primary_match.group(1).strip()
+    else:
+        # Explicit confirmation without a primary direction is intentionally rejected.
+        # Users must name the direction; the Agent must not silently choose the top recommendation.
+        raise ValueError("确认创意方向时必须写明主方向，例如：主方向：采购指南型，辅助方向：产品细节型。")
+    supporting = supporting_match.group(1).strip() if supporting_match else None
+    if supporting and supporting in {"无", "不选", "不要", "none"}:
+        supporting = None
+    return primary, supporting
 
 
 def _parse_plan_revision_request(normalized_reply: str, original_reply: str) -> str | None:
