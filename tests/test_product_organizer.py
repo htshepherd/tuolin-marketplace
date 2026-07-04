@@ -30,11 +30,26 @@ class ProductOrganizerTests(unittest.TestCase):
             self.assertEqual(len(result.content_asset_cards), 3)
             self.assertEqual(len(result.application_scenario_cards), 1)
             self.assertEqual(result.review_item_cards, ("review_item/quartz_fiber_tape/product_facts_pending",))
+            self.assertEqual(len(result.card_inventory["content_asset"]), 3)
+            self.assertIn("视频创作可用素材卡 3 张", "\n".join(result.completion_receipt["user_receipt"]))
+            self.assertTrue(Path(result.report_path).exists())
 
             product_card = paths.knowledge_dir / "产品" / "石英纤维隔热带.md"
             self.assertTrue(product_card.exists())
             self.assertTrue(validate_card_file(product_card).valid)
             self.assertIn("status: draft", product_card.read_text(encoding="utf-8"))
+            receipt = Path(result.report_path).read_text(encoding="utf-8")
+            self.assertIn("## 生成或更新的知识卡", receipt)
+            self.assertIn("content_asset/quartz_fiber_tape/product_", receipt)
+
+            content_asset = next((paths.knowledge_dir / "内容素材" / "quartz_fiber_tape").glob("product_*.md"))
+            content_text = content_asset.read_text(encoding="utf-8")
+            self.assertIn("status: official", content_text)
+            self.assertIn("usage_scope: review_before_external", content_text)
+            self.assertIn("usable_for:", content_text)
+            self.assertIn("- video_creation", content_text)
+            self.assertIn("source_paths:", content_text)
+            self.assertIn("files:", content_text)
 
             card_paths = list(paths.knowledge_dir.rglob("*.md"))
             invalid = [path for path in card_paths if not validate_card_file(path).valid]

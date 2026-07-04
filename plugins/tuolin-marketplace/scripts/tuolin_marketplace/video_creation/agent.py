@@ -2173,6 +2173,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     external_names = _external_names_from_product(product)
     primary = state["creative_direction"]["primary"]
     supporting = state["creative_direction"].get("supporting")
+    content_asset_summaries = [_content_asset_summary(card) for card in content_assets]
     plan = {
         "schema_version": "video-plan-v1",
         "generated_at": now.isoformat(),
@@ -2218,7 +2219,8 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
             "review_before_external_rule": "可用于内部策划和 dry-run 草稿；正式外发成片前必须复核为 external_allowed，或删除高风险 claim。",
         },
         "usable_product_knowledge": _usable_product_knowledge(product),
-        "content_assets": [_content_asset_summary(card) for card in content_assets],
+        "content_assets": content_asset_summaries,
+        "material_availability": _material_availability_summary(content_asset_summaries),
         "visual_strategy": _visual_strategy(primary, supporting, content_assets),
         "production_style": _production_style_profile(primary, supporting),
         "creative_quality": _direction_quality_profile(primary),
@@ -2331,6 +2333,32 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             lines.append(f"- {asset['id']}｜{asset['title']}｜媒体类型：{media}｜用途：仅用于画面/素材参考，不证明产品事实")
     else:
         lines.append("- 暂无正式关联内容素材；后续分镜应降低真实素材覆盖预期。")
+    material = plan.get("material_availability", {})
+    counts = material.get("counts", {})
+    lines.extend(
+        [
+            "",
+            "## 视频创作素材准备度",
+            "",
+            f"- 内容素材卡总数：{counts.get('total_assets', 0)}",
+            f"- 产品图片素材：{counts.get('product_image_assets', 0)}",
+            f"- 产品视频素材：{counts.get('product_video_assets', 0)}",
+            f"- 应用场景素材：{counts.get('application_assets', 0)}",
+            f"- 测试/验证素材：{counts.get('test_or_validation_assets', 0)}",
+            f"- 可用于 image2video/reuse_video 的真实参考素材：{counts.get('usable_visual_reference_assets', 0)}",
+        ]
+    )
+    usable_refs = material.get("usable_visual_references", [])
+    if usable_refs:
+        lines.append("- 可优先使用素材：")
+        for item in usable_refs[:10]:
+            media = ", ".join(item.get("media_types", [])) or "unknown"
+            first_path = item.get("files", ["未记录路径"])[0] if item.get("files") else "未记录路径"
+            lines.append(f"  - {item['id']}｜{media}｜{first_path}")
+    else:
+        lines.append("- 可优先使用素材：无。产品可见镜头会在分镜/即梦任务中被阻断。")
+    for warning in material.get("warnings", []):
+        lines.append(f"- 警告：{warning}")
     lines.extend(
         [
             "",
@@ -4669,6 +4697,93 @@ def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any]:
         "human_face_risk": str(frontmatter.get("human_face_risk") or "none"),
         "usage_note": "内容素材只用于素材选择、画面描述、Prompt 参考和镜头生成约束，不能证明产品事实。",
     }
+
+
+def _material_availability_summary(content_assets: list[dict[str, Any]]) -> dict[str, Any]:
+    counts = {
+        "total_assets": len(content_assets),
+        "image_assets": 0,
+        "video_assets": 0,
+        "product_image_assets": 0,
+        "product_video_assets": 0,
+        "application_assets": 0,
+        "test_or_validation_assets": 0,
+        "assets_with_local_paths": 0,
+        "usable_visual_reference_assets": 0,
+    }
+    usable_visual_references: list[dict[str, Any]] = []
+    for asset in content_assets:
+        media_types = {str(item).lower() for item in asset.get("media_types", [])}
+        files = [str(item) for item in asset.get("files", []) if str(item).strip()]
+        searchable = " ".join(
+            [
+                str(asset.get("title", "")),
+                str(asset.get("asset_category", "")),
+                " ".join(files),
+            ]
+        )
+        is_image = "image" in media_types or _has_file_suffix(files, {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
+        is_video = "video" in media_types or _has_file_suffix(files, {".mp4", ".mov", ".m4v", ".avi", ".mkv"})
+        if is_image:
+            counts["image_assets"] += 1
+        if is_video:
+            counts["video_assets"] += 1
+        if files:
+            counts["assets_with_local_paths"] += 1
+        if _contains_any(searchable, ["产品图片", "product image", "product photo", "产品实拍", "精选图"]):
+            counts["product_image_assets"] += 1 if is_image else 0
+        if _contains_any(searchable, ["产品视频", "product video", "实拍视频"]):
+            counts["product_video_assets"] += 1 if is_video else 0
+        if _contains_any(searchable, ["应用场景", "application", "exhaust", "pipe", "包覆", "管道"]):
+            counts["application_assets"] += 1
+        if _contains_any(searchable, ["测试", "验证", "test", "verification", "report", "检测"]):
+            counts["test_or_validation_assets"] += 1
+        if files and (is_image or is_video):
+            counts["usable_visual_reference_assets"] += 1
+            usable_visual_references.append(
+                {
+                    "id": asset.get("id", ""),
+                    "title": asset.get("title", ""),
+                    "media_types": asset.get("media_types", []),
+                    "asset_category": asset.get("asset_category", ""),
+                    "files": files,
+                }
+            )
+
+    warnings: list[str] = []
+    if counts["total_assets"] == 0:
+        warnings.append("当前视频上下文没有可读内容素材卡；产品可见镜头会缺少真实参考。")
+    elif counts["usable_visual_reference_assets"] == 0:
+        warnings.append("内容素材卡存在，但没有记录可用于即梦的本地图片或视频路径。")
+    if counts["product_image_assets"] + counts["product_video_assets"] == 0:
+        warnings.append("没有识别到产品图片或产品视频素材；产品 hero 和细节镜头会受到限制。")
+    return {
+        "schema_version": "video-material-availability-v1",
+        "counts": counts,
+        "usable_visual_references": usable_visual_references,
+        "warnings": warnings,
+        "user_summary": _material_availability_user_summary(counts, warnings),
+    }
+
+
+def _has_file_suffix(files: list[str], suffixes: set[str]) -> bool:
+    return any(Path(value).suffix.lower() in suffixes for value in files)
+
+
+def _contains_any(value: str, needles: list[str]) -> bool:
+    lowered = value.lower()
+    return any(needle.lower() in lowered for needle in needles)
+
+
+def _material_availability_user_summary(counts: dict[str, int], warnings: list[str]) -> str:
+    if counts.get("usable_visual_reference_assets", 0) > 0:
+        return (
+            f"已读取 {counts.get('total_assets', 0)} 张内容素材卡，"
+            f"其中 {counts.get('usable_visual_reference_assets', 0)} 张可作为视频生成参考。"
+        )
+    if warnings:
+        return warnings[0]
+    return "暂无可用于视频生成的真实素材参考。"
 
 
 def _visual_strategy(primary: dict[str, str], supporting: dict[str, str] | None, content_assets: list[dict[str, Any]]) -> dict[str, str]:

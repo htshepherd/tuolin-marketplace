@@ -98,6 +98,17 @@ Load the relevant reference before generating or validating that stage:
 
 External Seedance/Dreamina skills are absorbed as methodology only. Do not copy entertainment, short-drama, or cinematic categories into Tuolin's fixed 16-direction industrial product taxonomy.
 
+## Material readiness reporting
+
+Before asking the user to confirm a video plan or Dreamina generation, always show a plain-language material readiness summary:
+
+- How many official content assets were read for the quartz-fiber tape product.
+- How many are product images, product videos, application-scene assets, and test/validation assets.
+- How many can be used as real visual references for `image2video` or direct video reuse.
+- Whether product-visible shots are likely to be blocked because there is no real product reference.
+
+Do not ask the user to “sync content_asset cards” as the primary next step. Say what they need to do in operational terms, such as “请先整理石英纤维隔热带产品图片和产品视频，让视频 Agent 能读取真实产品素材。”
+
 ## Current executable entrypoint
 
 Use this script for the current implemented run-initialization slice:

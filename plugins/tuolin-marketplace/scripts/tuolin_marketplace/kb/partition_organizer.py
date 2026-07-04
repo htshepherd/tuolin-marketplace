@@ -55,7 +55,7 @@ def _from_product_result(product_result: ProductOrganizeResult) -> PartitionOrga
         cards=tuple(cards),
         evidence_cards=product_result.evidence_cards,
         review_item_cards=product_result.review_item_cards,
-        report_path=None,
+        report_path=product_result.report_path,
         generated_summary=product_result.generated_summary,
     )
 

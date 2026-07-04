@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,9 @@ class OrganizeResult:
     content_asset_cards: tuple[str, ...]
     application_scenario_cards: tuple[str, ...]
     review_item_cards: tuple[str, ...]
+    card_inventory: dict[str, Any]
+    completion_receipt: dict[str, Any]
+    report_path: str
     generated_summary: dict[str, Any]
 
 
@@ -57,6 +61,21 @@ def organize_product_partition(paths: ProjectPaths, partition_query: str) -> Org
     review_id = _write_review_item_card(paths, definition)
     product_id = _write_product_card(paths, definition, evidence_ids, [review_id])
 
+    card_inventory = _build_card_inventory(
+        product_id=product_id,
+        evidence_ids=evidence_ids,
+        content_asset_ids=content_asset_ids,
+        application_scenario_ids=application_scenario_ids,
+        review_ids=[review_id],
+    )
+    completion_receipt = _build_completion_receipt(
+        paths,
+        definition,
+        raw_files=raw_files,
+        card_inventory=card_inventory,
+    )
+    report_path = _write_completion_receipt(paths, definition, completion_receipt)
+
     mark_partition_organized(paths, definition)
     refresh_navigation(paths, reason="organize_product")
     generated_summary = rebuild_generated_indexes(paths)
@@ -67,6 +86,9 @@ def organize_product_partition(paths: ProjectPaths, partition_query: str) -> Org
         content_asset_cards=tuple(content_asset_ids),
         application_scenario_cards=tuple(application_scenario_ids),
         review_item_cards=(review_id,),
+        card_inventory=card_inventory,
+        completion_receipt=completion_receipt,
+        report_path=str(report_path),
         generated_summary=generated_summary,
     )
 
@@ -172,7 +194,7 @@ def _write_content_asset_card(paths: ProjectPaths, definition: PartitionDefiniti
         "id": card_id,
         "title": f"{definition.name} 内容素材 - {raw_file.name}",
         "aliases": [],
-        "status": "draft",
+        "status": "official",
         "usage_scope": "review_before_external",
         "raw_partitions": [f"raw/{definition.primary_raw_path}/"],
         "tags": ["内容素材", definition.name],
@@ -183,7 +205,9 @@ def _write_content_asset_card(paths: ProjectPaths, definition: PartitionDefiniti
         "asset_category": _asset_category(raw_file),
         "media_types": [_media_type(raw_file)],
         "related_products": [f"product/{definition.slug}"],
-        "usable_for": ["待人工确认"],
+        "source_paths": [f"raw/{raw_relative}"],
+        "files": [f"raw/{raw_relative}"],
+        "usable_for": ["video_creation"],
     }
     body = [
         "# 素材说明",
@@ -208,7 +232,7 @@ def _write_application_scenario_card(paths: ProjectPaths, definition: PartitionD
         "id": card_id,
         "title": f"{definition.name} 应用场景素材 - {raw_file.name}",
         "aliases": [],
-        "status": "draft",
+        "status": "official",
         "usage_scope": "review_before_external",
         "raw_partitions": [f"raw/{definition.primary_raw_path}/"],
         "tags": ["应用场景", definition.name],
@@ -218,7 +242,8 @@ def _write_application_scenario_card(paths: ProjectPaths, definition: PartitionD
         "review_refs": [],
         "scenario_category": "待人工确认",
         "related_products": [f"product/{definition.slug}"],
-        "usable_channels": ["待人工确认"],
+        "source_paths": [f"raw/{raw_relative}"],
+        "usable_channels": ["video_creation"],
     }
     body = [
         "# 场景说明",
@@ -266,6 +291,118 @@ def _write_review_item_card(paths: ProjectPaths, definition: PartitionDefinition
     ]
     _write_card(path, frontmatter, body)
     return card_id
+
+
+def _build_card_inventory(
+    *,
+    product_id: str,
+    evidence_ids: list[str],
+    content_asset_ids: list[str],
+    application_scenario_ids: list[str],
+    review_ids: list[str],
+) -> dict[str, Any]:
+    return {
+        "product": [product_id],
+        "evidence": list(evidence_ids),
+        "content_asset": list(content_asset_ids),
+        "application_scenario": list(application_scenario_ids),
+        "review_item": list(review_ids),
+        "all_cards": [
+            product_id,
+            *evidence_ids,
+            *content_asset_ids,
+            *application_scenario_ids,
+            *review_ids,
+        ],
+    }
+
+
+def _build_completion_receipt(
+    paths: ProjectPaths,
+    definition: PartitionDefinition,
+    *,
+    raw_files: list[Path],
+    card_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    image_count = sum(1 for path in raw_files if path.suffix.lower() in IMAGE_SUFFIXES)
+    video_count = sum(1 for path in raw_files if path.suffix.lower() in VIDEO_SUFFIXES)
+    document_count = sum(1 for path in raw_files if path.suffix.lower() in DOCUMENT_SUFFIXES)
+    content_assets = card_inventory.get("content_asset", [])
+    return {
+        "schema_version": "product-organization-receipt-v1",
+        "generated_at": _now(),
+        "partition_name": definition.name,
+        "raw_partition": f"raw/{definition.primary_raw_path}/",
+        "raw_file_count": len(raw_files),
+        "raw_file_counts": {
+            "images": image_count,
+            "videos": video_count,
+            "documents": document_count,
+            "other": max(0, len(raw_files) - image_count - video_count - document_count),
+        },
+        "card_inventory": card_inventory,
+        "video_creation_readiness": {
+            "usable": bool(content_assets),
+            "content_asset_count": len(content_assets),
+            "rule": "content_asset 卡必须是 official，usage_scope 允许 review_before_external，usable_for 包含 video_creation，并关联本产品。",
+            "note": "内容素材只证明本地素材存在并可用于画面参考；不证明性能、认证、耐温或其他产品 claim。",
+        },
+        "agent_interface": {
+            "rebuild_triggered_by_organizer": True,
+            "expected_after_rebuild": "generated/agent-interface/cards/content_asset.json 应包含本次 content_asset 卡。",
+        },
+        "user_receipt": [
+            f"已整理 {definition.name} 的原始资料，共 {len(raw_files)} 个文件。",
+            f"已生成/更新知识卡 {len(card_inventory.get('all_cards', []))} 张。",
+            f"其中视频创作可用素材卡 {len(content_assets)} 张。",
+            "产品事实仍需复核；素材卡不能替代产品 claim 证据。",
+        ],
+    }
+
+
+def _write_completion_receipt(paths: ProjectPaths, definition: PartitionDefinition, receipt: dict[str, Any]) -> Path:
+    safe_slug = re.sub(r"[^a-z0-9_-]+", "_", definition.slug.lower()).strip("_") or "product"
+    report_dir = paths.generated_dir / "reports"
+    json_path = report_dir / f"PRODUCT_ORGANIZATION_RECEIPT_{safe_slug}.json"
+    md_path = report_dir / f"PRODUCT_ORGANIZATION_RECEIPT_{safe_slug}.md"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
+    lines = [
+        f"# {definition.name} 整理完成清单",
+        "",
+        f"- 原始分区：{receipt['raw_partition']}",
+        f"- 原始文件数：{receipt['raw_file_count']}",
+        f"- 图片/视频/文档：{receipt['raw_file_counts']['images']} / {receipt['raw_file_counts']['videos']} / {receipt['raw_file_counts']['documents']}",
+        "",
+        "## 生成或更新的知识卡",
+        "",
+    ]
+    for card_type in ["product", "content_asset", "application_scenario", "evidence", "review_item"]:
+        values = receipt["card_inventory"].get(card_type, [])
+        lines.append(f"### {card_type}（{len(values)}）")
+        lines.append("")
+        if values:
+            lines.extend(f"- {card_id}" for card_id in values)
+        else:
+            lines.append("- 无")
+        lines.append("")
+    readiness = receipt["video_creation_readiness"]
+    lines.extend(
+        [
+            "## 视频创作可用性",
+            "",
+            f"- 可用于视频创作：{'是' if readiness['usable'] else '否'}",
+            f"- 可用素材卡数量：{readiness['content_asset_count']}",
+            f"- 规则：{readiness['rule']}",
+            f"- 边界：{readiness['note']}",
+            "",
+            "## 给用户的完成回执",
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in receipt["user_receipt"])
+    md_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return md_path
 
 
 def _assert_file_in_product_partition(paths: ProjectPaths, definition: PartitionDefinition, raw_file: Path) -> None:

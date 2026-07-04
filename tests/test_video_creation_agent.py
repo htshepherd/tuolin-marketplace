@@ -408,6 +408,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("对外英文名：Specialty Glass Fiber Tape", plan_text)
             self.assertIn("允许 55-65 秒", plan_text)
             self.assertIn("content_asset/quartz_product_photo", plan_text)
+            self.assertIn("## 视频创作素材准备度", plan_text)
+            self.assertIn("产品图片素材：1", plan_text)
+            self.assertIn("可用于 image2video/reuse_video 的真实参考素材：1", plan_text)
             self.assertIn("音乐 brief", plan_text)
             self.assertIn("不得使用 video_script", plan_text)
             self.assertIn("不得使用母版/master", plan_text)
@@ -426,6 +429,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("hook", plan["creative_quality"])
             self.assertIn("dexhunter/seedance2-skill", {item["source"] for item in plan["external_skill_absorption"]})
             self.assertTrue(plan["prompt_policy"]["visible_product_requires_real_reference"])
+            self.assertEqual(plan["material_availability"]["counts"]["product_image_assets"], 1)
+            self.assertEqual(plan["material_availability"]["counts"]["usable_visual_reference_assets"], 1)
+            self.assertEqual(plan["material_availability"]["usable_visual_references"][0]["id"], "content_asset/quartz_product_photo")
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertFalse(state["confirmations"]["video_plan"])
@@ -1440,6 +1446,8 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             f"human_face_risk: {human_face_risk}",
             "related_products:",
             "  - product/quartz_fiber_tape",
+            "files:",
+            "  - raw/01_产品/02_石英纤维隔热带/02_产品图片/product.jpg",
             "usable_for:",
             "  - video_creation",
         ],

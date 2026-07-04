@@ -114,6 +114,8 @@ Rules:
 - For product partitions, always report progress for the five fixed product subfolders: `01_检测报告与认证`, `02_产品图片`, `03_产品视频`, `04_应用场景素材`, and `05_测试验证素材`.
 - Product status answers must distinguish “业务可用” from “素材处理完成”. If any fixed product subfolder is `not_started` or `in_progress`, say the product can be used only as current knowledge, and there is still material work left.
 - Always report PDF and video processing progress separately, because registered evidence does not mean OCR or video keyframes are complete.
+- After organizing a product partition, always give a human-readable completion receipt: how many raw files were registered, which knowledge card IDs were generated or updated by type, where the receipt report is, and whether the generated `content_asset` cards are usable by the video creation Agent. Do not tell the user to “同步 content_asset 卡” or use schema terms as the primary instruction; translate it into “已整理出可用于视频创作的图片/视频素材” or “还没有可用于视频创作的真实素材”.
+- Product media `content_asset` cards created from `02_产品图片`, `03_产品视频`, `04_应用场景素材`, or `05_测试验证素材` must preserve local file paths and be marked usable for `video_creation`. They may only prove that a local media asset exists; they must not be used as evidence for product performance, certification, temperature, or safety claims.
 
 ## Partition Scope Protocol
 
