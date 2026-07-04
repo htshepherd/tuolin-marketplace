@@ -17,6 +17,7 @@ from ..shared.project_layout import ProjectPaths
 INTERNAL_PRODUCT_ID = "product/quartz_fiber_tape"
 INTERNAL_PRODUCT_NAME = "石英纤维隔热带"
 RUN_DIR_PRODUCT_SLUG = "quartz_fiber_tape"
+VIDEO_CREATION_PRODUCT_ALIAS_IDS = ["product/quartz_fiber_exhaust_wrap"]
 SUPPORTED_LANGUAGE_VERSIONS = {"zh", "en"}
 SUPPORTED_DURATIONS = {60, 90, 120}
 SUPPORTED_PLATFORMS = {"youtube_shorts", "tiktok"}
@@ -416,6 +417,8 @@ def create_video_creation_run(
         "context": {
             "context_id": context["context_id"],
             "product_id": context["product_id"],
+            "canonical_product_id": context.get("canonical_product_id", INTERNAL_PRODUCT_ID),
+            "product_alias_ids": context.get("product_alias_ids", []),
             "raw_access": context["raw_access"],
             "policy": context["policy"],
         },
@@ -1993,7 +1996,9 @@ def _initial_workflow_state(
         "updated_at": timestamp,
         "run_dir": str(run_dir),
         "product": {
-            "internal_id": INTERNAL_PRODUCT_ID,
+            "internal_id": context.get("product_id") or INTERNAL_PRODUCT_ID,
+            "canonical_id": INTERNAL_PRODUCT_ID,
+            "compatible_alias_ids": VIDEO_CREATION_PRODUCT_ALIAS_IDS,
             "internal_name": INTERNAL_PRODUCT_NAME,
         },
         "language_version": requirements["language_version"],
@@ -2022,6 +2027,8 @@ def _initial_workflow_state(
             "context_id": context["context_id"],
             "task_type": context["task_type"],
             "product_id": context["product_id"],
+            "canonical_product_id": context.get("canonical_product_id", INTERNAL_PRODUCT_ID),
+            "product_alias_ids": context.get("product_alias_ids", []),
             "raw_access": context["raw_access"],
             "policy": context["policy"],
         },
@@ -2171,10 +2178,14 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         "generated_at": now.isoformat(),
         "status": "draft_pending_confirmation",
         "product": {
-            "internal_id": INTERNAL_PRODUCT_ID,
+            "internal_id": product.get("id") or context.get("product_id") or INTERNAL_PRODUCT_ID,
+            "canonical_id": INTERNAL_PRODUCT_ID,
+            "compatible_alias_ids": VIDEO_CREATION_PRODUCT_ALIAS_IDS,
             "internal_name": INTERNAL_PRODUCT_NAME,
             "external_name_zh": external_names["zh"],
             "external_name_en": external_names["en"],
+            "usage_scope": product.get("usage_scope", ""),
+            "status": product.get("status", ""),
         },
         "language_version": language,
         "platforms": state["platforms"],
@@ -2199,6 +2210,12 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
             "content_assets_prove_product_facts": False,
             "no_keyword_expansion": True,
             "no_write_back_to_knowledge": True,
+            "canonical_product_id": context.get("canonical_product_id", INTERNAL_PRODUCT_ID),
+            "resolved_product_id": product.get("id") or context.get("product_id"),
+            "product_usage_scope": product.get("usage_scope", ""),
+            "external_publication_ready": product.get("usage_scope") == "external_allowed",
+            "draft_only_until_external_review": product.get("usage_scope") == "review_before_external",
+            "review_before_external_rule": "可用于内部策划和 dry-run 草稿；正式外发成片前必须复核为 external_allowed，或删除高风险 claim。",
         },
         "usable_product_knowledge": _usable_product_knowledge(product),
         "content_assets": [_content_asset_summary(card) for card in content_assets],
@@ -4061,6 +4078,14 @@ def _video_creation_planning_quality_issues(state: dict[str, Any]) -> dict[str, 
             blockers.append({"code": "missing_creative_quality_matrix", "message": "视频策划缺少按创意方向切换的质量矩阵。"})
         if not plan.get("production_style"):
             blockers.append({"code": "missing_product_video_style", "message": "视频策划缺少工业产品视频风格矩阵映射。"})
+        boundary = plan.get("knowledge_boundary", {})
+        if boundary.get("draft_only_until_external_review"):
+            blockers.append(
+                {
+                    "code": "product_requires_external_review",
+                    "message": "产品知识卡 usage_scope 为 review_before_external；可做内部策划/dry-run，但正式成片外发前必须复核为 external_allowed 或删除高风险 claim。",
+                }
+            )
         absorbed = {item.get("source") for item in plan.get("external_skill_absorption", [])}
         if "dexhunter/seedance2-skill" not in absorbed:
             warnings.append({"code": "seedance_prompt_reference_not_recorded", "message": "策划未记录 dexhunter/seedance2-skill 的 Prompt 规则吸收来源。"})

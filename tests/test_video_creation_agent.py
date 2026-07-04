@@ -122,6 +122,41 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["adapters"]["bgm_provider"], "manual_licensed_file")
             self.assertTrue(Path(state["files"]["context"]).exists())
 
+    def test_video_creation_resolves_legacy_quartz_product_id_and_draft_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_legacy_quartz_video_cards(paths)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。",
+                language_version="en",
+                platforms=["youtube_shorts", "tiktok"],
+                duration_seconds=60,
+                target_audience="欧美工业采购商",
+                core_objective="突出隔热、易施工和采购判断",
+                primary_direction="3",
+                supporting_direction="产品细节型",
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["context"]["product_id"], "product/quartz_fiber_exhaust_wrap")
+            self.assertEqual(state["context"]["canonical_product_id"], "product/quartz_fiber_tape")
+            self.assertIn("product/quartz_fiber_exhaust_wrap", state["context"]["product_alias_ids"])
+
+            generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+
+            plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["product"]["internal_id"], "product/quartz_fiber_exhaust_wrap")
+            self.assertEqual(plan["product"]["canonical_id"], "product/quartz_fiber_tape")
+            self.assertEqual(plan["product"]["usage_scope"], "review_before_external")
+            self.assertTrue(plan["knowledge_boundary"]["draft_only_until_external_review"])
+            self.assertFalse(plan["knowledge_boundary"]["external_publication_ready"])
+            self.assertEqual(plan["content_assets"][0]["id"], "content_asset/quartz_legacy_product_photo")
+
     def test_video_creation_run_captures_adapter_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(
@@ -1409,6 +1444,64 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             "  - video_creation",
         ],
         "可用于视频创作的产品素材；不能单独证明产品性能事实。",
+    )
+
+
+def _write_legacy_quartz_video_cards(paths) -> None:
+    _write_card(
+        paths.knowledge_dir / "产品" / "石英纤维隔热带.md",
+        [
+            "card_template_version: product-card-v1",
+            "type: product",
+            "id: product/quartz_fiber_exhaust_wrap",
+            "title: 石英纤维隔热带",
+            "aliases:",
+            "  - product/quartz_fiber_tape",
+            "  - 特种玻璃纤维带",
+            "  - Quartz Fiber Exhaust Wrap",
+            "status: official",
+            "usage_scope: review_before_external",
+            "raw_partitions:",
+            "  - raw/04_产品/01_石英纤维隔热带/",
+            "tags:",
+            "  - 产品",
+            "updated_at: 2026-06-25T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "product_line: 耐高温隔热带",
+            "related_refs: []",
+        ],
+        "石英纤维隔热带是首期视频创作产品；外发前需要复核高风险 claim。",
+    )
+    _write_card(
+        paths.knowledge_dir / "内容素材" / "quartz_legacy_product_photo.md",
+        [
+            "card_template_version: content-asset-card-v1",
+            "type: content_asset",
+            "id: content_asset/quartz_legacy_product_photo",
+            "title: 石英纤维隔热带精选图片",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/04_产品/01_石英纤维隔热带/精选图片/",
+            "tags:",
+            "  - 产品图片",
+            "updated_at: 2026-06-25T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "asset_category: 产品图片",
+            "media_types:",
+            "  - image",
+            "human_face_risk: none",
+            "related_products:",
+            "  - product/quartz_fiber_exhaust_wrap",
+            "usable_for:",
+            "  - video_creation",
+        ],
+        "可用于视频创作的石英纤维隔热带产品素材。",
     )
 
 

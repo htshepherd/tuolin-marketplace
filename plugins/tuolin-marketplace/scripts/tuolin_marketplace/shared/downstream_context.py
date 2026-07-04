@@ -22,6 +22,17 @@ TASK_TYPES = {
         "audience": "external",
         "card_types": ["product", "content_asset"],
         "fixed_product_id": "product/quartz_fiber_tape",
+        "product_alias_ids": ["product/quartz_fiber_exhaust_wrap"],
+        "product_terms": [
+            "石英纤维隔热带",
+            "石英纤维",
+            "quartz fiber tape",
+            "quartz fiber exhaust wrap",
+            "fiberglass tape",
+            "glass fiber tape",
+        ],
+        "allowed_external_scopes": ["external_allowed", "review_before_external"],
+        "review_before_external_draft_only": True,
         "no_keyword_expansion": True,
     },
     "customer_support": {"audience": "internal", "card_types": ["product", "customer_question", "sales_material"]},
@@ -40,37 +51,50 @@ def build_downstream_context(
 
     config = TASK_TYPES[task_type]
     fixed_product_id = config.get("fixed_product_id")
+    product_alias_ids = [str(item) for item in config.get("product_alias_ids", [])]
+    product_terms = [str(item) for item in config.get("product_terms", [])]
     if fixed_product_id:
-        if product_id and product_id != fixed_product_id:
+        supported_ids = [fixed_product_id, *product_alias_ids]
+        if product_id and product_id not in supported_ids:
             raise ValueError(f"{task_type} only supports {fixed_product_id}")
         product_id = fixed_product_id
+    product_ids = [item for item in [product_id, *product_alias_ids] if item]
+    allowed_external_scopes = config.get("allowed_external_scopes")
 
     audience = config["audience"]
     selected = _select_cards(
         paths,
         config["card_types"],
         audience,
-        product_id,
+        product_ids,
+        product_terms,
         query,
+        allowed_external_scopes=allowed_external_scopes if isinstance(allowed_external_scopes, list) else None,
         allow_query_expansion=not config.get("no_keyword_expansion", False),
     )
+    product_cards = [card for card in selected if card.get("type") == "product"]
+    resolved_product_id = product_cards[0]["id"] if product_cards else product_id
     evidence = _collect_evidence(paths, selected)
-    risks = _review_risks(paths, selected, product_id) if include_review_items else []
+    risks = _review_risks(paths, selected, product_ids) if include_review_items else []
     excluded_summary = _excluded_summary(
         paths,
         config["card_types"],
         audience,
-        product_id,
+        product_ids,
+        product_terms,
         query,
+        allowed_external_scopes=allowed_external_scopes if isinstance(allowed_external_scopes, list) else None,
         allow_query_expansion=not config.get("no_keyword_expansion", False),
     )
     status = knowledge_status(paths)
-    context_id = _context_id(task_type, product_id, query)
+    context_id = _context_id(task_type, resolved_product_id, query)
     context = {
         "context_id": context_id,
         "task_type": task_type,
         "audience": audience,
-        "product_id": product_id,
+        "product_id": resolved_product_id,
+        "canonical_product_id": product_id,
+        "product_alias_ids": product_alias_ids,
         "query": query,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "interface_revision": status["manifest"]["interface_revision"],
@@ -84,11 +108,14 @@ def build_downstream_context(
             "source_boundary": "generated/agent-interface only",
             "official_only": True,
             "external_requires": "external_allowed",
+            "allowed_external_scopes": allowed_external_scopes or ["external_allowed"],
+            "review_before_external_draft_only": bool(config.get("review_before_external_draft_only", False)),
             "review_items_are_facts": False,
             "contexts_are_formal_knowledge": False,
             "content_assets_prove_product_facts": False,
             "no_keyword_expansion": bool(config.get("no_keyword_expansion", False)),
             "fixed_product_scope": fixed_product_id,
+            "fixed_product_alias_ids": product_alias_ids,
         },
         "note": "下游任务上下文只用于本次任务，不是正式知识；不得扫描 raw，也不得把上下文结论写回 knowledge/okf/。",
     }
@@ -100,16 +127,18 @@ def _select_cards(
     paths: ProjectPaths,
     card_types: list[str],
     audience: str,
-    product_id: str | None,
+    product_ids: list[str] | None,
+    product_terms: list[str] | None,
     query: str | None,
+    allowed_external_scopes: list[str] | None = None,
     allow_query_expansion: bool = True,
 ) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
     for card_type in card_types:
         for card in read_cards_by_type(paths, card_type, include_non_official=True):
-            if not _usable_for_audience(card, audience):
+            if not _usable_for_audience(card, audience, allowed_external_scopes):
                 continue
-            if product_id and not _relates_to_product(card, product_id):
+            if product_ids and not _relates_to_any_product(card, product_ids, product_terms or []):
                 continue
             if query and _query_sensitive(card["type"]) and not _matches_query(card, query):
                 continue
@@ -117,8 +146,8 @@ def _select_cards(
 
     if query and allow_query_expansion:
         for card in search_cards(paths, query, include_non_official=True, limit=20):
-            if card["type"] in card_types and _usable_for_audience(card, audience):
-                if product_id and not _relates_to_product(card, product_id):
+            if card["type"] in card_types and _usable_for_audience(card, audience, allowed_external_scopes):
+                if product_ids and not _relates_to_any_product(card, product_ids, product_terms or []):
                     continue
                 cards.append(card)
     return _dedupe(cards)
@@ -131,7 +160,7 @@ def _collect_evidence(paths: ProjectPaths, cards: list[dict[str, Any]]) -> list[
     return _dedupe(evidence)
 
 
-def _review_risks(paths: ProjectPaths, cards: list[dict[str, Any]], product_id: str | None) -> list[dict[str, Any]]:
+def _review_risks(paths: ProjectPaths, cards: list[dict[str, Any]], product_ids: list[str] | None) -> list[dict[str, Any]]:
     selected_ids = {card["id"] for card in cards}
     risks = []
     for review in open_reviews(paths):
@@ -139,7 +168,7 @@ def _review_risks(paths: ProjectPaths, cards: list[dict[str, Any]], product_id: 
         if selected_ids & affected:
             risks.append(_risk_item(review))
             continue
-        if product_id and (product_id in affected or any(product_id in item for item in affected)):
+        if product_ids and any(product_id in affected or any(product_id in item for item in affected) for product_id in product_ids):
             risks.append(_risk_item(review))
     return risks
 
@@ -148,41 +177,61 @@ def _excluded_summary(
     paths: ProjectPaths,
     card_types: list[str],
     audience: str,
-    product_id: str | None,
+    product_ids: list[str] | None,
+    product_terms: list[str] | None,
     query: str | None,
+    allowed_external_scopes: list[str] | None = None,
     allow_query_expansion: bool = True,
 ) -> dict[str, int]:
     counts = {"draft": 0, "review_required": 0, "archived": 0, "usage_scope_blocked": 0}
     for card_type in card_types:
         for card in read_cards_by_type(paths, card_type, include_non_official=True):
-            if product_id and not _relates_to_product(card, product_id):
+            if product_ids and not _relates_to_any_product(card, product_ids, product_terms or []):
                 continue
             if allow_query_expansion and query and _query_sensitive(card_type) and not _matches_query(card, query):
                 continue
             status = card.get("status")
             if status in counts:
                 counts[status] += 1
-            elif not _usable_for_audience(card, audience):
+            elif not _usable_for_audience(card, audience, allowed_external_scopes):
                 counts["usage_scope_blocked"] += 1
     return counts
 
 
-def _usable_for_audience(card: dict[str, Any], audience: str) -> bool:
+def _usable_for_audience(card: dict[str, Any], audience: str, allowed_external_scopes: list[str] | None = None) -> bool:
     if card.get("status") != "official":
         return False
     scope = card.get("usage_scope")
     if scope in {"evidence_only", "not_answerable"}:
         return False
     if audience == "external":
-        return scope == "external_allowed"
+        return scope in set(allowed_external_scopes or ["external_allowed"])
     return scope in {"external_allowed", "internal_only"}
 
 
-def _relates_to_product(card: dict[str, Any], product_id: str) -> bool:
+def _relates_to_any_product(card: dict[str, Any], product_ids: list[str], product_terms: list[str]) -> bool:
+    return any(_relates_to_product(card, product_id, product_terms) for product_id in product_ids)
+
+
+def _relates_to_product(card: dict[str, Any], product_id: str, product_terms: list[str] | None = None) -> bool:
     if card["id"] == product_id:
         return True
     frontmatter = card.get("frontmatter", {})
-    return product_id in frontmatter.get("related_products", []) or product_id in frontmatter.get("related_refs", [])
+    if product_id in frontmatter.get("related_products", []) or product_id in frontmatter.get("related_refs", []):
+        return True
+    if card.get("type") != "product":
+        return False
+    terms = [term.lower() for term in (product_terms or []) if term]
+    if not terms:
+        return False
+    text = " ".join(
+        [
+            str(card.get("title", "")),
+            " ".join(str(item) for item in card.get("aliases", [])),
+            " ".join(str(item) for item in card.get("tags", [])),
+        ]
+    ).lower()
+    return any(term in text for term in terms)
 
 
 def _matches_query(card: dict[str, Any], query: str) -> bool:
