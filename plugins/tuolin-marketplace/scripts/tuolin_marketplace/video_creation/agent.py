@@ -2953,11 +2953,70 @@ def _material_reference_execution_strategy(media_kind: str) -> str:
     return "pass_to_dreamina_cli_input"
 
 
+_MATERIAL_PATH_KEYS = (
+    "files",
+    "file",
+    "file_paths",
+    "file_path",
+    "paths",
+    "path",
+    "local_paths",
+    "local_path",
+    "source_paths",
+    "source_path",
+    "original_paths",
+    "original_path",
+    "asset_paths",
+    "asset_path",
+    "media_files",
+    "media_file",
+    "raw_files",
+    "raw_file",
+)
+
+
+def _extract_material_paths(material: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    for key in _MATERIAL_PATH_KEYS:
+        if key in material:
+            paths.extend(_flatten_material_path_values(material.get(key)))
+    # raw_partitions are usually directories, so keep them as a last-resort fallback
+    # for reports, but prefer explicit file/local path fields for Dreamina execution.
+    if not paths and material.get("raw_partitions"):
+        paths.extend(_flatten_material_path_values(material.get("raw_partitions")))
+    seen: set[str] = set()
+    unique: list[str] = []
+    for path in paths:
+        clean = str(path).strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            unique.append(clean)
+    return unique
+
+
+def _flatten_material_path_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Path):
+        return [str(value)]
+    if isinstance(value, dict):
+        values: list[str] = []
+        for key in _MATERIAL_PATH_KEYS:
+            if key in value:
+                values.extend(_flatten_material_path_values(value.get(key)))
+        return values
+    if isinstance(value, (list, tuple, set)):
+        values: list[str] = []
+        for item in value:
+            values.extend(_flatten_material_path_values(item))
+        return values
+    return [str(value)]
+
+
 def _material_local_paths(material: dict[str, Any]) -> list[str]:
-    values = material.get("files") or material.get("file_paths") or material.get("paths") or material.get("raw_partitions") or []
-    if isinstance(values, str):
-        return [values]
-    return [str(item) for item in values if str(item).strip()]
+    return _extract_material_paths(material)
 
 
 def _material_reference_limit_blockers(material_reference_map: dict[str, Any], capability_profile: dict[str, Any]) -> list[str]:
@@ -3649,6 +3708,20 @@ def _submit_dreamina_jobs_payload(
                 }
             )
             continue
+        if not command:
+            submissions.append(
+                {
+                    "job_id": job["job_id"],
+                    "shot_id": job["shot_id"],
+                    "job_type": job["job_type"],
+                    "status": "submission_blocked",
+                    "provider_task_id": None,
+                    "command": command,
+                    "expected_output_path": str(output_path),
+                    "error": "缺少可执行即梦命令；请检查素材文件路径和任务验证结果。",
+                }
+            )
+            continue
         if not execute:
             submissions.append(
                 {
@@ -3684,7 +3757,7 @@ def _submit_dreamina_jobs_payload(
         "schema_version": "dreamina-submission-v1",
         "submitted_at": now.isoformat(),
         "mode": "execute" if execute else "dry_run",
-        "status": "submitted" if all(item["status"] != "submission_failed" for item in submissions) else "partial_failure",
+        "status": "submitted" if all(item["status"] not in {"submission_failed", "submission_blocked"} for item in submissions) else "partial_failure",
         "run_dir": jobs_payload["run_dir"],
         "estimated_total_credits": jobs_payload["estimated_total_credits"],
         "submissions": submissions,
@@ -3704,7 +3777,9 @@ def _write_manual_dreamina_submission_assets(submission: dict[str, Any], script_
     script_path.parent.mkdir(parents=True, exist_ok=True)
     manual_submission = _manual_submission_template(submission)
     template_path.write_text(json.dumps(manual_submission, ensure_ascii=False, indent=2), encoding="utf-8")
-    script_path.write_text(_render_manual_dreamina_submit_ps1(submission), encoding="utf-8")
+    # Windows PowerShell 5 treats UTF-8 without BOM as the active ANSI code page.
+    # Write a BOM so Chinese product names and prompts survive manual execution.
+    script_path.write_text(_render_manual_dreamina_submit_ps1(submission), encoding="utf-8-sig")
 
 
 def _manual_submission_template(submission: dict[str, Any]) -> dict[str, Any]:
@@ -3747,6 +3822,25 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
                     "  stdout = \"\"",
                     "  stderr = \"\"",
                     "  error = $null",
+                    "}",
+                    "",
+                ]
+            )
+            continue
+        if item.get("status") == "submission_blocked":
+            lines.extend(
+                [
+                    f"Write-Host \"Skipping shot {item['shot_id']} ({item['job_type']}): submission blocked\"",
+                    "$submissions += [ordered]@{",
+                    f"  job_id = {_ps_quote(item['job_id'])}",
+                    f"  shot_id = {_ps_quote(item['shot_id'])}",
+                    f"  job_type = {_ps_quote(item['job_type'])}",
+                    "  status = \"submission_blocked\"",
+                    "  provider_task_id = \"\"",
+                    f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
+                    "  stdout = \"\"",
+                    "  stderr = \"\"",
+                    f"  error = {_ps_quote(str(item.get('error') or '缺少可执行即梦命令'))}",
                     "}",
                     "",
                 ]
@@ -4046,13 +4140,15 @@ def _dreamina_submit_command(job: dict[str, Any], dreamina_command: str, output_
         ]
     if job_type == "image2video":
         material_path = _reference_material_path(job, _project_dir_from_generated_output(output_path))
+        if not material_path:
+            return []
         base = [
             dreamina_command,
             "image2video",
             "--model_version",
             model,
             "--image",
-            material_path or "",
+            material_path,
             "--prompt",
             job.get("prompt", ""),
             "--duration",
@@ -4105,11 +4201,25 @@ def _dreamina_cli_resolution(value: str) -> str:
 
 def _reference_material_path(job: dict[str, Any], project_dir: Path | None = None) -> str | None:
     selected = job.get("selected_material") or {}
-    files = selected.get("files") or selected.get("file_paths") or selected.get("paths") or []
-    if isinstance(files, str):
-        return _resolve_material_path(files, project_dir)
-    if files:
-        return _resolve_material_path(str(files[0]), project_dir)
+    files = _extract_material_paths(selected)
+    preferred = _first_compatible_material_file(files, str(job.get("job_type") or ""))
+    if preferred:
+        return _resolve_material_path(preferred, project_dir)
+    return None
+
+
+def _first_compatible_material_file(files: list[str], job_type: str) -> str | None:
+    if not files:
+        return None
+    image_suffixes = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"}
+    video_suffixes = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
+    suffixes = image_suffixes if job_type in {"image2video", "reuse_image"} else video_suffixes if job_type == "reuse_video" else image_suffixes | video_suffixes
+    for value in files:
+        if Path(value).suffix.lower() in suffixes:
+            return value
+    for value in files:
+        if Path(value).suffix:
+            return value
     return None
 
 
@@ -5012,6 +5122,10 @@ def _validate_dreamina_job(
         blockers.append(f"镜头时长 {duration} 秒超出 Seedance 能力配置范围 {min_duration}-{max_duration} 秒。")
     if shot.get("product_visible") and job_type == "text2video":
         blockers.append("可见产品镜头不能规划为 text2video。")
+    if job_type == "image2video":
+        files = _extract_material_paths(shot.get("selected_material") or {})
+        if not _first_compatible_material_file(files, "image2video"):
+            blockers.append("image2video 任务缺少可用图片文件路径，不能生成即梦提交命令。")
     if prompt.get("reference_required") and not prompt.get("reference_material_id"):
         blockers.append("Prompt 要求参考素材，但任务缺少 reference_material_id。")
     if prompt.get("reference_required") and not prompt.get("numbered_reference_label"):
@@ -5097,7 +5211,9 @@ def _usable_product_knowledge(product: dict[str, Any]) -> list[str]:
 def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any]:
     frontmatter = card.get("frontmatter", {})
     raw_partitions = card.get("raw_partitions", [])
-    files = frontmatter.get("files") or frontmatter.get("file_paths") or frontmatter.get("paths") or raw_partitions
+    files = _extract_material_paths(frontmatter)
+    if not files:
+        files = _extract_material_paths({"raw_partitions": raw_partitions})
     return {
         "id": card["id"],
         "title": card.get("title", ""),

@@ -979,6 +979,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             ps1_text = manual_ps1.read_text(encoding="utf-8")
             self.assertIn("manual_submission.json", ps1_text)
             self.assertIn("--model_version", ps1_text)
+            self.assertTrue(manual_ps1.read_bytes().startswith(b"\xef\xbb\xbf"))
+            self.assertNotIn("'--image' '--prompt'", ps1_text)
+            self.assertIn("product.jpg", ps1_text)
             template = json.loads(manual_template.read_text(encoding="utf-8"))
             self.assertEqual(template["mode"], "manual_execute")
             self.assertTrue(all(item["status"] == "pending_manual_execution" for item in template["submissions"]))
@@ -987,6 +990,25 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["current_pending_confirmation"], "查询即梦结果")
             self.assertEqual(state["files"]["dreamina_submission_json"], str(submission_json))
             self.assertEqual(state["files"]["dreamina_manual_submit_ps1"], str(manual_ps1))
+
+    def test_dreamina_submission_uses_content_asset_local_path_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_generation_confirmed_run(Path(tmp))
+            jobs_path = run_dir / "dreamina_generation" / "dreamina_jobs.json"
+            jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
+            for job in jobs["jobs"]:
+                selected = job["selected_material"]
+                selected.pop("files", None)
+                selected["local_path"] = "raw/01_产品/02_石英纤维隔热带/02_产品图片/local-product.png"
+                job["validation"] = {"status": "ok", "messages": ["ok"]}
+            jobs_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            submit_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 40, 0))
+
+            manual_ps1 = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
+            ps1_text = manual_ps1.read_text(encoding="utf-8-sig")
+            self.assertIn("local-product.png", ps1_text)
+            self.assertNotIn("'--image' '--prompt'", ps1_text)
 
     def test_cannot_submit_dreamina_jobs_without_generation_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
