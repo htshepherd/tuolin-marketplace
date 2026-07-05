@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import wave
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -1039,7 +1040,10 @@ def submit_dreamina_jobs(
     submission = _submit_dreamina_jobs_payload(jobs_payload, execute, command, runner, now or datetime.now())
     submission_json_path = run_dir / "dreamina_generation" / "dreamina_submission.json"
     submission_md_path = run_dir / "dreamina_generation" / "dreamina_submission.md"
+    manual_script_path = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
+    manual_template_path = run_dir / "dreamina_generation" / "manual_submission_template.json"
     submission_json_path.write_text(json.dumps(submission, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_manual_dreamina_submission_assets(submission, manual_script_path, manual_template_path)
     submission_md_path.write_text(_render_dreamina_submission(submission), encoding="utf-8")
 
     timestamp = _timestamp(now)
@@ -1051,6 +1055,8 @@ def submit_dreamina_jobs(
     files = state.setdefault("files", {})
     files["dreamina_submission_md"] = str(submission_md_path)
     files["dreamina_submission_json"] = str(submission_json_path)
+    files["dreamina_manual_submit_ps1"] = str(manual_script_path)
+    files["dreamina_manual_submission_template_json"] = str(manual_template_path)
     _append_status_history(state, state["status"], timestamp)
     _write_state(state_path, state)
     mode = "真实提交" if execute else "dry-run 提交记录"
@@ -1061,7 +1067,7 @@ def submit_dreamina_jobs(
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
-        output_paths=(str(submission_md_path), str(submission_json_path)),
+        output_paths=(str(submission_md_path), str(submission_json_path), str(manual_script_path), str(manual_template_path)),
     )
 
 
@@ -1078,7 +1084,11 @@ def query_dreamina_results(
     if state.get("phase") not in {"awaiting_dreamina_results", "awaiting_shot_confirmation"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能查询即梦结果。")
 
+    manual_submission_path = run_dir / "dreamina_generation" / "manual_submission.json"
     submission_json_path = Path(state.get("files", {}).get("dreamina_submission_json", run_dir / "dreamina_generation" / "dreamina_submission.json"))
+    if manual_submission_path.exists():
+        submission_json_path = manual_submission_path
+        execute = True
     submission = _load_json_file(submission_json_path, "dreamina_submission.json")
     command = dreamina_command or _state_adapter_command(state, "dreamina_command", "dreamina")
     results = _query_dreamina_results_payload(submission, execute, command, runner, now or datetime.now())
@@ -3655,7 +3665,7 @@ def _submit_dreamina_jobs_payload(
             continue
         completed = runner(command, capture_output=True, text=True, check=False)
         parsed = _parse_dreamina_json_output(completed.stdout)
-        provider_task_id = parsed.get("task_id") or parsed.get("id") or parsed.get("job_id")
+        provider_task_id = parsed.get("submit_id") or parsed.get("task_id") or parsed.get("id") or parsed.get("job_id")
         submissions.append(
             {
                 "job_id": job["job_id"],
@@ -3678,6 +3688,11 @@ def _submit_dreamina_jobs_payload(
         "run_dir": jobs_payload["run_dir"],
         "estimated_total_credits": jobs_payload["estimated_total_credits"],
         "submissions": submissions,
+        "manual_execution": {
+            "required_when_agent_execute_is_blocked": True,
+            "powershell_script": str(Path(jobs_payload["run_dir"]) / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"),
+            "manual_submission_json": str(Path(jobs_payload["run_dir"]) / "dreamina_generation" / "manual_submission.json"),
+        },
         "policy": {
             "submitted_only_after_user_confirmation": True,
             "dry_run_does_not_consume_credits": not execute,
@@ -3685,13 +3700,121 @@ def _submit_dreamina_jobs_payload(
     }
 
 
+def _write_manual_dreamina_submission_assets(submission: dict[str, Any], script_path: Path, template_path: Path) -> None:
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    manual_submission = _manual_submission_template(submission)
+    template_path.write_text(json.dumps(manual_submission, ensure_ascii=False, indent=2), encoding="utf-8")
+    script_path.write_text(_render_manual_dreamina_submit_ps1(submission), encoding="utf-8")
+
+
+def _manual_submission_template(submission: dict[str, Any]) -> dict[str, Any]:
+    manual = deepcopy(submission)
+    manual["mode"] = "manual_execute"
+    manual["status"] = "pending_manual_execution"
+    for item in manual.get("submissions", []):
+        if item.get("status") == "dry_run_submitted":
+            item["status"] = "pending_manual_execution"
+            item["provider_task_id"] = ""
+            item["stdout"] = ""
+            item["stderr"] = ""
+            item["error"] = None
+    manual["policy"]["dry_run_does_not_consume_credits"] = False
+    manual["policy"]["manual_execution_by_human"] = True
+    return manual
+
+
+def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
+    output_json = Path(submission["run_dir"]) / "dreamina_generation" / "manual_submission.json"
+    lines = [
+        "$ErrorActionPreference = \"Stop\"",
+        "# This script performs real Dreamina submissions and may consume credits.",
+        "# Run only after human confirmation.",
+        f"$manualSubmissionPath = {_ps_quote(str(output_json))}",
+        "$submissions = @()",
+        "",
+    ]
+    for item in submission.get("submissions", []):
+        if item.get("status") == "reused":
+            lines.extend(
+                [
+                    "$submissions += [ordered]@{",
+                    f"  job_id = {_ps_quote(item['job_id'])}",
+                    f"  shot_id = {_ps_quote(item['shot_id'])}",
+                    f"  job_type = {_ps_quote(item['job_type'])}",
+                    "  status = \"reused\"",
+                    "  provider_task_id = \"\"",
+                    f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
+                    "  stdout = \"\"",
+                    "  stderr = \"\"",
+                    "  error = $null",
+                    "}",
+                    "",
+                ]
+            )
+            continue
+        command = item.get("command") or []
+        command_line = " ".join(_ps_quote(str(part)) for part in command)
+        lines.extend(
+            [
+                f"Write-Host \"Submitting shot {item['shot_id']} ({item['job_type']})\"",
+                f"$stdout = & {command_line}",
+                "$parsed = $stdout | ConvertFrom-Json",
+                "$submitId = $parsed.submit_id",
+                "if (-not $submitId) { $submitId = $parsed.task_id }",
+                "if (-not $submitId) { $submitId = $parsed.id }",
+                "if (-not $submitId) { throw \"Dreamina did not return submit_id.\" }",
+                "$submissions += [ordered]@{",
+                f"  job_id = {_ps_quote(item['job_id'])}",
+                f"  shot_id = {_ps_quote(item['shot_id'])}",
+                f"  job_type = {_ps_quote(item['job_type'])}",
+                "  status = \"submitted\"",
+                "  provider_task_id = $submitId",
+                f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
+                "  stdout = ($stdout | Out-String)",
+                "  stderr = \"\"",
+                "  error = $null",
+                "}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "$manual = [ordered]@{",
+            "  schema_version = \"dreamina-submission-v1\"",
+            "  submitted_at = (Get-Date).ToString(\"o\")",
+            "  mode = \"manual_execute\"",
+            "  status = \"submitted\"",
+            f"  run_dir = {_ps_quote(submission['run_dir'])}",
+            f"  estimated_total_credits = {int(submission.get('estimated_total_credits') or 0)}",
+            "  submissions = $submissions",
+            "  policy = [ordered]@{",
+            "    submitted_only_after_user_confirmation = $true",
+            "    dry_run_does_not_consume_credits = $false",
+            "    manual_execution_by_human = $true",
+            "  }",
+            "}",
+            "$manual | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $manualSubmissionPath",
+            "Write-Host \"Wrote manual submission file: $manualSubmissionPath\"",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _ps_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def _render_dreamina_submission(submission: dict[str, Any]) -> str:
+    manual = submission.get("manual_execution", {})
     lines = [
         "# 即梦提交记录",
         "",
         f"- 模式：{submission['mode']}",
         f"- 状态：{submission['status']}",
         f"- 预计额度：{submission['estimated_total_credits']}",
+        f"- 人工真实提交脚本：{manual.get('powershell_script') or '未生成'}",
+        f"- 人工提交结果文件：{manual.get('manual_submission_json') or '未生成'}",
         "",
         "## 提交明细",
         "",
@@ -3709,7 +3832,18 @@ def _render_dreamina_submission(submission: dict[str, Any]) -> str:
                 "",
             ]
         )
-    lines.extend(["下一步：查询即梦结果。", ""])
+    lines.extend(
+        [
+            "## 人工真实提交",
+            "",
+            "- 如果当前环境不能代为真实提交，请在 PowerShell 手动执行上面的 `submit_real_dreamina_jobs.ps1`。",
+            "- 脚本会把真实 submit_id 写入 `manual_submission.json`。",
+            "- `manual_submission.json` 存在时，后续查询会优先使用真实 submit_id。",
+            "",
+            "下一步：查询即梦结果。",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -3722,7 +3856,8 @@ def _query_dreamina_results_payload(
 ) -> dict[str, Any]:
     results = []
     for item in submission.get("submissions", []):
-        command = _dreamina_status_command(dreamina_command, item.get("provider_task_id"))
+        download_dir = str(Path(item["expected_output_path"]).parent) if item.get("expected_output_path") else None
+        command = _dreamina_status_command(dreamina_command, item.get("provider_task_id"), download_dir)
         if item["status"] == "reused":
             results.append(
                 {
@@ -3754,10 +3889,13 @@ def _query_dreamina_results_payload(
             continue
         completed = runner(command, capture_output=True, text=True, check=False)
         parsed = _parse_dreamina_json_output(completed.stdout)
-        provider_status = str(parsed.get("status") or parsed.get("state") or "").lower()
+        provider_status = str(parsed.get("gen_status") or parsed.get("status") or parsed.get("state") or "").lower()
         status = "succeeded" if provider_status in {"succeeded", "success", "completed", "done"} else "pending"
+        if provider_status in {"fail", "failed", "error"}:
+            status = "query_failed"
         if completed.returncode != 0:
             status = "query_failed"
+        output_path = _dreamina_result_output_path(parsed) or item["expected_output_path"]
         results.append(
             {
                 "job_id": item["job_id"],
@@ -3765,7 +3903,7 @@ def _query_dreamina_results_payload(
                 "job_type": item["job_type"],
                 "status": status,
                 "provider_task_id": item.get("provider_task_id"),
-                "output_path": parsed.get("output_path") or parsed.get("video_path") or parsed.get("url") or item["expected_output_path"],
+                "output_path": output_path,
                 "command": command,
                 "stdout": completed.stdout,
                 "stderr": completed.stderr,
@@ -3885,45 +4023,111 @@ def _render_shot_retry_plan(retry: dict[str, Any]) -> str:
 
 
 def _dreamina_submit_command(job: dict[str, Any], dreamina_command: str, output_path: Path) -> list[str]:
+    job_type = str(job["job_type"])
+    duration = str(job["duration_seconds"])
+    model = str(job["model"])
+    resolution = _dreamina_cli_resolution(str(job["resolution"]))
+    if job_type == "text2video":
+        return [
+            dreamina_command,
+            "text2video",
+            "--model_version",
+            model,
+            "--prompt",
+            job.get("prompt", ""),
+            "--duration",
+            duration,
+            "--ratio",
+            str(job["aspect_ratio"]),
+            "--video_resolution",
+            resolution,
+            "--poll",
+            "30",
+        ]
+    if job_type == "image2video":
+        material_path = _reference_material_path(job, _project_dir_from_generated_output(output_path))
+        base = [
+            dreamina_command,
+            "image2video",
+            "--model_version",
+            model,
+            "--image",
+            material_path or "",
+            "--prompt",
+            job.get("prompt", ""),
+            "--duration",
+            duration,
+            "--video_resolution",
+            resolution,
+            "--poll",
+            "30",
+        ]
+        return [part for part in base if part != ""]
+    if job_type in {"reuse_video", "reuse_image"}:
+        return []
     base = [
         dreamina_command,
-        "video",
-        job["job_type"],
-        "--model",
-        job["model"],
-        "--resolution",
-        job["resolution"],
-        "--aspect-ratio",
-        job["aspect_ratio"],
-        "--duration",
-        str(job["duration_seconds"]),
+        job_type,
+        "--model_version",
+        model,
         "--prompt",
         job.get("prompt", ""),
-        "--negative-prompt",
-        job.get("negative_prompt", ""),
-        "--output",
-        str(output_path),
-        "--json",
+        "--duration",
+        duration,
+        "--video_resolution",
+        resolution,
+        "--poll",
+        "30",
     ]
-    material_path = _reference_material_path(job)
+    material_path = _reference_material_path(job, _project_dir_from_generated_output(output_path))
     if material_path:
-        base.extend(["--input", material_path])
+        base.extend(["--image", material_path])
     return base
 
 
-def _dreamina_status_command(dreamina_command: str, provider_task_id: str | None) -> list[str]:
-    command = [dreamina_command, "task", "status", provider_task_id or "", "--json"]
+def _dreamina_status_command(dreamina_command: str, provider_task_id: str | None, download_dir: str | None = None) -> list[str]:
+    command = [dreamina_command, "query_result", f"--submit_id={provider_task_id or ''}"]
+    if download_dir:
+        command.append(f"--download_dir={download_dir}")
     return [part for part in command if part != ""]
 
 
-def _reference_material_path(job: dict[str, Any]) -> str | None:
+def _dreamina_cli_resolution(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized == "1080p":
+        return "1080p"
+    if normalized == "720p":
+        return "720p"
+    if normalized == "4k":
+        return "4k"
+    return normalized or "1080p"
+
+
+def _reference_material_path(job: dict[str, Any], project_dir: Path | None = None) -> str | None:
     selected = job.get("selected_material") or {}
     files = selected.get("files") or selected.get("file_paths") or selected.get("paths") or []
     if isinstance(files, str):
-        return files
+        return _resolve_material_path(files, project_dir)
     if files:
-        return str(files[0])
+        return _resolve_material_path(str(files[0]), project_dir)
     return None
+
+
+def _resolve_material_path(value: str, project_dir: Path | None) -> str:
+    path = Path(value)
+    if path.is_absolute() or not project_dir:
+        return str(path)
+    if value.replace("\\", "/").startswith("raw/"):
+        return str((project_dir / value).resolve())
+    return value
+
+
+def _project_dir_from_generated_output(output_path: Path) -> Path | None:
+    try:
+        # {project}/generated/reports/video-creation/{run}/dreamina_generation/generated_shots/shot.mp4
+        return output_path.resolve().parents[6]
+    except IndexError:
+        return None
 
 
 def _parse_dreamina_json_output(output: str) -> dict[str, Any]:
@@ -3934,6 +4138,19 @@ def _parse_dreamina_json_output(output: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _dreamina_result_output_path(parsed: dict[str, Any]) -> str | None:
+    if parsed.get("output_path") or parsed.get("video_path") or parsed.get("url"):
+        return str(parsed.get("output_path") or parsed.get("video_path") or parsed.get("url"))
+    result_json = parsed.get("result_json")
+    if isinstance(result_json, dict):
+        videos = result_json.get("videos")
+        if isinstance(videos, list) and videos:
+            first = videos[0]
+            if isinstance(first, dict) and first.get("path"):
+                return str(first["path"])
+    return None
 
 
 def _completed_error(completed: subprocess.CompletedProcess[str]) -> str:

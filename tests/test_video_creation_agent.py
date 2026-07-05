@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 import wave
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
@@ -960,19 +961,32 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(result.phase, "awaiting_dreamina_results")
             submission_json = run_dir / "dreamina_generation" / "dreamina_submission.json"
             submission_md = run_dir / "dreamina_generation" / "dreamina_submission.md"
+            manual_ps1 = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
+            manual_template = run_dir / "dreamina_generation" / "manual_submission_template.json"
             self.assertTrue(submission_json.exists())
             self.assertTrue(submission_md.exists())
+            self.assertTrue(manual_ps1.exists())
+            self.assertTrue(manual_template.exists())
             submission = json.loads(submission_json.read_text(encoding="utf-8"))
             self.assertEqual(submission["mode"], "dry_run")
             self.assertTrue(submission["policy"]["dry_run_does_not_consume_credits"])
             self.assertEqual(len(submission["submissions"]), 12)
             self.assertTrue(all(item["status"] == "dry_run_submitted" for item in submission["submissions"]))
             self.assertTrue(all(item["provider_task_id"].startswith("dryrun_shot_") for item in submission["submissions"]))
-            self.assertIn("dreamina video image2video", submission_md.read_text(encoding="utf-8"))
+            submission_text = submission_md.read_text(encoding="utf-8")
+            self.assertIn("人工真实提交脚本", submission_text)
+            self.assertIn("dreamina image2video", submission_text)
+            ps1_text = manual_ps1.read_text(encoding="utf-8")
+            self.assertIn("manual_submission.json", ps1_text)
+            self.assertIn("--model_version", ps1_text)
+            template = json.loads(manual_template.read_text(encoding="utf-8"))
+            self.assertEqual(template["mode"], "manual_execute")
+            self.assertTrue(all(item["status"] == "pending_manual_execution" for item in template["submissions"]))
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["current_pending_confirmation"], "查询即梦结果")
             self.assertEqual(state["files"]["dreamina_submission_json"], str(submission_json))
+            self.assertEqual(state["files"]["dreamina_manual_submit_ps1"], str(manual_ps1))
 
     def test_cannot_submit_dreamina_jobs_without_generation_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1011,6 +1025,46 @@ class VideoCreationAgentTests(unittest.TestCase):
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["shots"])
             self.assertEqual(state["current_pending_confirmation"], "生成成片预览")
+
+    def test_queries_manual_dreamina_submission_file_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_submitted_run(Path(tmp))
+            submission = json.loads((run_dir / "dreamina_generation" / "dreamina_submission.json").read_text(encoding="utf-8"))
+            manual = deepcopy(submission)
+            manual["mode"] = "manual_execute"
+            for item in manual["submissions"]:
+                item["status"] = "submitted"
+                item["provider_task_id"] = f"real_submit_{item['shot_id']}"
+            (run_dir / "dreamina_generation" / "manual_submission.json").write_text(
+                json.dumps(manual, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            calls = []
+
+            def fake_query_runner(command, capture_output, text, check):
+                calls.append(command)
+                submit_id = next(part.split("=", 1)[1] for part in command if part.startswith("--submit_id="))
+                payload = {
+                    "submit_id": submit_id,
+                    "gen_status": "success",
+                    "result_json": {
+                        "videos": [
+                            {
+                                "path": str(run_dir / "dreamina_generation" / "generated_shots" / f"{submit_id}.mp4")
+                            }
+                        ]
+                    },
+                }
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+
+            result = query_dreamina_results(run_dir, now=datetime(2026, 6, 25, 15, 45, 0), runner=fake_query_runner)
+
+            self.assertEqual(result.status, "dreamina_results_ready")
+            self.assertTrue(all("query_result" in call for call in calls))
+            self.assertTrue(all(any(part.startswith("--download_dir=") for part in call) for call in calls))
+            results = json.loads((run_dir / "dreamina_generation" / "dreamina_results.json").read_text(encoding="utf-8"))
+            self.assertEqual(results["mode"], "execute")
+            self.assertTrue(all(item["provider_task_id"].startswith("real_submit_") for item in results["results"]))
 
     def test_plans_and_confirms_single_shot_retry_with_credit_estimate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
