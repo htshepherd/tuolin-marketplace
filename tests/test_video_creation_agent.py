@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+import re
 import wave
 from copy import deepcopy
 from datetime import datetime
@@ -716,6 +717,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             script = json.loads(script_json.read_text(encoding="utf-8"))
             self.assertEqual(script["language_version"], "en")
             self.assertEqual(len(script["sentences"]), 12)
+            self.assertNotRegex(script["full_text"], r"[\u4e00-\u9fff]")
+            self.assertTrue(all(not re.search(r"[\u4e00-\u9fff]", sentence["text"]) for sentence in script["sentences"]))
+            self.assertIn("multiple benefit overview", script["full_text"])
             self.assertTrue(script["policy"]["confirm_before_voice_samples"])
             self.assertTrue(script["policy"]["no_new_product_facts"])
 

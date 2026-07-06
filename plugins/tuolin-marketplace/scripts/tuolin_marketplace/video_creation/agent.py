@@ -679,6 +679,8 @@ def generate_narration_script(run_dir: Path, overwrite: bool = False, now: datet
     plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
     storyboard = _load_json_file(Path(state["files"]["storyboard_json"]), "storyboard.json")
     narration = _build_narration_script_payload(state, plan, storyboard, now or datetime.now())
+    if narration["language_version"] == "en" and _narration_contains_cjk(narration):
+        raise ValueError("英文旁白文案中检测到中文字符，必须先修正创意方向标签或旁白模板。")
     script_md_path.write_text(_render_narration_script(narration), encoding="utf-8")
     script_json_path.write_text(json.dumps(narration, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -3282,9 +3284,10 @@ def _prompt_motion_for_role(role: str) -> str:
 def _build_narration_script_payload(state: dict[str, Any], plan: dict[str, Any], storyboard: dict[str, Any], now: datetime) -> dict[str, Any]:
     product_name = _display_product_name(plan)
     language = state["language_version"]
+    primary_direction_label = _creative_direction_label_for_language(plan["creative_direction"]["primary"], language)
     sentences = []
     for shot in storyboard["shots"]:
-        text = _narration_sentence_for_shot(shot, plan, product_name, language)
+        text = _narration_sentence_for_shot(shot, product_name, language, primary_direction_label)
         sentences.append(
             {
                 "shot_id": shot["shot_id"],
@@ -3309,6 +3312,37 @@ def _build_narration_script_payload(state: dict[str, Any], plan: dict[str, Any],
         },
         "next_step": "确认旁白文案后生成 3 个声音样本。",
     }
+
+
+def _creative_direction_label_for_language(direction: dict[str, Any], language: str) -> str:
+    if language != "en":
+        return str(direction.get("name") or direction.get("id") or "")
+    return {
+        "product_overview": "product overview",
+        "single_core_benefit": "single core benefit",
+        "multiple_benefit_overview": "multiple benefit overview",
+        "product_detail": "product detail",
+        "application_demonstration": "application demonstration",
+        "customer_pain_point_solution": "customer pain point solution",
+        "installation_demonstration": "installation demonstration",
+        "usage_precautions": "usage precautions",
+        "technical_education": "technical education",
+        "performance_test": "performance test",
+        "faq": "FAQ-style explanation",
+        "material_comparison_selection": "material comparison and selection",
+        "specification_customization": "specification and customization",
+        "procurement_guide": "procurement guide",
+        "real_case_study": "real case study",
+        "inquiry_conversion": "inquiry conversion",
+    }.get(str(direction.get("id") or ""), str(direction.get("name") or direction.get("id") or ""))
+
+
+def _narration_contains_cjk(narration: dict[str, Any]) -> bool:
+    text_parts = [str(narration.get("full_text", ""))]
+    for sentence in narration.get("sentences", []):
+        text_parts.append(str(sentence.get("text", "")))
+    combined = "\n".join(text_parts)
+    return bool(re.search(r"[\u4e00-\u9fff]", combined))
 
 
 def _render_narration_script(script: dict[str, Any]) -> str:
@@ -3350,9 +3384,8 @@ def _render_narration_script(script: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _narration_sentence_for_shot(shot: dict[str, Any], plan: dict[str, Any], product_name: str, language: str) -> str:
+def _narration_sentence_for_shot(shot: dict[str, Any], product_name: str, language: str, primary_direction_label: str) -> str:
     role = shot["role"]
-    primary_name = plan["creative_direction"]["primary"]["name"]
     if language == "en":
         if role == "opening_environment":
             return "High-temperature insulation work needs materials that are reliable, clean, and easy to handle."
@@ -3361,7 +3394,7 @@ def _narration_sentence_for_shot(shot: dict[str, Any], plan: dict[str, Any], pro
         if role == "product_detail":
             return "Its woven surface and flexible tape form help installers handle detailed wrapping work more consistently."
         if role == "benefit_visual":
-            return f"This video focuses on the confirmed product value behind {primary_name}, without overstating test results."
+            return f"This video focuses on the confirmed product value behind {primary_direction_label}, without overstating test results."
         if role == "application_context":
             return "Use it only in confirmed application scenarios, and treat any simulated scene as a visual explanation."
         return "For specifications, samples, or purchasing details, contact Tuolin with your application requirements."
@@ -3372,7 +3405,7 @@ def _narration_sentence_for_shot(shot: dict[str, Any], plan: dict[str, Any], pro
     if role == "product_detail":
         return "织带表面和柔性形态，有助于施工人员处理细节包覆。"
     if role == "benefit_visual":
-        return f"本视频围绕{primary_name}表达已确认价值，不夸大测试结果。"
+        return f"本视频围绕{primary_direction_label}表达已确认价值，不夸大测试结果。"
     if role == "application_context":
         return "应用画面只基于已确认场景，AI 模拟画面仅用于解释。"
     return "如需规格、样品或采购信息，请把具体应用需求发给拓霖。"
