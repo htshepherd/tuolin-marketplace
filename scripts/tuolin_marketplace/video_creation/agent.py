@@ -48,7 +48,6 @@ DEFAULT_DREAMINA_CAPABILITY_PROFILE = {
 }
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
-
 VIDEO_CREATIVE_DIRECTIONS = [
     {"id": "product_overview", "name": "产品总览型", "description": "用短时间介绍产品是什么、核心特点和适合的工业客户"},
     {"id": "single_core_benefit", "name": "单一核心卖点型", "description": "聚焦一个核心优势，例如耐高温、隔热、不刺痒或不冒烟"},
@@ -390,6 +389,7 @@ def create_video_creation_run(
     supporting = normalize_creative_direction(supporting_direction) if supporting_direction else None
     if primary and supporting and supporting["id"] == primary["id"]:
         raise ValueError("辅助创意方向不能与主创意方向相同")
+    workflow_mode = _infer_video_workflow_mode(request_text)
 
     context = build_downstream_context(
         paths,
@@ -414,6 +414,7 @@ def create_video_creation_run(
         "duration_seconds": duration,
         "target_audience": target_audience,
         "core_objective": core_objective,
+        "workflow_mode": workflow_mode,
         "primary_direction": primary,
         "supporting_direction": supporting,
         "recommendations": recommendations,
@@ -644,14 +645,21 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认分镜。")
 
     timestamp = _timestamp(now)
+    video_only = state.get("workflow_mode") == "video_only"
     state["status"] = "storyboard_confirmed"
-    state["phase"] = "ready_for_narration_script"
-    state["current_pending_confirmation"] = "生成旁白文案"
+    state["phase"] = "ready_for_dreamina_jobs" if video_only else "ready_for_narration_script"
+    state["current_pending_confirmation"] = "规划即梦任务" if video_only else "生成旁白文案"
     state["updated_at"] = timestamp
     state["confirmations"]["storyboard"] = True
     _append_status_history(state, "storyboard_confirmed", timestamp)
     _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "确认视频分镜，进入旁白文案阶段。")
+    _append_change(
+        run_dir,
+        timestamp,
+        "确认视频分镜，进入即梦任务规划阶段（视频-only 模式，跳过旁白和字幕）。"
+        if video_only
+        else "确认视频分镜，进入旁白文案阶段。",
+    )
 
     return VideoCreationStepResult(
         run_dir=str(run_dir),
@@ -663,6 +671,7 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
 
 
 def generate_narration_script(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -707,6 +716,7 @@ def generate_narration_script(run_dir: Path, overwrite: bool = False, now: datet
 
 
 def confirm_narration_script(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -750,6 +760,7 @@ def generate_voice_samples(
     now: datetime | None = None,
     runner: Runner = subprocess.run,
 ) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -813,6 +824,7 @@ def generate_voice_samples(
 
 
 def select_voice(run_dir: Path, sample_id: int, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -850,6 +862,7 @@ def generate_full_narration(
     now: datetime | None = None,
     runner: Runner = subprocess.run,
 ) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -905,6 +918,7 @@ def generate_full_narration(
 
 
 def confirm_narration(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -941,7 +955,8 @@ def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime
     state = _load_state(state_path)
     if state.get("phase") not in {"ready_for_dreamina_jobs", "awaiting_dreamina_generation_confirmation"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能规划即梦任务。")
-    if not state.get("confirmations", {}).get("narration"):
+    video_only = state.get("workflow_mode") == "video_only"
+    if not video_only and not state.get("confirmations", {}).get("narration"):
         raise ValueError("旁白尚未确认，不能规划即梦任务。")
 
     jobs_md_path = run_dir / "dreamina_generation" / "dreamina_jobs.md"
@@ -952,7 +967,9 @@ def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime
     plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
     storyboard = _load_json_file(Path(state["files"]["storyboard_json"]), "storyboard.json")
     prompts = _load_json_file(Path(state["files"]["prompts_json"]), "prompts.json")
-    timing = _load_json_file(Path(state["files"]["narration_timing"]), "narration/timing.json")
+    timing = {}
+    if not video_only:
+        timing = _load_json_file(Path(state["files"]["narration_timing"]), "narration/timing.json")
     jobs = _build_dreamina_jobs_payload(state, plan, storyboard, prompts, timing, now or datetime.now())
     jobs_md_path.write_text(_render_dreamina_jobs(jobs), encoding="utf-8")
     jobs_json_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1139,9 +1156,10 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
     shot_preview_md_path.write_text(_render_shot_preview_manifest(shot_preview), encoding="utf-8")
 
     timestamp = _timestamp(now)
+    video_only = state.get("workflow_mode") == "video_only"
     state["status"] = "shots_confirmed"
-    state["phase"] = "ready_for_final_assembly"
-    state["current_pending_confirmation"] = "生成成片预览"
+    state["phase"] = "completed" if video_only else "ready_for_final_assembly"
+    state["current_pending_confirmation"] = None if video_only else "生成成片预览"
     state["updated_at"] = timestamp
     state["confirmations"]["shots"] = True
     state.setdefault("files", {})["shot_preview_manifest_json"] = str(shot_preview_json_path)
@@ -1149,7 +1167,13 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
     state.setdefault("files", {})["shot_preview_mp4"] = str(run_dir / "dreamina_generation" / "shot_preview.mp4")
     _append_status_history(state, "shots_confirmed", timestamp)
     _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "确认全部镜头，进入成片组装阶段。")
+    _append_change(
+        run_dir,
+        timestamp,
+        "确认全部镜头，视频-only 模式已完成即梦视频生成。"
+        if video_only
+        else "确认全部镜头，进入成片组装阶段。",
+    )
 
     return VideoCreationStepResult(
         run_dir=str(run_dir),
@@ -1423,9 +1447,12 @@ def assemble_final_preview(
     runner: Runner = subprocess.run,
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
+    if state.get("workflow_mode") == "video_only":
+        raise ValueError("视频-only 模式不生成成片预览、字幕或 BGM。")
     if state.get("phase") not in {"ready_for_final_assembly", "ready_for_quality_gate"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成成片预览。")
     if not state.get("confirmations", {}).get("shots"):
@@ -1500,6 +1527,7 @@ def select_bgm_track(
     license_url: str = "",
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -1545,9 +1573,12 @@ def select_bgm_track(
 
 
 def run_quality_gate(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
+    if state.get("workflow_mode") == "video_only":
+        raise ValueError("视频-only 模式不运行成片质量门禁。")
     if state.get("phase") not in {"ready_for_quality_gate", "awaiting_manual_quality_check"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能运行质量门禁。")
     report = _build_quality_report(run_dir, state, now or datetime.now())
@@ -1589,6 +1620,7 @@ def record_manual_quality_check(
     notes: str = "",
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -1628,9 +1660,12 @@ def record_manual_quality_check(
 
 
 def confirm_final_video(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
+    if state.get("workflow_mode") == "video_only":
+        raise ValueError("视频-only 模式没有最终成片预览可确认。")
     if state.get("phase") != "awaiting_final_video_confirmation":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认成片。")
     if not state.get("manual_quality_check", {}).get("audio_ok") or not state.get("manual_quality_check", {}).get("visual_ok"):
@@ -1741,19 +1776,6 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
         return generate_storyboard(run_dir, now=now)
     if normalized == "确认分镜":
         return confirm_storyboard(run_dir, now=now)
-    if normalized == "生成旁白文案":
-        return generate_narration_script(run_dir, now=now)
-    if normalized == "确认旁白文案":
-        return confirm_narration_script(run_dir, now=now)
-    if normalized == "生成声音样本":
-        return generate_voice_samples(run_dir, now=now)
-    voice_id = _parse_voice_selection(normalized)
-    if voice_id is not None:
-        return select_voice(run_dir, voice_id, now=now)
-    if normalized in {"生成完整旁白", "生成旁白音频"}:
-        return generate_full_narration(run_dir, now=now)
-    if normalized == "确认旁白":
-        return confirm_narration(run_dir, now=now)
     if normalized == "规划即梦任务":
         return generate_dreamina_jobs(run_dir, now=now)
     if normalized == "确认即梦生成":
@@ -1776,20 +1798,11 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
         return plan_shot_retry(run_dir, shot_retry_request_id, reason=reply, now=now)
     if normalized == "确认镜头":
         return confirm_shots(run_dir, now=now)
-    if normalized == "生成成片预览":
-        return assemble_final_preview(run_dir, now=now)
-    if normalized == "运行质量门禁":
-        return run_quality_gate(run_dir, now=now)
-    if _is_manual_quality_pass_reply(normalized):
-        return record_manual_quality_check(run_dir, audio_ok=True, visual_ok=True, notes=reply, now=now)
-    if normalized == "确认成片":
-        return confirm_final_video(run_dir, now=now)
-    if normalized in {"更换背景音乐", "换背景音乐", "更换bgm", "换bgm"}:
-        return request_bgm_replacement(run_dir, now=now)
     raise ValueError(f"未支持的视频创作回复：{reply}")
 
 
 def request_bgm_replacement(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
+    raise ValueError(_removed_audio_subtitle_feature_message())
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
@@ -2075,10 +2088,7 @@ def recommend_creative_directions(
 def _ensure_run_dirs(run_dir: Path) -> None:
     for relative in [
         ".",
-        "narration/voice_samples",
         "dreamina_generation/generated_shots",
-        "audio",
-        "subtitles",
     ]:
         (run_dir / relative).mkdir(parents=True, exist_ok=True)
 
@@ -2117,6 +2127,7 @@ def _initial_workflow_state(
         "duration_seconds": requirements["duration_seconds"],
         "target_audience": requirements["target_audience"],
         "core_objective": requirements["core_objective"],
+        "workflow_mode": requirements.get("workflow_mode", "full_pipeline"),
         "requirements_payload": requirements,
         "creative_direction": {
             "primary": requirements["primary_direction"],
@@ -2178,6 +2189,7 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
         f"- 时长：{requirements['duration_seconds']} 秒",
         f"- 受众：{requirements['target_audience'] or '未填写'}",
         f"- 核心目标：{requirements['core_objective'] or '未填写'}",
+        f"- 工作流模式：{'仅视频生成（不含配音/字幕）' if requirements.get('workflow_mode') == 'video_only' else '完整流程（含旁白/后续字幕）'}",
         f"- 主创意方向：{primary_text}",
         f"- 辅助创意方向：{supporting_text}",
         "",
@@ -2220,17 +2232,19 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _infer_video_workflow_mode(request_text: str) -> str:
+    return "video_only"
+
+
+def _removed_audio_subtitle_feature_message() -> str:
+    return "视频创作 Agent 已收敛为只负责即梦视频生成；配音、字幕、BGM、成片预览和质量门禁功能已移除。"
+
+
 def _video_adapter_config(config: dict[str, Any]) -> dict[str, Any]:
     video_config = config.get("video_creation", {}) if isinstance(config.get("video_creation", {}), dict) else {}
     return {
         "dreamina_command": str(video_config.get("dreamina_command") or config.get("dreamina_command") or "dreamina"),
         "dreamina_execute_default": bool(video_config.get("dreamina_execute_default", False)),
-        "ffmpeg_command": str(video_config.get("ffmpeg_command") or config.get("ffmpeg_path") or "ffmpeg"),
-        "tts_provider": str(video_config.get("tts_provider") or "mock"),
-        "tts_command": str(video_config.get("tts_command") or ""),
-        "bgm_provider": str(video_config.get("bgm_provider") or "manual_licensed_file"),
-        "bgm_library_dir": str(video_config.get("bgm_library_dir") or ""),
-        "logo_path": str(video_config.get("logo_path") or config.get("linkedin", {}).get("transparent_logo_path", "")),
     }
 
 
@@ -3586,6 +3600,7 @@ def _build_dreamina_jobs_payload(
     capability_profile = _state_dreamina_capability_profile(state)
     material_reference_map = prompts.get("material_reference_map") or _build_material_reference_map(storyboard, capability_profile)
     material_limit_blockers = _material_reference_limit_blockers(material_reference_map, capability_profile)
+    video_only = state.get("workflow_mode") == "video_only"
     jobs = []
     for shot in storyboard.get("shots", []):
         prompt = prompt_by_shot.get(shot["shot_id"], {})
@@ -3595,8 +3610,7 @@ def _build_dreamina_jobs_payload(
         validation = _validate_dreamina_job(shot, prompt, job_type, blocked_reason, capability_profile, material_limit_blockers)
         estimated_credits = _estimate_dreamina_credits(job_type, int(shot["duration_seconds"]))
         job_status = "blocked" if job_type == "blocked" or validation.get("status") == "blocked" else "planned"
-        jobs.append(
-            {
+        job = {
                 "job_id": f"shot_{shot['shot_id']}",
                 "shot_id": shot["shot_id"],
                 "job_type": job_type,
@@ -3620,13 +3634,14 @@ def _build_dreamina_jobs_payload(
                 "selected_material": shot.get("selected_material"),
                 "product_visible": bool(shot.get("product_visible")),
                 "ai_generated": bool(shot.get("ai_generated")),
-                "narration_timing": sentence_timing,
                 "estimated_credits": estimated_credits,
                 "risk_notes": shot.get("risk_notes", ""),
                 "blocked_reason": blocked_reason,
                 "validation": validation,
             }
-        )
+        if not video_only:
+            job["narration_timing"] = sentence_timing
+        jobs.append(job)
     estimated_total = sum(int(job["estimated_credits"]) for job in jobs)
     return {
         "schema_version": "dreamina-jobs-v1",
@@ -3645,7 +3660,7 @@ def _build_dreamina_jobs_payload(
         "source_files": {
             "storyboard_json": state["files"]["storyboard_json"],
             "prompts_json": state["files"]["prompts_json"],
-            "narration_timing": state["files"]["narration_timing"],
+            **({} if video_only else {"narration_timing": state["files"]["narration_timing"]}),
         },
         "material_reference_map": material_reference_map,
         "estimated_total_credits": estimated_total,
@@ -3657,11 +3672,13 @@ def _build_dreamina_jobs_payload(
             "text2video_not_allowed_for_visible_product": True,
             "blocked_jobs_prevent_confirmation": True,
             "job_validation_required": True,
+            "video_only_mode": video_only,
         },
     }
 
 
 def _render_dreamina_jobs(jobs_payload: dict[str, Any]) -> str:
+    video_only = bool(jobs_payload.get("policy", {}).get("video_only_mode"))
     lines = [
         "# 即梦任务计划",
         "",
@@ -3671,10 +3688,10 @@ def _render_dreamina_jobs(jobs_payload: dict[str, Any]) -> str:
         f"- 画幅：{jobs_payload['format']['aspect_ratio']}",
         f"- 预计总额度：{jobs_payload['estimated_total_credits']}",
         "- 提交条件：用户明确回复 `确认即梦生成`",
-        "",
-        "## 任务列表",
-        "",
     ]
+    if video_only:
+        lines.append("- 工作流模式：仅视频生成（不含配音/字幕）")
+    lines.extend(["", "## 任务列表", ""])
     for job in jobs_payload["jobs"]:
         lines.extend(
             [
@@ -4151,18 +4168,19 @@ def _render_dreamina_results(results: dict[str, Any]) -> str:
 
 
 def _build_shot_preview_manifest(run_dir: Path, state: dict[str, Any], results: dict[str, Any], now: datetime) -> dict[str, Any]:
-    timing_path = Path(state["files"]["narration_timing"])
+    video_only = state.get("workflow_mode") == "video_only"
+    timing_path = Path(state.get("files", {}).get("narration_timing", run_dir / "narration" / "timing.json"))
     return {
         "schema_version": "shot-preview-manifest-v1",
         "generated_at": now.isoformat(),
         "status": "dry_run_ready",
         "run_dir": str(run_dir),
         "shot_outputs": [item.get("output_path", "") for item in results.get("results", [])],
-        "narration_audio": state["files"]["narration_audio"],
-        "temporary_subtitles_source": str(timing_path),
+        "narration_audio": state.get("files", {}).get("narration_audio", ""),
+        "temporary_subtitles_source": str(timing_path) if not video_only else "",
         "preview_path": str(run_dir / "dreamina_generation" / "shot_preview.mp4"),
-        "contains_confirmed_narration": True,
-        "contains_temporary_subtitles": True,
+        "contains_confirmed_narration": not video_only,
+        "contains_temporary_subtitles": not video_only,
         "contains_final_bgm": False,
         "policy": {
             "used_for_shot_review_only": True,
@@ -4178,12 +4196,12 @@ def _render_shot_preview_manifest(manifest: dict[str, Any]) -> str:
         "",
         f"- 状态：{manifest['status']}",
         f"- 镜头数量：{len(manifest['shot_outputs'])}",
-        f"- 旁白：{manifest['narration_audio']}",
-        f"- 临时字幕来源：{manifest['temporary_subtitles_source']}",
+        f"- 旁白：{manifest['narration_audio'] or '无'}",
+        f"- 临时字幕来源：{manifest['temporary_subtitles_source'] or '无'}",
         f"- 预览输出：{manifest['preview_path']}",
         f"- 包含最终 BGM：{'是' if manifest['contains_final_bgm'] else '否'}",
         "",
-        "该预览只用于确认镜头；最终 BGM 在确认镜头后再加入。",
+        "该预览只用于确认镜头；视频-only 模式不会继续生成旁白、字幕或 BGM。",
         "",
     ]
     return "\n".join(lines)
@@ -4827,17 +4845,8 @@ def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: 
     adapters = state.get("adapters", {})
     capability_profile = _state_dreamina_capability_profile(state)
     dreamina_command = str(adapters.get("dreamina_command") or "dreamina")
-    ffmpeg_command = str(adapters.get("ffmpeg_command") or "ffmpeg")
-    tts_provider = str(adapters.get("tts_provider") or "mock")
-    tts_command = str(adapters.get("tts_command") or "")
-    bgm_library_dir = str(adapters.get("bgm_library_dir") or "")
-    logo_path = str(adapters.get("logo_path") or "")
     checks = [
         _command_check("dreamina_command", dreamina_command, required=False),
-        _command_check("ffmpeg_command", ffmpeg_command, required=True),
-        _command_check("tts_command", tts_command, required=tts_provider == "external_command"),
-        _optional_path_check("bgm_library_dir", bgm_library_dir, must_be_dir=True),
-        _optional_project_path_check("logo_path", logo_path, run_dir),
         _capability_profile_check(capability_profile),
     ]
     blocking = [item for item in checks if item["severity"] == "blocking" and item["status"] != "ok"]
@@ -4978,20 +4987,11 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
     if pending == "确认分镜":
         return ["确认分镜", "修改分镜，减少泛泛介绍", "修改镜头03，突出产品细节"]
     if pending in {
-        "确认旁白文案",
-        "确认旁白",
         "确认即梦生成",
-        "确认成片",
     }:
         return [pending]
-    if phase == "awaiting_voice_selection":
-        return ["声音选 1", "声音选 2", "声音选 3"]
     if phase == "awaiting_shot_confirmation":
         return ["确认镜头", "重做镜头 03"]
-    if phase == "awaiting_manual_quality_check":
-        return ["人工音视频检查通过", "更换背景音乐"]
-    if phase in {"ready_for_quality_gate", "awaiting_final_video_confirmation"}:
-        return ["更换背景音乐", "确认成片"]
     if pending:
         return [pending]
     return []

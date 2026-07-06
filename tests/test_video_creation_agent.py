@@ -94,10 +94,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue((run_dir / "requirements.md").exists())
             self.assertTrue((run_dir / "workflow_state.json").exists())
             self.assertTrue((run_dir / "change_log.md").exists())
-            self.assertTrue((run_dir / "narration" / "voice_samples").is_dir())
             self.assertTrue((run_dir / "dreamina_generation" / "generated_shots").is_dir())
-            self.assertTrue((run_dir / "audio").is_dir())
-            self.assertTrue((run_dir / "subtitles").is_dir())
+            self.assertFalse((run_dir / "narration").exists())
+            self.assertFalse((run_dir / "audio").exists())
+            self.assertFalse((run_dir / "subtitles").exists())
 
             requirements = (run_dir / "requirements.md").read_text(encoding="utf-8")
             self.assertIn("## 动态推荐", requirements)
@@ -114,6 +114,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["language_version"], "en")
             self.assertEqual(state["platforms"], ["youtube_shorts", "tiktok"])
             self.assertEqual(state["duration_seconds"], 60)
+            self.assertEqual(state["workflow_mode"], "video_only")
             self.assertEqual(state["creative_direction"]["primary"]["id"], "multiple_benefit_overview")
             self.assertEqual(state["creative_direction"]["supporting"]["id"], "product_detail")
             self.assertEqual(state["context"]["task_type"], "video_creation")
@@ -122,8 +123,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["outputs"]["final_filename"], "quartz_fiber_tape_en_9x16.mp4")
             self.assertEqual(state["outputs"]["dreamina_model"], "seedance2.0_vip")
             self.assertEqual(state["adapters"]["dreamina_command"], "dreamina")
-            self.assertEqual(state["adapters"]["ffmpeg_command"], "ffmpeg")
-            self.assertEqual(state["adapters"]["bgm_provider"], "manual_licensed_file")
+            self.assertNotIn("ffmpeg_command", state["adapters"])
+            self.assertNotIn("tts_provider", state["adapters"])
+            self.assertNotIn("bgm_provider", state["adapters"])
             self.assertTrue(Path(state["files"]["context"]).exists())
 
     def test_video_creation_resolves_legacy_quartz_product_id_and_draft_scope(self) -> None:
@@ -235,12 +237,6 @@ class VideoCreationAgentTests(unittest.TestCase):
                 {
                     "video_creation": {
                         "dreamina_command": "/opt/dreamina",
-                        "ffmpeg_command": "/opt/ffmpeg",
-                        "tts_provider": "external_command",
-                        "tts_command": "/opt/tts",
-                        "bgm_provider": "manual_licensed_file",
-                        "bgm_library_dir": "/music",
-                        "logo_path": "assets/logo/custom.png",
                     }
                 },
             )
@@ -260,11 +256,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             state = json.loads((Path(result.run_dir) / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["adapters"]["dreamina_command"], "/opt/dreamina")
-            self.assertEqual(state["adapters"]["ffmpeg_command"], "/opt/ffmpeg")
-            self.assertEqual(state["adapters"]["tts_provider"], "external_command")
-            self.assertEqual(state["adapters"]["tts_command"], "/opt/tts")
-            self.assertEqual(state["adapters"]["bgm_library_dir"], "/music")
-            self.assertEqual(state["adapters"]["logo_path"], "assets/logo/custom.png")
+            self.assertEqual(set(state["adapters"]), {"dreamina_command", "dreamina_execute_default"})
 
     def test_video_creation_run_records_default_dreamina_capability_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,12 +310,6 @@ class VideoCreationAgentTests(unittest.TestCase):
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
             confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
-            generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-            confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-            confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
             generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
             inspect_video_creation_adapters(run_dir, now=datetime(2026, 6, 25, 16, 20, 0))
 
@@ -366,12 +352,6 @@ class VideoCreationAgentTests(unittest.TestCase):
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
             confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
-            generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-            confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-            confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
             generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
 
             jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
@@ -409,12 +389,6 @@ class VideoCreationAgentTests(unittest.TestCase):
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
             confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
-            generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-            confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-            confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
             generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
 
             jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
@@ -447,12 +421,6 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(any(shot["human_face_risk"] == "clear_face" for shot in storyboard["shots"]))
             self.assertTrue(any(shot["shot_design_validation"]["status"] == "blocked" for shot in storyboard["shots"]))
             confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
-            generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-            confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-            confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
             generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
 
             jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
@@ -671,7 +639,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 generate_storyboard(run_dir)
 
-    def test_confirms_storyboard_and_moves_to_narration_phase(self) -> None:
+    def test_confirms_storyboard_and_moves_to_dreamina_planning_phase(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_plan_confirmed_run(Path(tmp))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
@@ -679,15 +647,45 @@ class VideoCreationAgentTests(unittest.TestCase):
             result = confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
 
             self.assertEqual(result.status, "storyboard_confirmed")
-            self.assertEqual(result.phase, "ready_for_narration_script")
+            self.assertEqual(result.phase, "ready_for_dreamina_jobs")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["storyboard"])
             self.assertFalse(state["confirmations"]["narration_script"])
-            self.assertEqual(state["current_pending_confirmation"], "生成旁白文案")
+            self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
             self.assertEqual(
                 [item["status"] for item in state["status_history"]],
                 ["requirements_confirmed", "video_plan_ready", "video_plan_confirmed", "storyboard_ready", "storyboard_confirmed"],
             )
+
+    def test_video_only_run_skips_narration_and_goes_straight_to_dreamina_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_video_only_ready_run(Path(tmp))
+            generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+            confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+
+            confirmed = confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
+            self.assertEqual(confirmed.phase, "ready_for_dreamina_jobs")
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["workflow_mode"], "video_only")
+            self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
+            self.assertNotEqual(state["phase"], "ready_for_narration_script")
+
+            result = generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
+            self.assertEqual(result.phase, "awaiting_dreamina_generation_confirmation")
+            jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
+            self.assertTrue(jobs["policy"]["video_only_mode"])
+            self.assertNotIn("narration_timing", jobs["source_files"])
+
+            confirm_dreamina_generation(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
+            submit_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
+            query_dreamina_results(run_dir, now=datetime(2026, 6, 25, 15, 35, 0))
+            shots = confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 40, 0))
+            self.assertEqual(shots.phase, "completed")
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertIsNone(state["current_pending_confirmation"])
+            self.assertFalse(state["confirmations"]["narration_script"])
+            self.assertFalse(state["confirmations"]["narration"])
 
     def test_cannot_generate_storyboard_before_plan_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -697,152 +695,36 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "当前阶段是 'awaiting_video_plan_confirmation'"):
                 generate_storyboard(run_dir)
 
-    def test_generates_and_confirms_narration_script(self) -> None:
+    def test_removed_audio_subtitle_and_final_edit_helpers_raise(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_storyboard_confirmed_run(Path(tmp))
 
-            result = generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-
-            self.assertEqual(result.status, "narration_script_ready")
-            self.assertEqual(result.phase, "awaiting_narration_script_confirmation")
-            script_md = run_dir / "narration" / "script.md"
-            script_json = run_dir / "narration" / "script.json"
-            self.assertTrue(script_md.exists())
-            self.assertTrue(script_json.exists())
-            script_text = script_md.read_text(encoding="utf-8")
-            self.assertIn("# 旁白文案", script_text)
-            self.assertIn("middle-aged Western male", script_text)
-            self.assertIn("Specialty Glass Fiber Tape", script_text)
-            self.assertIn("确认旁白文案", script_text)
-            script = json.loads(script_json.read_text(encoding="utf-8"))
-            self.assertEqual(script["language_version"], "en")
-            self.assertEqual(len(script["sentences"]), 12)
-            self.assertNotRegex(script["full_text"], r"[\u4e00-\u9fff]")
-            self.assertTrue(all(not re.search(r"[\u4e00-\u9fff]", sentence["text"]) for sentence in script["sentences"]))
-            self.assertIn("multiple benefit overview", script["full_text"])
-            self.assertTrue(script["policy"]["confirm_before_voice_samples"])
-            self.assertTrue(script["policy"]["no_new_product_facts"])
-
-            confirmed = confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-            self.assertEqual(confirmed.status, "narration_script_confirmed")
-            self.assertEqual(confirmed.phase, "ready_for_voice_samples")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["narration_script"])
-            self.assertEqual(state["current_pending_confirmation"], "生成声音样本")
-
-    def test_voice_samples_use_same_excerpt_and_voice_selection_advances_state(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_script_confirmed_run(Path(tmp))
-
-            result = generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-
-            self.assertEqual(result.status, "voice_samples_ready")
-            samples_json = run_dir / "narration" / "voice_samples.json"
-            samples = json.loads(samples_json.read_text(encoding="utf-8"))
-            self.assertEqual(len(samples["samples"]), 3)
-            excerpts = {sample["excerpt"] for sample in samples["samples"]}
-            self.assertEqual(len(excerpts), 1)
-            self.assertIn("High-temperature insulation work", samples["excerpt"])
-            for sample in samples["samples"]:
-                sample_path = Path(sample["audio_path"])
-                self.assertTrue(sample_path.exists())
-                with wave.open(str(sample_path), "rb") as handle:
-                    self.assertEqual(handle.getnchannels(), 1)
-                    self.assertGreater(handle.getnframes(), 0)
-                self.assertIn("middle-aged Western male", sample["voice_profile"]["description"])
-
-            selected = select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            self.assertEqual(selected.status, "voice_selected")
-            self.assertEqual(selected.phase, "ready_for_full_narration")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["voice"])
-            self.assertEqual(state["selected_voice"]["sample_id"], 2)
+            removed_message = "已收敛为只负责即梦视频生成"
+            removed_calls = [
+                lambda: generate_narration_script(run_dir),
+                lambda: confirm_narration_script(run_dir),
+                lambda: generate_voice_samples(run_dir),
+                lambda: select_voice(run_dir, 1),
+                lambda: generate_full_narration(run_dir),
+                lambda: confirm_narration(run_dir),
+                lambda: assemble_final_preview(run_dir),
+                lambda: select_bgm_track(run_dir, title="x", source="x", license_name="x", local_path=run_dir / "x.mp3"),
+                lambda: run_quality_gate(run_dir),
+                lambda: record_manual_quality_check(run_dir, audio_ok=True, visual_ok=True),
+                lambda: confirm_final_video(run_dir),
+            ]
+            for call in removed_calls:
+                with self.assertRaisesRegex(ValueError, removed_message):
+                    call()
 
     def test_handles_voice_selection_reply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_script_confirmed_run(Path(tmp))
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-
-            result = handle_video_creation_reply(run_dir, "声音选 2", now=datetime(2026, 6, 25, 15, 23, 0))
-
-            self.assertEqual(result.status, "voice_selected")
-            self.assertEqual(result.phase, "ready_for_full_narration")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["selected_voice"]["sample_id"], 2)
-
-    def test_generates_and_confirms_full_narration_with_sentence_timing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_voice_selected_run(Path(tmp))
-
-            result = generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-
-            self.assertEqual(result.status, "narration_ready")
-            self.assertEqual(result.phase, "awaiting_narration_confirmation")
-            narration_wav = run_dir / "narration" / "narration.wav"
-            timing_json = run_dir / "narration" / "timing.json"
-            preview_md = run_dir / "narration" / "narration_preview.md"
-            self.assertTrue(narration_wav.exists())
-            self.assertTrue(timing_json.exists())
-            self.assertTrue(preview_md.exists())
-            with wave.open(str(narration_wav), "rb") as handle:
-                self.assertEqual(handle.getnchannels(), 1)
-                self.assertEqual(handle.getframerate(), 8000)
-                self.assertEqual(round(handle.getnframes() / handle.getframerate()), 60)
-            timing = json.loads(timing_json.read_text(encoding="utf-8"))
-            self.assertEqual(timing["total_duration_seconds"], 60)
-            self.assertEqual(len(timing["sentence_timing"]), 12)
-            self.assertEqual(timing["sentence_timing"][0]["start_seconds"], 0.0)
-            self.assertEqual(timing["sentence_timing"][-1]["end_seconds"], 60.0)
-            preview = preview_md.read_text(encoding="utf-8")
-            self.assertIn("请检查旁白文案、声音、语速、发音和节奏", preview)
-
-            confirmed = confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
-            self.assertEqual(confirmed.status, "narration_confirmed")
-            self.assertEqual(confirmed.phase, "ready_for_dreamina_jobs")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["narration"])
-            self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
-
-    def test_external_command_tts_generates_voice_samples_and_full_narration(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_script_confirmed_run(Path(tmp), tts_provider="external_command", tts_command="/opt/tts")
-            calls = []
-
-            def fake_tts_runner(command, capture_output, text, check):
-                calls.append(command)
-                output_path = Path(command[command.index("--output") + 1])
-                _write_test_wav(output_path)
-                return _completed(command)
-
-            generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0), runner=fake_tts_runner)
-            samples = json.loads((run_dir / "narration" / "voice_samples.json").read_text(encoding="utf-8"))
-            self.assertEqual({sample["provider"] for sample in samples["samples"]}, {"external_command"})
-            self.assertTrue(all("--voice-id" in call for call in calls))
-
-            select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-            generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0), runner=fake_tts_runner)
-            timing = json.loads((run_dir / "narration" / "timing.json").read_text(encoding="utf-8"))
-            self.assertEqual(timing["tts_provider"], "external_command")
-            self.assertTrue((run_dir / "narration" / "narration.wav").exists())
-
-    def test_confirmed_narration_script_cannot_be_modified_before_tts(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_script_confirmed_run(Path(tmp))
-            script_md = run_dir / "narration" / "script.md"
-            script_md.write_text(script_md.read_text(encoding="utf-8") + "\nAI rewrite\n", encoding="utf-8")
-
-            with self.assertRaisesRegex(ValueError, "旁白文案已确认后被修改"):
-                generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-
-    def test_cannot_generate_voice_samples_before_script_confirmation(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_storyboard_confirmed_run(Path(tmp))
-            generate_narration_script(run_dir)
 
-            with self.assertRaisesRegex(ValueError, "当前阶段是 'awaiting_narration_script_confirmation'"):
-                generate_voice_samples(run_dir)
+            with self.assertRaisesRegex(ValueError, "未支持的视频创作回复"):
+                handle_video_creation_reply(run_dir, "声音选 2", now=datetime(2026, 6, 25, 15, 23, 0))
 
-    def test_generates_dreamina_jobs_after_narration_confirmation(self) -> None:
+    def test_generates_dreamina_jobs_after_storyboard_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_narration_confirmed_run(Path(tmp))
 
@@ -871,7 +753,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertGreater(jobs["estimated_total_credits"], 0)
             self.assertTrue(all(job["job_type"] == "image2video" for job in jobs["jobs"]))
             self.assertTrue(all(job["estimated_credits"] == 8 for job in jobs["jobs"]))
-            self.assertTrue(all(job["narration_timing"] for job in jobs["jobs"]))
+            self.assertTrue(all("narration_timing" not in job for job in jobs["jobs"]))
             self.assertTrue(all(job["numbered_reference_label"] == "@图片1" for job in jobs["jobs"]))
             self.assertTrue(all(job["reference_usage"] for job in jobs["jobs"]))
             self.assertTrue(any(job["first_frame_reference_id"] == "content_asset/quartz_product_photo" for job in jobs["jobs"]))
@@ -907,12 +789,11 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 generate_dreamina_jobs(run_dir)
 
-    def test_cannot_generate_dreamina_jobs_before_narration_confirmation(self) -> None:
+    def test_cannot_generate_dreamina_jobs_before_storyboard_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_voice_selected_run(Path(tmp))
-            generate_full_narration(run_dir)
+            run_dir = _create_plan_confirmed_run(Path(tmp))
 
-            with self.assertRaisesRegex(ValueError, "当前阶段是 'awaiting_narration_confirmation'"):
+            with self.assertRaisesRegex(ValueError, "当前阶段是 'ready_for_storyboard'"):
                 generate_dreamina_jobs(run_dir)
 
     def test_blocked_dreamina_jobs_prevent_confirmation(self) -> None:
@@ -1046,16 +927,16 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             confirmed = confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 50, 0))
             self.assertEqual(confirmed.status, "shots_confirmed")
-            self.assertEqual(confirmed.phase, "ready_for_final_assembly")
+            self.assertEqual(confirmed.phase, "completed")
             shot_preview_manifest = run_dir / "dreamina_generation" / "shot_preview_manifest.json"
             self.assertTrue(shot_preview_manifest.exists())
             shot_preview = json.loads(shot_preview_manifest.read_text(encoding="utf-8"))
-            self.assertTrue(shot_preview["contains_confirmed_narration"])
-            self.assertTrue(shot_preview["contains_temporary_subtitles"])
+            self.assertFalse(shot_preview["contains_confirmed_narration"])
+            self.assertFalse(shot_preview["contains_temporary_subtitles"])
             self.assertFalse(shot_preview["contains_final_bgm"])
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["shots"])
-            self.assertEqual(state["current_pending_confirmation"], "生成成片预览")
+            self.assertIsNone(state["current_pending_confirmation"])
 
     def test_queries_manual_dreamina_submission_file_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1193,7 +1074,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_revising_video_plan_clears_downstream_confirmations_and_file_references(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
             result = revise_video_plan(
                 run_dir,
@@ -1218,9 +1099,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("高温设备密封痛点", (run_dir / "video_plan.md").read_text(encoding="utf-8"))
             self.assertIn("清除分镜及后续确认", (run_dir / "change_log.md").read_text(encoding="utf-8"))
 
-    def test_revising_storyboard_clears_narration_and_generation_confirmations_only(self) -> None:
+    def test_revising_storyboard_clears_generation_confirmations_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
             result = revise_storyboard(
                 run_dir,
@@ -1233,12 +1114,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["video_plan"])
             self.assertFalse(state["confirmations"]["storyboard"])
-            self.assertFalse(state["confirmations"]["narration_script"])
             self.assertFalse(state["confirmations"]["dreamina_generation"])
             self.assertFalse(state["confirmations"]["shots"])
             self.assertEqual(state["current_pending_confirmation"], "确认分镜")
             self.assertIn("storyboard_json", state["files"])
-            self.assertNotIn("narration_script_json", state["files"])
             self.assertNotIn("dreamina_jobs_json", state["files"])
             storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
             self.assertEqual(storyboard["change_requests"][0]["scope"], "storyboard")
@@ -1246,7 +1125,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_revising_single_shot_marks_only_that_shot_and_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
             result = revise_storyboard_shot(
                 run_dir,
@@ -1272,7 +1151,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_handles_revision_replies(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
             result = handle_video_creation_reply(run_dir, "修改镜头03，突出编织纹理", now=datetime(2026, 6, 25, 16, 23, 0))
 
@@ -1282,7 +1161,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             shot_03 = next(item for item in storyboard["shots"] if item["shot_id"] == "03")
             self.assertIn("编织纹理", shot_03["change_requests"][0]["request"])
 
-    def test_mock_full_chain_from_natural_language_replies_to_final_path(self) -> None:
+    def test_mock_full_chain_from_natural_language_replies_to_confirmed_dreamina_shots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_ready_run(Path(tmp))
 
@@ -1290,249 +1169,20 @@ class VideoCreationAgentTests(unittest.TestCase):
             handle_video_creation_reply(run_dir, "确认策划", now=datetime(2026, 6, 25, 15, 1, 0))
             handle_video_creation_reply(run_dir, "生成分镜", now=datetime(2026, 6, 25, 15, 2, 0))
             handle_video_creation_reply(run_dir, "确认分镜", now=datetime(2026, 6, 25, 15, 3, 0))
-            handle_video_creation_reply(run_dir, "生成旁白文案", now=datetime(2026, 6, 25, 15, 4, 0))
-            handle_video_creation_reply(run_dir, "确认旁白文案", now=datetime(2026, 6, 25, 15, 5, 0))
-            handle_video_creation_reply(run_dir, "生成声音样本", now=datetime(2026, 6, 25, 15, 6, 0))
-            handle_video_creation_reply(run_dir, "声音选 2", now=datetime(2026, 6, 25, 15, 7, 0))
-            handle_video_creation_reply(run_dir, "生成完整旁白", now=datetime(2026, 6, 25, 15, 8, 0))
-            handle_video_creation_reply(run_dir, "确认旁白", now=datetime(2026, 6, 25, 15, 9, 0))
             handle_video_creation_reply(run_dir, "规划即梦任务", now=datetime(2026, 6, 25, 15, 10, 0))
             handle_video_creation_reply(run_dir, "确认即梦生成", now=datetime(2026, 6, 25, 15, 11, 0))
             handle_video_creation_reply(run_dir, "提交即梦任务", now=datetime(2026, 6, 25, 15, 12, 0))
             handle_video_creation_reply(run_dir, "查询即梦结果", now=datetime(2026, 6, 25, 15, 13, 0))
-            handle_video_creation_reply(run_dir, "确认镜头", now=datetime(2026, 6, 25, 15, 14, 0))
-            handle_video_creation_reply(run_dir, "生成成片预览", now=datetime(2026, 6, 25, 15, 15, 0))
+            final = handle_video_creation_reply(run_dir, "确认镜头", now=datetime(2026, 6, 25, 15, 14, 0))
 
-            bgm_path = run_dir / "audio" / "licensed_bgm.mp3"
-            bgm_path.write_bytes(b"fake bgm")
-            select_bgm_track(
-                run_dir,
-                title="Industrial Clean Pulse",
-                source="Licensed internal music provider",
-                license_name="commercial-use",
-                local_path=bgm_path,
-                now=datetime(2026, 6, 25, 15, 16, 0),
-            )
-            handle_video_creation_reply(run_dir, "生成成片预览", now=datetime(2026, 6, 25, 15, 17, 0))
-            preview = run_dir / "dreamina_generation" / "final_preview.mp4"
-            preview.write_bytes(b"fake mp4 for workflow contract")
-            handle_video_creation_reply(run_dir, "运行质量门禁", now=datetime(2026, 6, 25, 15, 18, 0))
-            handle_video_creation_reply(run_dir, "人工音视频检查通过", now=datetime(2026, 6, 25, 15, 19, 0))
-            final = handle_video_creation_reply(run_dir, "确认成片", now=datetime(2026, 6, 25, 15, 20, 0))
-
-            self.assertEqual(final.status, "final_video_confirmed")
+            self.assertEqual(final.status, "shots_confirmed")
             self.assertEqual(final.phase, "completed")
-            final_path = Path(final.output_paths[0])
-            self.assertTrue(final_path.exists())
-            self.assertNotIn("master", final_path.name.lower())
-            self.assertNotIn("母版", final_path.name)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["final_video"])
-            self.assertIsNone(state["current_pending_confirmation"])
-
-    def test_assembles_final_preview_contract_with_short_sentence_subtitles_and_bgm_metadata(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_shots_confirmed_run(Path(tmp))
-
-            result = assemble_final_preview(run_dir, now=datetime(2026, 6, 25, 16, 0, 0))
-
-            self.assertEqual(result.status, "final_preview_ready")
-            self.assertEqual(result.phase, "ready_for_quality_gate")
-            manifest_json = run_dir / "dreamina_generation" / "final_preview_manifest.json"
-            subtitles_srt = run_dir / "subtitles" / "final_subtitles.srt"
-            bgm_license = run_dir / "audio" / "bgm_license.json"
-            self.assertTrue(manifest_json.exists())
-            self.assertTrue(subtitles_srt.exists())
-            self.assertTrue(bgm_license.exists())
-            manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["status"], "dry_run_ready")
-            self.assertEqual(manifest["preview_path"], str(run_dir / "dreamina_generation" / "final_preview.mp4"))
-            self.assertTrue(manifest["subtitles_burned_in"])
-            self.assertFalse(manifest["bgm_embedded"])
-            self.assertEqual(manifest["logo_status"], "missing_or_not_configured")
-            self.assertEqual(manifest["duration_tolerance_seconds"], {"min": 55, "max": 65})
-            subtitle_blocks = [block for block in subtitles_srt.read_text(encoding="utf-8").split("\n\n") if block.strip()]
-            self.assertEqual(len(subtitle_blocks), 12)
-            for block in subtitle_blocks:
-                self.assertLessEqual(len(block.splitlines()[2:]), 2)
-            bgm = json.loads(bgm_license.read_text(encoding="utf-8"))
-            self.assertTrue(bgm["music_policy"]["commercially_usable_required"])
-            self.assertTrue(bgm["music_policy"]["do_not_use_tiktok_trending_song"])
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["current_pending_confirmation"], "运行质量门禁")
-
-    def test_quality_gate_blocks_dry_run_without_real_preview_file(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-
-            result = run_quality_gate(run_dir, now=datetime(2026, 6, 25, 16, 5, 0))
-
-            self.assertEqual(result.status, "quality_gate_failed")
-            self.assertEqual(result.phase, "ready_for_quality_gate")
-            report = json.loads((run_dir / "quality_report.json").read_text(encoding="utf-8"))
-            codes = {item["code"] for item in report["blocking_defects"]}
-            self.assertIn("missing_final_preview_mp4", codes)
-            self.assertIn("dry_run_preview_only", codes)
-            self.assertIn("bgm_track_not_selected", codes)
-            self.assertIn("bgm_not_embedded", codes)
-            self.assertTrue(report["checks"]["creative_quality_matrix_checked"])
-            self.assertTrue(report["checks"]["prompt_standard_checked"])
-            self.assertTrue(report["checks"]["dreamina_job_validation_checked"])
-            with self.assertRaisesRegex(ValueError, "当前阶段是 'ready_for_quality_gate'"):
-                record_manual_quality_check(run_dir, audio_ok=True, visual_ok=True)
-
-    def test_quality_gate_reports_prompt_conflicts_and_duration_complexity(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-            prompts_path = run_dir / "prompts.json"
-            prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
-            prompts["prompts"][0]["prompt_components"]["motion_and_camera"] = "Fixed camera, static camera, fast pan, orbit, tracking shot."
-            prompts["prompts"][0]["prompt_components"]["time_segments"] = (
-                "0-1s: product. 1-2s: cut to pipe. 2-3s: new scene. "
-                "3-4s: montage. 4-5s: split screen."
-            )
-            prompts["prompts"][0]["prompt"] = (
-                prompts["prompts"][0]["prompt"]
-                + " Fixed camera, static camera, fast pan, orbit, tracking shot. "
-                + "Cut to a new scene, montage, split screen, rapid transition."
-            )
-            prompts["prompts"][0].pop("prompt_quality_checks", None)
-            prompts_path.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
-
-            run_quality_gate(run_dir, now=datetime(2026, 6, 25, 16, 5, 0))
-
-            report = json.loads((run_dir / "quality_report.json").read_text(encoding="utf-8"))
-            codes = {item["code"] for item in report["blocking_defects"]}
-            self.assertIn("fixed_camera_conflicts_with_dynamic_camera", codes)
-            self.assertIn("scene_change_complexity_exceeds_duration", codes)
-
-    def test_manual_quality_check_and_final_confirmation_after_preview_exists(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-            preview = run_dir / "dreamina_generation" / "final_preview.mp4"
-            preview.write_bytes(b"fake mp4 for workflow contract")
-            bgm_path = run_dir / "audio" / "licensed_bgm.mp3"
-            bgm_path.write_bytes(b"fake bgm")
-            bgm = select_bgm_track(
-                run_dir,
-                title="Industrial Clean Pulse",
-                source="Licensed internal music provider",
-                license_name="commercial-use",
-                local_path=bgm_path,
-                license_url="https://license.example/bgm",
-                now=datetime(2026, 6, 25, 16, 2, 0),
-            )
-            self.assertEqual(bgm.status, "final_preview_ready")
-            assemble_final_preview(run_dir, now=datetime(2026, 6, 25, 16, 3, 0))
-
-            gate = run_quality_gate(run_dir, now=datetime(2026, 6, 25, 16, 5, 0))
-            self.assertEqual(gate.status, "quality_gate_passed")
-            self.assertEqual(gate.phase, "awaiting_manual_quality_check")
-            report = json.loads((run_dir / "quality_report.json").read_text(encoding="utf-8"))
-            warning_codes = {item["code"] for item in report["warnings"]}
-            self.assertIn("logo_missing_or_not_configured", warning_codes)
-            self.assertTrue(report["checks"]["creative_quality_matrix_checked"])
-            self.assertTrue(report["checks"]["prompt_standard_checked"])
-            self.assertTrue(report["checks"]["dreamina_job_validation_checked"])
-
-            manual = record_manual_quality_check(
-                run_dir,
-                audio_ok=True,
-                visual_ok=True,
-                notes="人工打开剪辑软件检查，音频与字幕同步。",
-                now=datetime(2026, 6, 25, 16, 10, 0),
-            )
-            self.assertEqual(manual.status, "manual_quality_check_confirmed")
-            self.assertEqual(manual.phase, "awaiting_final_video_confirmation")
-
-            final = confirm_final_video(run_dir, now=datetime(2026, 6, 25, 16, 15, 0))
-            self.assertEqual(final.status, "final_video_confirmed")
-            self.assertEqual(final.phase, "completed")
-            final_path = run_dir / "quartz_fiber_tape_en_9x16.mp4"
-            self.assertTrue(final_path.exists())
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["final_video"])
-            self.assertEqual(state["files"]["final_video"], str(final_path))
-
-    def test_bgm_replacement_reply_clears_manual_check_without_rebuilding_upstream(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-            preview = run_dir / "dreamina_generation" / "final_preview.mp4"
-            preview.write_bytes(b"fake mp4 for workflow contract")
-            bgm_path = run_dir / "audio" / "licensed_bgm.mp3"
-            bgm_path.write_bytes(b"fake bgm")
-            select_bgm_track(
-                run_dir,
-                title="Industrial Clean Pulse",
-                source="Licensed internal music provider",
-                license_name="commercial-use",
-                local_path=bgm_path,
-                now=datetime(2026, 6, 25, 16, 2, 0),
-            )
-            assemble_final_preview(run_dir, now=datetime(2026, 6, 25, 16, 3, 0))
-            run_quality_gate(run_dir, now=datetime(2026, 6, 25, 16, 5, 0))
-            record_manual_quality_check(run_dir, audio_ok=True, visual_ok=True, now=datetime(2026, 6, 25, 16, 10, 0))
-
-            result = handle_video_creation_reply(run_dir, "更换背景音乐", now=datetime(2026, 6, 25, 16, 12, 0))
-
-            self.assertEqual(result.status, "bgm_replacement_requested")
-            self.assertEqual(result.phase, "ready_for_quality_gate")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertNotIn("manual_quality_check", state)
-            self.assertTrue(state["confirmations"]["storyboard"])
-            self.assertTrue(state["confirmations"]["narration"])
+            self.assertEqual(state["workflow_mode"], "video_only")
             self.assertTrue(state["confirmations"]["shots"])
-            self.assertEqual(state["current_pending_confirmation"], "选择新的可商用 BGM 并重新生成成片预览")
-
-    def test_handles_manual_quality_pass_reply(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-            preview = run_dir / "dreamina_generation" / "final_preview.mp4"
-            preview.write_bytes(b"fake mp4 for workflow contract")
-            bgm_path = run_dir / "audio" / "licensed_bgm.mp3"
-            bgm_path.write_bytes(b"fake bgm")
-            select_bgm_track(
-                run_dir,
-                title="Industrial Clean Pulse",
-                source="Licensed internal music provider",
-                license_name="commercial-use",
-                local_path=bgm_path,
-                now=datetime(2026, 6, 25, 16, 2, 0),
-            )
-            assemble_final_preview(run_dir, now=datetime(2026, 6, 25, 16, 3, 0))
-            run_quality_gate(run_dir, now=datetime(2026, 6, 25, 16, 5, 0))
-
-            result = handle_video_creation_reply(run_dir, "人工音视频检查通过", now=datetime(2026, 6, 25, 16, 10, 0))
-
-            self.assertEqual(result.status, "manual_quality_check_confirmed")
-            self.assertEqual(result.phase, "awaiting_final_video_confirmation")
-            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["manual_quality_check"]["audio_ok"])
-            self.assertTrue(state["manual_quality_check"]["visual_ok"])
-
-    def test_select_bgm_track_requires_existing_local_commercial_track_metadata(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_final_preview_contract_run(Path(tmp))
-
-            with self.assertRaisesRegex(ValueError, "必须填写"):
-                select_bgm_track(run_dir, title="", source="Provider", license_name="commercial", local_path=run_dir / "audio" / "x.mp3")
-            with self.assertRaisesRegex(ValueError, "找不到 BGM 本地文件"):
-                select_bgm_track(run_dir, title="Track", source="Provider", license_name="commercial", local_path=run_dir / "audio" / "missing.mp3")
-
-            bgm_path = run_dir / "audio" / "licensed_bgm.mp3"
-            bgm_path.write_bytes(b"fake bgm")
-            result = select_bgm_track(
-                run_dir,
-                title="Track",
-                source="Provider",
-                license_name="commercial-use",
-                local_path=bgm_path,
-                now=datetime(2026, 6, 25, 16, 2, 0),
-            )
-            self.assertEqual(result.phase, "ready_for_quality_gate")
-            payload = json.loads((run_dir / "audio" / "bgm_license.json").read_text(encoding="utf-8"))
-            self.assertEqual(payload["status"], "selected")
-            self.assertEqual(payload["selected_track"]["local_path"], str(bgm_path.resolve()))
+            self.assertIsNone(state["current_pending_confirmation"])
+            self.assertFalse((run_dir / "subtitles").exists())
+            self.assertFalse((run_dir / "audio").exists())
 
     def test_inspects_video_creation_adapters_without_paid_generation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1703,7 +1353,12 @@ def _write_card(path: Path, frontmatter_lines: list[str], body: str) -> None:
     path.write_text("---\n" + "\n".join(frontmatter_lines) + "\n---\n\n" + body + "\n", encoding="utf-8")
 
 
-def _create_ready_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
+def _create_ready_run(
+    root: Path,
+    tts_provider: str = "mock",
+    tts_command: str = "",
+    request_text: str = "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。",
+) -> Path:
     config = {}
     if tts_provider != "mock" or tts_command:
         config = {"video_creation": {"tts_provider": tts_provider, "tts_command": tts_command}}
@@ -1713,7 +1368,7 @@ def _create_ready_run(root: Path, tts_provider: str = "mock", tts_command: str =
     rebuild_agent_interface(paths)
     result = create_video_creation_run(
         paths,
-        "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。",
+        request_text,
         language_version="en",
         platforms=["youtube_shorts", "tiktok"],
         duration_seconds=60,
@@ -1724,6 +1379,13 @@ def _create_ready_run(root: Path, tts_provider: str = "mock", tts_command: str =
         now=datetime(2026, 6, 25, 14, 30, 5),
     )
     return Path(result.run_dir)
+
+
+def _create_video_only_ready_run(root: Path) -> Path:
+    return _create_ready_run(
+        root,
+        request_text="做一个60秒石英纤维隔热带产品介绍视频，不加配音和字幕，只用即梦cli生成视频。",
+    )
 
 
 def _create_plan_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
@@ -1740,25 +1402,8 @@ def _create_storyboard_confirmed_run(root: Path, tts_provider: str = "mock", tts
     return run_dir
 
 
-def _create_narration_script_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
-    run_dir = _create_storyboard_confirmed_run(root, tts_provider=tts_provider, tts_command=tts_command)
-    generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-    confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-    return run_dir
-
-
-def _create_voice_selected_run(root: Path) -> Path:
-    run_dir = _create_narration_script_confirmed_run(root)
-    generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-    select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-    return run_dir
-
-
 def _create_narration_confirmed_run(root: Path) -> Path:
-    run_dir = _create_voice_selected_run(root)
-    generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-    confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
-    return run_dir
+    return _create_storyboard_confirmed_run(root)
 
 
 def _create_dreamina_jobs_ready_run(root: Path) -> Path:
@@ -1791,12 +1436,6 @@ def _create_shots_confirmed_run(root: Path) -> Path:
     return run_dir
 
 
-def _create_final_preview_contract_run(root: Path) -> Path:
-    run_dir = _create_shots_confirmed_run(root)
-    assemble_final_preview(run_dir, now=datetime(2026, 6, 25, 16, 0, 0))
-    return run_dir
-
-
 def _create_narration_confirmed_run_without_assets(root: Path) -> Path:
     paths = resolve_paths(root, {})
     initialize_project(paths)
@@ -1819,12 +1458,6 @@ def _create_narration_confirmed_run_without_assets(root: Path) -> Path:
     confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
     generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
     confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
-    generate_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 20, 0))
-    confirm_narration_script(run_dir, now=datetime(2026, 6, 25, 15, 21, 0))
-    generate_voice_samples(run_dir, now=datetime(2026, 6, 25, 15, 22, 0))
-    select_voice(run_dir, 2, now=datetime(2026, 6, 25, 15, 23, 0))
-    generate_full_narration(run_dir, now=datetime(2026, 6, 25, 15, 24, 0))
-    confirm_narration(run_dir, now=datetime(2026, 6, 25, 15, 25, 0))
     return run_dir
 
 
