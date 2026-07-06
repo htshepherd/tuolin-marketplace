@@ -447,9 +447,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("对外英文名：Specialty Glass Fiber Tape", plan_text)
             self.assertIn("允许 55-65 秒", plan_text)
             self.assertIn("content_asset/quartz_product_photo", plan_text)
+            self.assertNotIn("content_asset/quartz_product_video", plan_text)
             self.assertIn("## 视频创作素材准备度", plan_text)
             self.assertIn("产品图片素材：1", plan_text)
-            self.assertIn("可用于 image2video/reuse_video 的真实参考素材：1", plan_text)
+            self.assertIn("可用于 image2video 的图片参考素材：1", plan_text)
             self.assertIn("音乐 brief", plan_text)
             self.assertIn("不得使用 video_script", plan_text)
             self.assertIn("不得使用母版/master", plan_text)
@@ -470,7 +471,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(plan["prompt_policy"]["visible_product_requires_real_reference"])
             self.assertEqual(plan["material_availability"]["counts"]["product_image_assets"], 1)
             self.assertEqual(plan["material_availability"]["counts"]["usable_visual_reference_assets"], 1)
+            self.assertNotIn("product_video_assets", plan["material_availability"]["counts"])
             self.assertEqual(plan["material_availability"]["usable_visual_references"][0]["id"], "content_asset/quartz_product_photo")
+            self.assertEqual([asset["id"] for asset in plan["content_assets"]], ["content_asset/quartz_product_photo"])
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertFalse(state["confirmations"]["video_plan"])
@@ -1287,6 +1290,37 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             "  - video_creation",
         ],
         "可用于视频创作的产品素材；不能单独证明产品性能事实。",
+    )
+    _write_card(
+        paths.knowledge_dir / "内容素材" / "quartz_product_video.md",
+        [
+            "card_template_version: content-asset-card-v1",
+            "type: content_asset",
+            "id: content_asset/quartz_product_video",
+            "title: 石英纤维隔热带产品视频",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/01_产品/02_石英纤维隔热带/03_产品视频/",
+            "tags:",
+            "  - 产品视频",
+            "updated_at: 2026-06-25T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "asset_category: 产品视频",
+            "media_types:",
+            "  - video",
+            f"human_face_risk: {human_face_risk}",
+            "related_products:",
+            "  - product/quartz_fiber_tape",
+            "files:",
+            "  - raw/01_产品/02_石英纤维隔热带/03_产品视频/product.mp4",
+            "usable_for:",
+            "  - video_creation",
+        ],
+        "这是产品实拍视频素材；视频创作 Agent 不应把视频文件用于策划素材或即梦任务。",
     )
 
 

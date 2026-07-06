@@ -46,6 +46,9 @@ DEFAULT_DREAMINA_CAPABILITY_PROFILE = {
     "max_video_reference_duration_seconds": 15,
     "max_audio_reference_duration_seconds": 15,
 }
+
+IMAGE_FILE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"}
+VIDEO_FILE_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 VIDEO_CREATIVE_DIRECTIONS = [
@@ -1195,7 +1198,7 @@ def plan_shot_retry(run_dir: Path, shot_id: str, reason: str = "", now: datetime
     original_job = next((job for job in jobs.get("jobs", []) if job["shot_id"] == normalized_shot_id), None)
     if not original_job:
         raise ValueError(f"找不到镜头 {normalized_shot_id} 的即梦任务。")
-    if original_job.get("job_type") in {"blocked", "reuse_video", "reuse_image"}:
+    if original_job.get("job_type") == "blocked":
         raise ValueError(f"镜头 {normalized_shot_id} 的任务类型是 {original_job.get('job_type')}，不适合提交即梦重做。")
 
     timestamp = _timestamp(now)
@@ -1301,7 +1304,7 @@ def submit_shot_retry(
     original_job = retry_plan.get("original_job") or {}
     if original_job.get("shot_id") != shot_id:
         raise ValueError(f"重做计划镜头 {original_job.get('shot_id')} 与等待提交镜头 {shot_id} 不一致。")
-    if original_job.get("job_type") in {"blocked", "reuse_video", "reuse_image"}:
+    if original_job.get("job_type") == "blocked":
         raise ValueError(f"镜头 {shot_id} 的任务类型是 {original_job.get('job_type')}，不能提交即梦重做。")
 
     timestamp = _timestamp(now)
@@ -2078,7 +2081,7 @@ def recommend_creative_directions(
                 "supporting_direction": supporting,
                 "rationale": reason,
                 "material_coverage": material_coverage,
-                "missing_materials": "真实应用视频、真实测试视频需按内容素材卡确认；缺失时只能标记为 AI 模拟或改用产品图转视频。",
+                "missing_materials": "真实应用图片和产品图片需按内容素材卡确认；缺失时只能标记为 AI 模拟或改用环境镜头。",
                 "ai_generation_risk": "不得把 AI 模拟场景表述为真实案例、真实测试或客户现场。",
             }
         )
@@ -2302,7 +2305,11 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     external_names = _external_names_from_product(product)
     primary = state["creative_direction"]["primary"]
     supporting = state["creative_direction"].get("supporting")
-    content_asset_summaries = [_content_asset_summary(card) for card in content_assets]
+    content_asset_summaries = [
+        summary
+        for card in content_assets
+        if (summary := _content_asset_summary(card)) is not None
+    ]
     plan = {
         "schema_version": "video-plan-v1",
         "generated_at": now.isoformat(),
@@ -2471,10 +2478,9 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             "",
             f"- 内容素材卡总数：{counts.get('total_assets', 0)}",
             f"- 产品图片素材：{counts.get('product_image_assets', 0)}",
-            f"- 产品视频素材：{counts.get('product_video_assets', 0)}",
             f"- 应用场景素材：{counts.get('application_assets', 0)}",
             f"- 测试/验证素材：{counts.get('test_or_validation_assets', 0)}",
-            f"- 可用于 image2video/reuse_video 的真实参考素材：{counts.get('usable_visual_reference_assets', 0)}",
+            f"- 可用于 image2video 的图片参考素材：{counts.get('usable_visual_reference_assets', 0)}",
         ]
     )
     usable_refs = material.get("usable_visual_references", [])
@@ -2496,7 +2502,7 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             f"- {plan['visual_strategy']['summary']}",
             f"- 素材优先级：{plan['visual_strategy']['material_priority']}",
             f"- AI 风险控制：{plan['visual_strategy']['ai_risk_control']}",
-            f"- 产品视频风格：{plan['production_style']['name']}｜{plan['production_style']['visual_language']}",
+            f"- 画面风格：{plan['production_style']['name']}｜{plan['production_style']['visual_language']}",
             "",
             "## 创意质量矩阵",
             "",
@@ -2508,7 +2514,7 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             "## 即梦 Prompt 规则",
             "",
             "- Prompt 使用结构化英文写法：时间段、主体、参考素材、动作/运镜、环境、材质细节、禁止项。",
-            "- 产品可见镜头必须使用真实产品图或视频参考；纯 text2video 只能用于环境或过渡镜头。",
+            "- 产品可见镜头必须使用真实产品图片参考；纯 text2video 只能用于环境或过渡镜头。",
             "- Prompt 不生成字幕、不生成平台 UI、不引入知识卡之外的认证、参数或测试结论。",
             "",
             "## 音乐 brief",
@@ -2768,8 +2774,6 @@ def _shot_role(index: int, total: int) -> str:
 def _shot_material_mode(role: str, product_asset: dict[str, Any] | None, product_visible: bool) -> str:
     if product_asset:
         media_types = set(product_asset.get("media_types", []))
-        if "video" in media_types:
-            return "reuse_video"
         if "image" in media_types:
             return "image2video" if product_visible else "reuse_image"
     if product_visible:
@@ -2876,7 +2880,7 @@ def _build_material_reference_map(storyboard: dict[str, Any], capability_profile
         if not material_id:
             continue
         media_kind = _seedance_media_kind(material)
-        if media_kind not in counters:
+        if media_kind != "image":
             continue
         usage = _material_reference_usage(shot, media_kind)
         if material_id in references_by_material_id:
@@ -2885,9 +2889,8 @@ def _build_material_reference_map(storyboard: dict[str, Any], capability_profile
                 existing["usages"].append(usage)
             continue
         counters[media_kind] += 1
-        label_prefix = {"image": "@图片", "video": "@视频", "audio": "@音频"}[media_kind]
         reference = {
-            "label": f"{label_prefix}{counters[media_kind]}",
+            "label": f"@图片{counters[media_kind]}",
             "material_id": material_id,
             "title": material.get("title", ""),
             "media_kind": media_kind,
@@ -2939,19 +2942,16 @@ def _material_reference_for_shot(shot: dict[str, Any], material_reference_map: d
 
 def _seedance_media_kind(material: dict[str, Any]) -> str:
     media_types = {str(item).lower() for item in material.get("media_types", [])}
-    if "video" in media_types:
-        return "video"
-    if "audio" in media_types:
-        return "audio"
+    if "image" in media_types:
+        return "image"
+    files = _material_local_paths(material)
+    if _has_file_suffix(files, IMAGE_FILE_SUFFIXES):
+        return "image"
     return "image"
 
 
 def _material_reference_usage(shot: dict[str, Any], media_kind: str) -> str:
     role = str(shot.get("role") or "")
-    if media_kind == "video":
-        return "真实产品视频参考，用于产品外观、动作和运镜节奏"
-    if media_kind == "audio":
-        return "音频节奏或 BGM 参考；当前流程优先作为后处理音乐策略记录"
     if role == "product_hero":
         return "真实产品首帧参考"
     if role == "product_detail":
@@ -2964,9 +2964,7 @@ def _material_reference_usage(shot: dict[str, Any], media_kind: str) -> str:
 
 
 def _material_reference_execution_strategy(media_kind: str) -> str:
-    if media_kind == "audio":
-        return "record_for_bgm_or_future_audio_reference"
-    return "pass_to_dreamina_cli_input"
+    return "image2video first-frame reference"
 
 
 _MATERIAL_PATH_KEYS = (
@@ -3181,8 +3179,6 @@ def _dreamina_prompt_components_for_shot(shot: dict[str, Any], plan: dict[str, A
     reference_usage = material_reference.get("usage")
     if shot["material_mode"] in {"image2video", "reuse_image"}:
         reference = f"Use {reference_label} as {reference_usage}; preserve product identity, tape shape, woven surface, and material texture." if reference_label and reference_usage else "BLOCKED: this image-based product shot needs a numbered real product reference and usage."
-    elif shot["material_mode"] == "reuse_video":
-        reference = f"Use {reference_label} as {reference_usage}; keep product identity unchanged." if reference_label and reference_usage else "BLOCKED: this video-based product shot needs a numbered real footage reference and usage."
     elif shot["material_mode"] == "blocked":
         reference = "BLOCKED: this shot needs a real product reference before generation."
     else:
@@ -3744,7 +3740,7 @@ def _submit_dreamina_jobs_payload(
     for job in jobs_payload.get("jobs", []):
         output_path = generated_dir / f"shot_{job['shot_id']}.mp4"
         command = _dreamina_submit_command(job, dreamina_command, output_path)
-        if job["job_type"] in {"reuse_video", "reuse_image"}:
+        if job["job_type"] == "reuse_image":
             submissions.append(
                 {
                     "job_id": job["job_id"],
@@ -4275,7 +4271,7 @@ def _dreamina_submit_command(job: dict[str, Any], dreamina_command: str, output_
             "30",
         ]
         return [part for part in base if part != ""]
-    if job_type in {"reuse_video", "reuse_image"}:
+    if job_type == "reuse_image":
         return []
     base = [
         dreamina_command,
@@ -4327,14 +4323,8 @@ def _reference_material_path(job: dict[str, Any], project_dir: Path | None = Non
 def _first_compatible_material_file(files: list[str], job_type: str) -> str | None:
     if not files:
         return None
-    image_suffixes = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"}
-    video_suffixes = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
-    suffixes = image_suffixes if job_type in {"image2video", "reuse_image"} else video_suffixes if job_type == "reuse_video" else image_suffixes | video_suffixes
     for value in files:
-        if Path(value).suffix.lower() in suffixes:
-            return value
-    for value in files:
-        if Path(value).suffix:
+        if Path(value).suffix.lower() in IMAGE_FILE_SUFFIXES:
             return value
     return None
 
@@ -4756,7 +4746,7 @@ def _video_creation_planning_quality_issues(state: dict[str, Any]) -> dict[str, 
             if item.get("reference_required") and not item.get("reference_material_id"):
                 blockers.append({"code": "missing_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但未绑定素材 ID。"})
             if item.get("reference_required") and not item.get("numbered_reference_label"):
-                blockers.append({"code": "missing_numbered_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少 @图片/@视频 编号引用。"})
+                blockers.append({"code": "missing_numbered_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少 @图片 编号引用。"})
             if item.get("reference_required") and not str(item.get("reference_usage") or "").strip():
                 blockers.append({"code": "missing_prompt_reference_usage", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少用途说明。"})
             if item.get("prompt_standard") == "tuolin-industrial-seedance-v2":
@@ -5169,10 +5159,8 @@ def _dreamina_job_type_for_shot(shot: dict[str, Any]) -> str:
     product_visible = bool(shot.get("product_visible"))
     if material_mode == "blocked":
         return "blocked"
-    if material_mode == "reuse_video":
-        return "reuse_video"
     if material_mode == "reuse_image":
-        return "reuse_image"
+        return "image2video"
     if material_mode == "image2video":
         return "image2video"
     if material_mode == "text2video" and not product_visible:
@@ -5188,7 +5176,7 @@ def _dreamina_blocked_reason(shot: dict[str, Any], job_type: str) -> str | None:
     if job_type != "blocked":
         return None
     if shot.get("product_visible") and not shot.get("selected_material"):
-        return "该镜头展示具体产品，但没有真实产品图片或视频参考。"
+        return "该镜头展示具体产品，但没有真实产品图片参考。"
     if shot.get("material_mode") == "ai_simulated_scene" and shot.get("product_visible"):
         return "AI 模拟场景不能在无真实产品参考时展示具体产品。"
     return "素材缺失或当前规则不允许生成。"
@@ -5227,7 +5215,7 @@ def _validate_dreamina_job(
     if prompt.get("reference_required") and not prompt.get("reference_material_id"):
         blockers.append("Prompt 要求参考素材，但任务缺少 reference_material_id。")
     if prompt.get("reference_required") and not prompt.get("numbered_reference_label"):
-        blockers.append("Prompt 要求参考素材，但缺少 @图片/@视频 编号引用。")
+        blockers.append("Prompt 要求参考素材，但缺少 @图片 编号引用。")
     if prompt.get("reference_required") and not str(prompt.get("reference_usage") or "").strip():
         blockers.append("Prompt 要求参考素材，但缺少素材用途说明。")
     if prompt.get("prompt_standard") not in {"tuolin-industrial-seedance-v1", "tuolin-industrial-seedance-v2"}:
@@ -5263,7 +5251,7 @@ def _validate_dreamina_job(
 
 
 def _estimate_dreamina_credits(job_type: str, duration_seconds: int) -> int:
-    if job_type in {"reuse_video", "reuse_image", "blocked"}:
+    if job_type in {"reuse_image", "blocked"}:
         return 0
     unit = max(1, round(duration_seconds / 5))
     if job_type == "image2video":
@@ -5306,19 +5294,24 @@ def _usable_product_knowledge(product: dict[str, Any]) -> list[str]:
     return items[:5]
 
 
-def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any]:
+def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any] | None:
     frontmatter = card.get("frontmatter", {})
     raw_partitions = card.get("raw_partitions", [])
     files = _extract_material_paths(frontmatter)
     if not files:
         files = _extract_material_paths({"raw_partitions": raw_partitions})
+    image_files = [path for path in files if Path(str(path)).suffix.lower() in IMAGE_FILE_SUFFIXES]
+    media_types = [str(item).lower() for item in frontmatter.get("media_types", [])]
+    has_image_media = "image" in media_types or bool(image_files)
+    if not has_image_media:
+        return None
     return {
         "id": card["id"],
         "title": card.get("title", ""),
-        "media_types": frontmatter.get("media_types", []),
+        "media_types": ["image"],
         "asset_category": frontmatter.get("asset_category", ""),
         "raw_partitions": raw_partitions,
-        "files": files,
+        "files": image_files,
         "human_face_risk": str(frontmatter.get("human_face_risk") or "none"),
         "usage_note": "内容素材只用于素材选择、画面描述、Prompt 参考和镜头生成约束，不能证明产品事实。",
     }
@@ -5328,9 +5321,7 @@ def _material_availability_summary(content_assets: list[dict[str, Any]]) -> dict
     counts = {
         "total_assets": len(content_assets),
         "image_assets": 0,
-        "video_assets": 0,
         "product_image_assets": 0,
-        "product_video_assets": 0,
         "application_assets": 0,
         "test_or_validation_assets": 0,
         "assets_with_local_paths": 0,
@@ -5347,23 +5338,18 @@ def _material_availability_summary(content_assets: list[dict[str, Any]]) -> dict
                 " ".join(files),
             ]
         )
-        is_image = "image" in media_types or _has_file_suffix(files, {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"})
-        is_video = "video" in media_types or _has_file_suffix(files, {".mp4", ".mov", ".m4v", ".avi", ".mkv"})
+        is_image = "image" in media_types or _has_file_suffix(files, IMAGE_FILE_SUFFIXES)
         if is_image:
             counts["image_assets"] += 1
-        if is_video:
-            counts["video_assets"] += 1
         if files:
             counts["assets_with_local_paths"] += 1
         if _contains_any(searchable, ["产品图片", "product image", "product photo", "产品实拍", "精选图"]):
             counts["product_image_assets"] += 1 if is_image else 0
-        if _contains_any(searchable, ["产品视频", "product video", "实拍视频"]):
-            counts["product_video_assets"] += 1 if is_video else 0
         if _contains_any(searchable, ["应用场景", "application", "exhaust", "pipe", "包覆", "管道"]):
             counts["application_assets"] += 1
         if _contains_any(searchable, ["测试", "验证", "test", "verification", "report", "检测"]):
             counts["test_or_validation_assets"] += 1
-        if files and (is_image or is_video):
+        if files and is_image:
             counts["usable_visual_reference_assets"] += 1
             usable_visual_references.append(
                 {
@@ -5379,9 +5365,9 @@ def _material_availability_summary(content_assets: list[dict[str, Any]]) -> dict
     if counts["total_assets"] == 0:
         warnings.append("当前视频上下文没有可读内容素材卡；产品可见镜头会缺少真实参考。")
     elif counts["usable_visual_reference_assets"] == 0:
-        warnings.append("内容素材卡存在，但没有记录可用于即梦的本地图片或视频路径。")
-    if counts["product_image_assets"] + counts["product_video_assets"] == 0:
-        warnings.append("没有识别到产品图片或产品视频素材；产品 hero 和细节镜头会受到限制。")
+        warnings.append("内容素材卡存在，但没有记录可用于即梦的本地图片路径。")
+    if counts["product_image_assets"] == 0:
+        warnings.append("没有识别到产品图片素材；产品 hero 和细节镜头会受到限制。")
     return {
         "schema_version": "video-material-availability-v1",
         "counts": counts,
@@ -5404,7 +5390,7 @@ def _material_availability_user_summary(counts: dict[str, int], warnings: list[s
     if counts.get("usable_visual_reference_assets", 0) > 0:
         return (
             f"已读取 {counts.get('total_assets', 0)} 张内容素材卡，"
-            f"其中 {counts.get('usable_visual_reference_assets', 0)} 张可作为视频生成参考。"
+            f"其中 {counts.get('usable_visual_reference_assets', 0)} 张图片可作为即梦 image2video 参考。"
         )
     if warnings:
         return warnings[0]
@@ -5416,8 +5402,8 @@ def _visual_strategy(primary: dict[str, str], supporting: dict[str, str] | None,
     coverage = "优先使用已整理内容素材" if content_assets else "当前缺少已整理内容素材，后续分镜需谨慎使用 AI 模拟"
     return {
         "summary": f"围绕{primary['name']}组织叙事{support_text}；{coverage}。",
-        "material_priority": "真实产品视频 > 真实应用视频 > 真实产品图片转视频 > 真实应用图片转视频 > AI 模拟场景 > 纯文本生成视频",
-        "ai_risk_control": "任何展示具体产品的 AI 镜头必须使用真实产品图/视频作参考；模拟场景必须标记为 AI 生成。",
+        "material_priority": "知识卡文字依据 > 真实产品图片转视频 > 真实应用图片转视频 > AI 模拟环境镜头 > 纯文本生成环境镜头",
+        "ai_risk_control": "任何展示具体产品的 AI 镜头必须使用真实产品图片作参考；模拟场景必须标记为 AI 生成。",
     }
 
 
