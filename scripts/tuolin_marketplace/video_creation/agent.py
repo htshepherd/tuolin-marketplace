@@ -3805,14 +3805,71 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
         "# This script performs real Dreamina submissions and may consume credits.",
         "# Run only after human confirmation.",
         f"$manualSubmissionPath = {_ps_quote(str(output_json))}",
-        "$submissions = @()",
+        f"$runDir = {_ps_quote(submission['run_dir'])}",
+        f"$estimatedTotalCredits = {int(submission.get('estimated_total_credits') or 0)}",
+        "",
+        "function Convert-DreaminaOutputJson {",
+        "  param([string[]]$OutputLines)",
+        "  $raw = ($OutputLines | Out-String).Trim()",
+        "  $start = $raw.IndexOf(\"{\")",
+        "  $end = $raw.LastIndexOf(\"}\")",
+        "  if ($start -lt 0 -or $end -lt $start) {",
+        "    Write-Host \"Dreamina raw output:\"",
+        "    Write-Host $raw",
+        "    throw \"Dreamina did not return parseable JSON.\"",
+        "  }",
+        "  return $raw.Substring($start, $end - $start + 1) | ConvertFrom-Json",
+        "}",
+        "",
+        "function New-ManualEnvelope {",
+        "  param([array]$Submissions)",
+        "  return [ordered]@{",
+        "    schema_version = \"dreamina-submission-v1\"",
+        "    submitted_at = (Get-Date).ToString(\"o\")",
+        "    updated_at = (Get-Date).ToString(\"o\")",
+        "    mode = \"manual_execute\"",
+        "    status = \"partial\"",
+        "    run_dir = $runDir",
+        "    estimated_total_credits = $estimatedTotalCredits",
+        "    submissions = $Submissions",
+        "    policy = [ordered]@{",
+        "      submitted_only_after_user_confirmation = $true",
+        "      dry_run_does_not_consume_credits = $false",
+        "      manual_execution_by_human = $true",
+        "      resumable_manual_submission = $true",
+        "    }",
+        "  }",
+        "}",
+        "",
+        "function Save-ManualSubmission {",
+        "  $completed = @($script:submissions | Where-Object { $_.status -in @(\"submitted\", \"reused\", \"submission_blocked\") }).Count",
+        "  if ($completed -eq @($script:submissions).Count) { $script:manual.status = \"submitted\" } else { $script:manual.status = \"partial\" }",
+        "  $script:manual.updated_at = (Get-Date).ToString(\"o\")",
+        "  $script:manual.submissions = $script:submissions",
+        "  $script:manual | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $manualSubmissionPath",
+        "  Write-Host \"Saved manual submission progress: $manualSubmissionPath\"",
+        "}",
+        "",
+        "$script:submissions = @()",
+        "if (Test-Path $manualSubmissionPath) {",
+        "  $existing = Get-Content $manualSubmissionPath -Raw | ConvertFrom-Json",
+        "  foreach ($item in @($existing.submissions)) { $script:submissions += $item }",
+        "  Write-Host \"Loaded existing manual submission progress: $manualSubmissionPath\"",
+        "}",
+        "$script:manual = New-ManualEnvelope $script:submissions",
         "",
     ]
     for item in submission.get("submissions", []):
         if item.get("status") == "reused":
+            shot_id = item["shot_id"]
+            job_type = item["job_type"]
             lines.extend(
                 [
-                    "$submissions += [ordered]@{",
+                    f"$existingItem = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -in @(\"submitted\", \"reused\", \"submission_blocked\") }} | Select-Object -First 1)",
+                    "if ($existingItem) {",
+                    f"Write-Host \"Skipping shot {shot_id} ({job_type}): already recorded\"",
+                    "} else {",
+                    "$script:submissions += [ordered]@{",
                     f"  job_id = {_ps_quote(item['job_id'])}",
                     f"  shot_id = {_ps_quote(item['shot_id'])}",
                     f"  job_type = {_ps_quote(item['job_type'])}",
@@ -3823,15 +3880,23 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
                     "  stderr = \"\"",
                     "  error = $null",
                     "}",
+                    "Save-ManualSubmission",
+                    "}",
                     "",
                 ]
             )
             continue
         if item.get("status") == "submission_blocked":
+            shot_id = item["shot_id"]
+            job_type = item["job_type"]
             lines.extend(
                 [
-                    f"Write-Host \"Skipping shot {item['shot_id']} ({item['job_type']}): submission blocked\"",
-                    "$submissions += [ordered]@{",
+                    f"$existingItem = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -in @(\"submitted\", \"reused\", \"submission_blocked\") }} | Select-Object -First 1)",
+                    "if ($existingItem) {",
+                    f"Write-Host \"Skipping shot {shot_id} ({job_type}): already recorded\"",
+                    "} else {",
+                    f"Write-Host \"Skipping shot {shot_id} ({job_type}): submission blocked\"",
+                    "$script:submissions += [ordered]@{",
                     f"  job_id = {_ps_quote(item['job_id'])}",
                     f"  shot_id = {_ps_quote(item['shot_id'])}",
                     f"  job_type = {_ps_quote(item['job_type'])}",
@@ -3842,22 +3907,32 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
                     "  stderr = \"\"",
                     f"  error = {_ps_quote(str(item.get('error') or '缺少可执行即梦命令'))}",
                     "}",
+                    "Save-ManualSubmission",
+                    "}",
                     "",
                 ]
             )
             continue
         command = item.get("command") or []
         command_line = " ".join(_ps_quote(str(part)) for part in command)
+        shot_id = item["shot_id"]
+        job_type = item["job_type"]
         lines.extend(
             [
-                f"Write-Host \"Submitting shot {item['shot_id']} ({item['job_type']})\"",
+                f"$existingItem = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -eq \"submitted\" -and $_.provider_task_id }} | Select-Object -First 1)",
+                "if ($existingItem) {",
+                f"Write-Host \"Skipping shot {shot_id} ({job_type}): already submitted as $($existingItem.provider_task_id)\"",
+                "} else {",
+                f"Write-Host \"Submitting shot {shot_id} ({job_type})\"",
                 f"$stdout = & {command_line}",
-                "$parsed = $stdout | ConvertFrom-Json",
+                "$parsed = Convert-DreaminaOutputJson $stdout",
                 "$submitId = $parsed.submit_id",
                 "if (-not $submitId) { $submitId = $parsed.task_id }",
                 "if (-not $submitId) { $submitId = $parsed.id }",
-                "if (-not $submitId) { throw \"Dreamina did not return submit_id.\" }",
-                "$submissions += [ordered]@{",
+                "if (-not $submitId) { $submitId = $parsed.job_id }",
+                "if (-not $submitId) { Write-Host \"Dreamina raw output:\"; Write-Host ($stdout | Out-String); throw \"Dreamina did not return submit_id.\" }",
+                "$script:submissions = @($script:submissions | Where-Object { $_.shot_id -ne " + _ps_quote(item["shot_id"]) + " })",
+                "$script:submissions += [ordered]@{",
                 f"  job_id = {_ps_quote(item['job_id'])}",
                 f"  shot_id = {_ps_quote(item['shot_id'])}",
                 f"  job_type = {_ps_quote(item['job_type'])}",
@@ -3868,27 +3943,15 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
                 "  stderr = \"\"",
                 "  error = $null",
                 "}",
+                "Save-ManualSubmission",
+                "}",
                 "",
             ]
         )
     lines.extend(
         [
-            "$manual = [ordered]@{",
-            "  schema_version = \"dreamina-submission-v1\"",
-            "  submitted_at = (Get-Date).ToString(\"o\")",
-            "  mode = \"manual_execute\"",
-            "  status = \"submitted\"",
-            f"  run_dir = {_ps_quote(submission['run_dir'])}",
-            f"  estimated_total_credits = {int(submission.get('estimated_total_credits') or 0)}",
-            "  submissions = $submissions",
-            "  policy = [ordered]@{",
-            "    submitted_only_after_user_confirmation = $true",
-            "    dry_run_does_not_consume_credits = $false",
-            "    manual_execution_by_human = $true",
-            "  }",
-            "}",
-            "$manual | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $manualSubmissionPath",
-            "Write-Host \"Wrote manual submission file: $manualSubmissionPath\"",
+            "Save-ManualSubmission",
+            "Write-Host \"Manual Dreamina submission finished or saved as partial progress.\"",
             "",
         ]
     )
@@ -3932,6 +3995,8 @@ def _render_dreamina_submission(submission: dict[str, Any]) -> str:
             "",
             "- 如果当前环境不能代为真实提交，请在 PowerShell 手动执行上面的 `submit_real_dreamina_jobs.ps1`。",
             "- 脚本会把真实 submit_id 写入 `manual_submission.json`。",
+            "- 脚本支持断点续跑：每个镜头成功提交后会立即保存；如果中途失败，修复后重新执行同一脚本会自动跳过已提交镜头。",
+            "- 脚本会从即梦 CLI 输出中提取 JSON，即使前面混入本地日志，也不需要用户手工处理。",
             "- `manual_submission.json` 存在时，后续查询会优先使用真实 submit_id。",
             "",
             "下一步：查询即梦结果。",
