@@ -4010,14 +4010,21 @@ def _ps_quote(value: str) -> str:
 
 def _render_dreamina_submission(submission: dict[str, Any]) -> str:
     manual = submission.get("manual_execution", {})
+    powershell_script = str(manual.get("powershell_script") or "").strip()
+    manual_submission_json = str(manual.get("manual_submission_json") or "").strip()
+    powershell_command = (
+        f'powershell.exe -ExecutionPolicy Bypass -File "{powershell_script}"'
+        if powershell_script
+        else ""
+    )
     lines = [
         "# 即梦提交记录",
         "",
         f"- 模式：{submission['mode']}",
         f"- 状态：{submission['status']}",
         f"- 预计额度：{submission['estimated_total_credits']}",
-        f"- 人工真实提交脚本：{manual.get('powershell_script') or '未生成'}",
-        f"- 人工提交结果文件：{manual.get('manual_submission_json') or '未生成'}",
+        f"- 人工真实提交脚本：{powershell_script or '未生成'}",
+        f"- 人工提交结果文件：{manual_submission_json or '未生成'}",
         "",
         "## 提交明细",
         "",
@@ -4039,13 +4046,18 @@ def _render_dreamina_submission(submission: dict[str, Any]) -> str:
         [
             "## 人工真实提交",
             "",
-            "- 如果当前环境不能代为真实提交，请在 PowerShell 手动执行上面的 `submit_real_dreamina_jobs.ps1`。",
+            "请打开 Windows PowerShell，复制并运行下面这条命令：",
+            "",
+            "```powershell",
+            powershell_command or "# 未生成真实提交脚本，不能执行人工真实提交。",
+            "```",
+            "",
             "- 脚本会把真实 submit_id 写入 `manual_submission.json`。",
             "- 脚本支持断点续跑：每个镜头成功提交后会立即保存；如果中途失败，修复后重新执行同一脚本会自动跳过已提交镜头。",
             "- 脚本会从即梦 CLI 输出中提取 JSON，即使前面混入本地日志，也不需要用户手工处理。",
             "- `manual_submission.json` 存在时，后续查询会优先使用真实 submit_id。",
             "",
-            "下一步：查询即梦结果。",
+            "命令执行完成后，回到 Codex 回复：`查询即梦结果`。",
             "",
         ]
     )
