@@ -2095,11 +2095,17 @@ def _state_adapter_command(state: dict[str, Any], key: str, default: str) -> str
     return str(value).strip() if value else default
 
 
+def _select_video_product_card(product_cards: list[dict[str, Any]]) -> dict[str, Any]:
+    supported_ids = {INTERNAL_PRODUCT_ID, *VIDEO_CREATION_PRODUCT_ALIAS_IDS}
+    for card in product_cards:
+        if str(card.get("id", "")) in supported_ids:
+            return card
+    raise ValueError("video_creation 上下文缺少石英纤维隔热带产品卡；不能使用产品矩阵或其他材料选型卡代替。")
+
+
 def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], now: datetime) -> dict[str, Any]:
     product_cards = context.get("cards_by_type", {}).get("product", [])
-    if not product_cards:
-        raise ValueError("video_creation 上下文缺少石英纤维隔热带产品卡。")
-    product = product_cards[0]
+    product = _select_video_product_card(product_cards)
     content_assets = context.get("cards_by_type", {}).get("content_asset", [])
     language = state["language_version"]
     duration = state["duration_seconds"]

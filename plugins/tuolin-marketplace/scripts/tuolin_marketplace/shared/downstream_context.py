@@ -72,6 +72,7 @@ def build_downstream_context(
         allowed_external_scopes=allowed_external_scopes if isinstance(allowed_external_scopes, list) else None,
         allow_query_expansion=not config.get("no_keyword_expansion", False),
     )
+    selected = _prioritize_product_cards(selected, product_ids)
     product_cards = [card for card in selected if card.get("type") == "product"]
     resolved_product_id = product_cards[0]["id"] if product_cards else product_id
     evidence = _collect_evidence(paths, selected)
@@ -261,6 +262,16 @@ def _group_by_type(cards: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]
     for card in cards:
         grouped.setdefault(card["type"], []).append(card)
     return grouped
+
+
+def _prioritize_product_cards(cards: list[dict[str, Any]], product_ids: list[str] | None) -> list[dict[str, Any]]:
+    if not product_ids:
+        return cards
+    product_id_order = {product_id: index for index, product_id in enumerate(product_ids)}
+    product_cards = [card for card in cards if card.get("type") == "product"]
+    other_cards = [card for card in cards if card.get("type") != "product"]
+    product_cards.sort(key=lambda card: (product_id_order.get(str(card.get("id")), len(product_id_order)), str(card.get("id", ""))))
+    return [*product_cards, *other_cards]
 
 
 def _risk_item(review: dict[str, Any]) -> dict[str, Any]:

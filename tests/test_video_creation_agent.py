@@ -211,6 +211,40 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertFalse(plan["knowledge_boundary"]["external_publication_ready"])
             self.assertEqual(plan["content_assets"][0]["id"], "content_asset/quartz_legacy_product_photo")
 
+    def test_video_creation_does_not_use_product_matrix_as_primary_product_knowledge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_product_matrix_card(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个15秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用于 YouTube Shorts 和 TikTok。",
+                language_version="en",
+                platforms=["youtube_shorts", "tiktok"],
+                duration_seconds=15,
+                target_audience="欧美工业采购商",
+                core_objective="突出隔热防护价值并引导询盘",
+                primary_direction="性能测试型",
+                supporting_direction="应用演示型",
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["context"]["product_id"], "product/quartz_fiber_tape")
+
+            generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+
+            plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["product"]["internal_id"], "product/quartz_fiber_tape")
+            self.assertEqual(plan["product"]["external_name_en"], "Specialty Glass Fiber Tape")
+            plan_text = (run_dir / "video_plan.md").read_text(encoding="utf-8")
+            self.assertNotIn("product/exhaust_wrap_matrix", plan_text)
+            self.assertNotIn("玄武岩", plan_text)
+            self.assertNotIn("陶瓷纤维", plan_text)
+
     def test_video_creation_run_requires_user_creative_direction_confirmation_before_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -1544,6 +1578,34 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             "  - video_creation",
         ],
         "这是产品实拍视频素材；视频创作 Agent 不应把视频文件用于策划素材或即梦任务。",
+    )
+
+
+def _write_product_matrix_card(paths) -> None:
+    _write_card(
+        paths.knowledge_dir / "产品" / "00排气管隔热带产品矩阵.md",
+        [
+            "card_template_version: product-card-v1",
+            "type: product",
+            "id: product/exhaust_wrap_matrix",
+            "title: 排气管隔热带产品矩阵",
+            "aliases:",
+            "  - Exhaust Wrap",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions: []",
+            "tags:",
+            "  - 石英纤维隔热带",
+            "  - 产品矩阵",
+            "updated_at: 2026-06-25T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "product_line: 耐高温隔热带",
+            "related_products:",
+            "  - product/quartz_fiber_tape",
+        ],
+        "## 产品矩阵\n\n| 产品 | 市场名称 |\n| --- | --- |\n| 玄武岩纤维隔热带 | 玄武岩隔热带 |\n| 陶瓷纤维隔热带 | 陶瓷隔热带 |\n| 石英纤维隔热带 | Exhaust Wrap |\n",
     )
 
 
