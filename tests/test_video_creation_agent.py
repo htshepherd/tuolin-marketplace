@@ -22,6 +22,7 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     confirm_narration_script,
     confirm_shot_retry,
     confirm_shots,
+    assemble_confirmed_video,
     confirm_storyboard,
     confirm_video_plan,
     create_video_creation_run,
@@ -127,7 +128,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["outputs"]["final_filename"], "quartz_fiber_tape_en_9x16.mp4")
             self.assertEqual(state["outputs"]["dreamina_model"], "seedance2.0_vip")
             self.assertEqual(state["adapters"]["dreamina_command"], "dreamina")
-            self.assertNotIn("ffmpeg_command", state["adapters"])
+            self.assertEqual(state["adapters"]["ffmpeg_command"], "ffmpeg")
             self.assertNotIn("tts_provider", state["adapters"])
             self.assertNotIn("bgm_provider", state["adapters"])
             self.assertTrue(Path(state["files"]["context"]).exists())
@@ -263,7 +264,8 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             state = json.loads((Path(result.run_dir) / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["adapters"]["dreamina_command"], "/opt/dreamina")
-            self.assertEqual(set(state["adapters"]), {"dreamina_command", "dreamina_execute_default"})
+            self.assertEqual(state["adapters"]["ffmpeg_command"], "ffmpeg")
+            self.assertEqual(set(state["adapters"]), {"dreamina_command", "dreamina_execute_default", "ffmpeg_command"})
 
     def test_video_creation_run_records_default_dreamina_capability_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -771,9 +773,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             submit_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
             query_dreamina_results(run_dir, now=datetime(2026, 6, 25, 15, 35, 0))
             shots = confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 40, 0))
-            self.assertEqual(shots.phase, "completed")
+            self.assertEqual(shots.phase, "ready_for_video_assembly")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertIsNone(state["current_pending_confirmation"])
+            self.assertEqual(state["current_pending_confirmation"], "合并视频")
             self.assertNotIn("narration_script", state["confirmations"])
             self.assertNotIn("voice", state["confirmations"])
             self.assertNotIn("narration", state["confirmations"])
@@ -1049,7 +1051,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             confirmed = confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 50, 0))
             self.assertEqual(confirmed.status, "shots_confirmed")
-            self.assertEqual(confirmed.phase, "completed")
+            self.assertEqual(confirmed.phase, "ready_for_video_assembly")
             shot_preview_manifest = run_dir / "dreamina_generation" / "shot_preview_manifest.json"
             self.assertTrue(shot_preview_manifest.exists())
             shot_preview = json.loads(shot_preview_manifest.read_text(encoding="utf-8"))
@@ -1059,7 +1061,49 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertNotIn("contains_final_bgm", shot_preview)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["shots"])
-            self.assertIsNone(state["current_pending_confirmation"])
+            self.assertFalse(state["confirmations"]["video_assembly"])
+            self.assertEqual(state["current_pending_confirmation"], "合并视频")
+
+    def test_assembling_confirmed_shots_blocks_when_videos_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
+            confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 50, 0))
+
+            result = assemble_confirmed_video(run_dir, runner=_ffmpeg_completed, now=datetime(2026, 6, 25, 15, 55, 0))
+
+            self.assertEqual(result.status, "video_assembly_blocked")
+            self.assertEqual(result.phase, "awaiting_video_assembly")
+            manifest = json.loads((run_dir / "dreamina_generation" / "assembly_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "blocked")
+            self.assertTrue(any("视频文件不存在" in blocker for blocker in manifest["blockers"]))
+            self.assertTrue((run_dir / "dreamina_generation" / "editing_subtitles.md").exists())
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertFalse(state["confirmations"]["video_assembly"])
+            self.assertEqual(state["current_pending_confirmation"], "合并视频")
+
+    def test_assembles_confirmed_shots_and_generates_editing_subtitles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_results_ready_run(Path(tmp))
+            _write_dreamina_result_videos(run_dir)
+            confirm_shots(run_dir, now=datetime(2026, 6, 25, 15, 50, 0))
+
+            result = assemble_confirmed_video(run_dir, runner=_ffmpeg_completed, now=datetime(2026, 6, 25, 15, 55, 0))
+
+            self.assertEqual(result.status, "video_assembled")
+            self.assertEqual(result.phase, "completed")
+            stitched = run_dir / "dreamina_generation" / "stitched_video.mp4"
+            subtitles = run_dir / "dreamina_generation" / "editing_subtitles.md"
+            self.assertTrue(stitched.exists())
+            self.assertTrue(subtitles.exists())
+            subtitle_text = subtitles.read_text(encoding="utf-8")
+            self.assertIn("| 镜头 | 时间段 | 建议字幕/旁白 |", subtitle_text)
+            self.assertIn("00:00:00–00:00:05", subtitle_text)
+            manifest = json.loads((run_dir / "dreamina_generation" / "assembly_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "succeeded")
+            self.assertTrue(manifest["policy"]["no_subtitles_burned"])
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertTrue(state["confirmations"]["video_assembly"])
+            self.assertEqual(state["files"]["assembled_video_mp4"], str(stitched))
 
     def test_queries_manual_dreamina_submission_file_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1300,11 +1344,11 @@ class VideoCreationAgentTests(unittest.TestCase):
             final = handle_video_creation_reply(run_dir, "确认镜头", now=datetime(2026, 6, 25, 15, 14, 0))
 
             self.assertEqual(final.status, "shots_confirmed")
-            self.assertEqual(final.phase, "completed")
+            self.assertEqual(final.phase, "ready_for_video_assembly")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["workflow_mode"], "video_only")
             self.assertTrue(state["confirmations"]["shots"])
-            self.assertIsNone(state["current_pending_confirmation"])
+            self.assertEqual(state["current_pending_confirmation"], "合并视频")
             self.assertFalse((run_dir / "subtitles").exists())
             self.assertFalse((run_dir / "audio").exists())
 
@@ -1679,8 +1723,24 @@ def _write_test_wav(path: Path) -> None:
         handle.writeframes(b"\x00\x00" * 800)
 
 
+def _write_dreamina_result_videos(run_dir: Path) -> None:
+    results_json = run_dir / "dreamina_generation" / "dreamina_results.json"
+    results = json.loads(results_json.read_text(encoding="utf-8"))
+    for item in results["results"]:
+        output_path = Path(item["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(f"fake video {item['shot_id']}".encode("utf-8"))
+
+
 def _completed(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
+
+
+def _ffmpeg_completed(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+    output_path = Path(command[-1])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"stitched video")
+    return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
 
 if __name__ == "__main__":

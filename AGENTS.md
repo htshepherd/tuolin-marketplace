@@ -60,6 +60,7 @@ Typical video confirmations:
 6. 确认即梦任务计划。
 7. 确认是否真实提交即梦。
 8. 确认镜头结果。
+9. 合并镜头视频并生成剪辑字幕稿。
 
 ## 5. Use AI For Creative And Judgment Work
 
@@ -188,6 +189,7 @@ Video creation:
 7. 生成即梦任务计划。
 8. 人工确认真实提交。
 9. 查询结果并确认镜头。
+10. 合并镜头视频并生成剪辑字幕稿。
 
 ## 12. Fail Loudly And Keep Human Control
 

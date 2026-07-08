@@ -903,10 +903,11 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
 
     timestamp = _timestamp(now)
     state["status"] = "shots_confirmed"
-    state["phase"] = "completed"
-    state["current_pending_confirmation"] = None
+    state["phase"] = "ready_for_video_assembly"
+    state["current_pending_confirmation"] = "合并视频"
     state["updated_at"] = timestamp
     state["confirmations"]["shots"] = True
+    state["confirmations"]["video_assembly"] = False
     state.setdefault("files", {})["shot_preview_manifest_json"] = str(shot_preview_json_path)
     state.setdefault("files", {})["shot_preview_manifest_md"] = str(shot_preview_md_path)
     state.setdefault("files", {})["shot_preview_mp4"] = str(run_dir / "dreamina_generation" / "shot_preview.mp4")
@@ -915,7 +916,7 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
     _append_change(
         run_dir,
         timestamp,
-        "确认全部镜头，已完成即梦视频镜头生成。",
+        "确认全部镜头，等待合并视频并生成剪辑字幕稿。",
     )
 
     return VideoCreationStepResult(
@@ -924,6 +925,98 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(results_json_path), str(shot_preview_md_path), str(shot_preview_json_path)),
+    )
+
+
+def assemble_confirmed_video(
+    run_dir: Path,
+    runner: Runner = subprocess.run,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") not in {"ready_for_video_assembly", "awaiting_video_assembly"}:
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能合并视频。")
+    if not state.get("confirmations", {}).get("shots"):
+        raise ValueError("镜头尚未确认，不能合并视频。")
+
+    results_json_path = Path(state.get("files", {}).get("dreamina_results_json", run_dir / "dreamina_generation" / "dreamina_results.json"))
+    storyboard_json_path = Path(state.get("files", {}).get("storyboard_json", run_dir / "storyboard.json"))
+    results = _load_json_file(results_json_path, "dreamina_results.json")
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    assembly = _build_video_assembly_manifest(run_dir, state, results, storyboard, now or datetime.now())
+    ffmpeg_command = _state_adapter_command(state, "ffmpeg_command", "ffmpeg")
+    if assembly["status"] == "ready":
+        command = [
+            ffmpeg_command,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            assembly["concat_file"],
+            "-c",
+            "copy",
+            assembly["output_video_path"],
+        ]
+        assembly["ffmpeg_command"] = command
+        try:
+            completed = runner(command, capture_output=True, text=True, check=False)
+        except FileNotFoundError as exc:
+            assembly["status"] = "blocked"
+            assembly["blockers"].append(f"找不到 ffmpeg 命令：{ffmpeg_command}")
+            assembly["error"] = str(exc)
+        else:
+            assembly["ffmpeg_returncode"] = completed.returncode
+            assembly["ffmpeg_stdout"] = completed.stdout
+            assembly["ffmpeg_stderr"] = completed.stderr
+            if completed.returncode != 0:
+                assembly["status"] = "blocked"
+                assembly["blockers"].append(_completed_error(completed))
+            elif not Path(assembly["output_video_path"]).exists():
+                assembly["status"] = "blocked"
+                assembly["blockers"].append("ffmpeg 执行完成，但未生成合并后的视频文件。")
+            else:
+                assembly["status"] = "succeeded"
+
+    assembly_json_path = run_dir / "dreamina_generation" / "assembly_manifest.json"
+    assembly_md_path = run_dir / "dreamina_generation" / "assembly_manifest.md"
+    subtitles_md_path = run_dir / "dreamina_generation" / "editing_subtitles.md"
+    assembly_json_path.write_text(json.dumps(assembly, ensure_ascii=False, indent=2), encoding="utf-8")
+    assembly_md_path.write_text(_render_video_assembly_manifest(assembly), encoding="utf-8")
+    subtitles_md_path.write_text(_render_editing_subtitles(assembly), encoding="utf-8")
+
+    timestamp = _timestamp(now)
+    files = state.setdefault("files", {})
+    files["assembly_manifest_json"] = str(assembly_json_path)
+    files["assembly_manifest_md"] = str(assembly_md_path)
+    files["editing_subtitles_md"] = str(subtitles_md_path)
+    files["assembled_video_mp4"] = assembly["output_video_path"]
+    if assembly["status"] == "succeeded":
+        state["status"] = "video_assembled"
+        state["phase"] = "completed"
+        state["current_pending_confirmation"] = None
+        state["confirmations"]["video_assembly"] = True
+        change_message = "已合并即梦镜头并生成人工剪辑字幕稿。"
+    else:
+        state["status"] = "video_assembly_blocked"
+        state["phase"] = "awaiting_video_assembly"
+        state["current_pending_confirmation"] = "合并视频"
+        state["confirmations"]["video_assembly"] = False
+        change_message = "合并视频未完成，已生成阻塞清单和人工剪辑字幕稿。"
+    state["updated_at"] = timestamp
+    _append_status_history(state, state["status"], timestamp)
+    _write_state(state_path, state)
+    _append_change(run_dir, timestamp, change_message)
+
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(assembly_md_path), str(assembly_json_path), str(subtitles_md_path), assembly["output_video_path"]),
     )
 
 
@@ -1170,6 +1263,8 @@ def query_shot_retry_results(
     else:
         state["pending_shot_retry"] = pending
     state["confirmations"]["shots"] = False
+    state["confirmations"]["video_assembly"] = False
+    _clear_downstream_file_references(state, after="shots")
     _append_status_history(state, state["status"], timestamp)
     _write_state(state_path, state)
     _append_change(run_dir, timestamp, f"查询镜头 {shot_id} 重做结果，状态：{state['status']}。")
@@ -1335,6 +1430,8 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
         return plan_shot_retry(run_dir, shot_retry_request_id, reason=reply, now=now)
     if normalized == "确认镜头":
         return confirm_shots(run_dir, now=now)
+    if normalized in {"合并视频", "拼接视频", "生成合并视频", "合成视频"}:
+        return assemble_confirmed_video(run_dir, now=now)
     raise ValueError(f"未支持的视频创作回复：{reply}")
 
 
@@ -1853,6 +1950,7 @@ def _initial_workflow_state(
             "storyboard": False,
             "dreamina_generation": False,
             "shots": False,
+            "video_assembly": False,
         },
         "context": {
             "context_id": context["context_id"],
@@ -1952,6 +2050,7 @@ def _video_adapter_config(config: dict[str, Any]) -> dict[str, Any]:
     return {
         "dreamina_command": str(video_config.get("dreamina_command") or config.get("dreamina_command") or "dreamina"),
         "dreamina_execute_default": bool(video_config.get("dreamina_execute_default", False)),
+        "ffmpeg_command": str(video_config.get("ffmpeg_command") or config.get("ffmpeg_path") or "ffmpeg"),
     }
 
 
@@ -3724,6 +3823,155 @@ def _build_shot_preview_manifest(run_dir: Path, state: dict[str, Any], results: 
     }
 
 
+def _build_video_assembly_manifest(
+    run_dir: Path,
+    state: dict[str, Any],
+    results: dict[str, Any],
+    storyboard: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any]:
+    output_video_path = run_dir / "dreamina_generation" / "stitched_video.mp4"
+    concat_file = run_dir / "dreamina_generation" / "concat_shots.txt"
+    shot_by_id = {str(shot.get("shot_id") or ""): shot for shot in storyboard.get("shots", [])}
+    ordered_results = sorted(results.get("results", []), key=lambda item: str(item.get("shot_id") or ""))
+    shot_inputs: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    current_second = 0
+    for item in ordered_results:
+        shot_id = str(item.get("shot_id") or "")
+        output_path = str(item.get("output_path") or "").strip()
+        path = Path(output_path) if output_path else None
+        exists = bool(path and path.exists() and path.is_file())
+        shot = shot_by_id.get(shot_id, {})
+        duration = int(shot.get("duration_seconds") or 0) or 5
+        subtitle_text = _subtitle_text_for_shot(shot)
+        if not output_path:
+            blockers.append(f"镜头 {shot_id} 缺少 output_path。")
+        elif not exists:
+            blockers.append(f"镜头 {shot_id} 视频文件不存在：{output_path}")
+        shot_inputs.append(
+            {
+                "shot_id": shot_id,
+                "status": item.get("status"),
+                "input_path": output_path,
+                "exists": exists,
+                "duration_seconds": duration,
+                "start_time": _format_timecode(current_second),
+                "end_time": _format_timecode(current_second + duration),
+                "subtitle_text": subtitle_text,
+                "visual_description": shot.get("visual_description", ""),
+            }
+        )
+        current_second += duration
+    if not shot_inputs:
+        blockers.append("没有可合并的镜头结果。")
+    concat_file.parent.mkdir(parents=True, exist_ok=True)
+    concat_file.write_text(
+        "\n".join(f"file '{_ffmpeg_concat_path(item['input_path'])}'" for item in shot_inputs if item.get("input_path")) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "schema_version": "video-assembly-manifest-v1",
+        "generated_at": now.isoformat(),
+        "status": "blocked" if blockers else "ready",
+        "run_dir": str(run_dir),
+        "language_version": state.get("language_version"),
+        "platforms": state.get("platforms", []),
+        "shot_count": len(shot_inputs),
+        "total_duration_seconds": current_second,
+        "output_video_path": str(output_video_path),
+        "concat_file": str(concat_file),
+        "shot_inputs": shot_inputs,
+        "blockers": blockers,
+        "policy": {
+            "video_only": True,
+            "no_voiceover_generated": True,
+            "no_subtitles_burned": True,
+            "subtitle_md_for_manual_editing_only": True,
+        },
+    }
+
+
+def _render_video_assembly_manifest(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# 即梦镜头合并清单",
+        "",
+        f"- 状态：{manifest['status']}",
+        f"- 镜头数量：{manifest['shot_count']}",
+        f"- 预计时长：{manifest['total_duration_seconds']} 秒",
+        f"- 合并视频：{manifest['output_video_path']}",
+        f"- 字幕/旁白人工剪辑稿：{Path(manifest['run_dir']) / 'dreamina_generation' / 'editing_subtitles.md'}",
+        "",
+    ]
+    blockers = manifest.get("blockers", [])
+    if blockers:
+        lines.extend(["## 阻塞项", ""])
+        for blocker in blockers:
+            lines.append(f"- {blocker}")
+        lines.append("")
+    lines.extend(["## 镜头输入", ""])
+    for item in manifest.get("shot_inputs", []):
+        lines.append(
+            f"- 镜头 {item['shot_id']}｜{item['start_time']}–{item['end_time']}｜"
+            f"{'存在' if item['exists'] else '缺失'}｜{item['input_path']}"
+        )
+    lines.extend(
+        [
+            "",
+            "## 边界",
+            "",
+            "- 本步骤只把即梦生成镜头拼接成一个无配音、无字幕、无 BGM 的视频文件。",
+            "- `editing_subtitles.md` 只供人工剪辑软件中添加字幕/配音参考，不会自动烧录字幕。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_editing_subtitles(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# 人工剪辑字幕/旁白稿",
+        "",
+        f"- 来源运行目录：{manifest['run_dir']}",
+        f"- 语言版本：{manifest.get('language_version')}",
+        f"- 镜头数量：{manifest['shot_count']}",
+        f"- 预计时长：{manifest['total_duration_seconds']} 秒",
+        f"- 合并视频：{manifest['output_video_path']}",
+        "",
+        "说明：本文件用于人工在剪辑软件中添加字幕或配音。视频创作 Agent 不生成配音、不烧录字幕。",
+        "",
+        "| 镜头 | 时间段 | 建议字幕/旁白 | 画面备注 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for item in manifest.get("shot_inputs", []):
+        subtitle = str(item.get("subtitle_text") or "").replace("|", "｜")
+        visual = str(item.get("visual_description") or "").replace("|", "｜")
+        lines.append(f"| {item['shot_id']} | {item['start_time']}–{item['end_time']} | {subtitle} | {visual} |")
+    lines.extend(["", "## 纯文本版本", ""])
+    for item in manifest.get("shot_inputs", []):
+        lines.append(f"{item['start_time']}–{item['end_time']}  {item.get('subtitle_text') or ''}")
+    return "\n".join(lines) + "\n"
+
+
+def _subtitle_text_for_shot(shot: dict[str, Any]) -> str:
+    message = str(shot.get("message") or "").strip()
+    if message:
+        return message
+    visual = str(shot.get("visual_description") or "").strip()
+    return visual
+
+
+def _format_timecode(total_seconds: int) -> str:
+    minutes, seconds = divmod(max(0, int(total_seconds)), 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _ffmpeg_concat_path(path_value: str) -> str:
+    clean = str(path_value).replace("\\", "/")
+    return clean.replace("'", "'\\''")
+
+
 def _render_shot_preview_manifest(manifest: dict[str, Any]) -> str:
     lines = [
         "# 镜头预览组装清单",
@@ -3929,8 +4177,10 @@ def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: 
     adapters = state.get("adapters", {})
     capability_profile = _state_dreamina_capability_profile(state)
     dreamina_command = str(adapters.get("dreamina_command") or "dreamina")
+    ffmpeg_command = str(adapters.get("ffmpeg_command") or "ffmpeg")
     checks = [
         _command_check("dreamina_command", dreamina_command, required=False),
+        _command_check("ffmpeg_command", ffmpeg_command, required=False),
         _capability_profile_check(capability_profile),
     ]
     blocking = [item for item in checks if item["severity"] == "blocking" and item["status"] != "ok"]
@@ -4076,6 +4326,8 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
         return [pending]
     if phase == "awaiting_shot_confirmation":
         return ["确认镜头", "重做镜头 03"]
+    if phase in {"ready_for_video_assembly", "awaiting_video_assembly"}:
+        return ["合并视频"]
     if pending:
         return [pending]
     return []
@@ -4677,6 +4929,7 @@ def _clear_downstream_confirmations(state: dict[str, Any], after: str) -> None:
         "storyboard",
         "dreamina_generation",
         "shots",
+        "video_assembly",
     ]
     if after not in order:
         return
@@ -4691,6 +4944,7 @@ def _clear_downstream_file_references(state: dict[str, Any], after: str) -> None
         "storyboard",
         "dreamina_generation",
         "shots",
+        "video_assembly",
     ]
     keys_by_stage = {
         "video_plan": {"video_plan_md", "video_plan_json"},
@@ -4707,6 +4961,12 @@ def _clear_downstream_file_references(state: dict[str, Any], after: str) -> None
             "shot_preview_manifest_json",
             "shot_preview_manifest_md",
             "shot_preview_mp4",
+        },
+        "video_assembly": {
+            "assembly_manifest_json",
+            "assembly_manifest_md",
+            "editing_subtitles_md",
+            "assembled_video_mp4",
         },
     }
     if after not in order:
