@@ -245,6 +245,39 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertNotIn("玄武岩", plan_text)
             self.assertNotIn("陶瓷纤维", plan_text)
 
+    def test_video_plan_uses_agent_interface_evidence_knowledge_for_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个15秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用于 YouTube Shorts 和 TikTok。",
+                language_version="en",
+                platforms=["youtube_shorts", "tiktok"],
+                duration_seconds=15,
+                target_audience="欧美工业采购商",
+                core_objective="快速展示隔热、易施工和采购判断",
+                primary_direction="客户痛点解决型",
+                supporting_direction="应用演示型",
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+
+            generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+
+            plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
+            usable_knowledge = "\n".join(plan["usable_product_knowledge"])
+            self.assertIn("证据知识卡：石英纤维隔热带关键参数", usable_knowledge)
+            self.assertIn("耐高温1000度", usable_knowledge)
+            self.assertIn("不刺痒", usable_knowledge)
+            self.assertIn("不冒烟", usable_knowledge)
+            plan_text = (run_dir / "video_plan.md").read_text(encoding="utf-8")
+            self.assertIn("证据知识卡：石英纤维隔热带关键参数", plan_text)
+            self.assertNotIn("关键参数需要从检测报告", plan_text)
+
     def test_video_creation_run_requires_user_creative_direction_confirmation_before_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -1495,12 +1528,44 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             "  - 产品",
             "updated_at: 2026-06-25T00:00:00+08:00",
             "last_reviewed_at: 2026-06-25T00:00:00+08:00",
-            "evidence_refs: []",
+            "evidence_refs:",
+            "  - evidence/quartz_fiber_tape/key_parameters",
             "review_refs: []",
             "product_line: 耐高温隔热带",
             "related_refs: []",
         ],
         "石英纤维隔热带是首期视频创作产品。",
+    )
+    _write_card(
+        paths.knowledge_dir / "证据" / "quartz_fiber_tape" / "key_parameters.md",
+        [
+            "card_template_version: evidence-card-v1",
+            "type: evidence",
+            "id: evidence/quartz_fiber_tape/key_parameters",
+            "title: 石英纤维隔热带关键参数",
+            "aliases: []",
+            "status: official",
+            "usage_scope: evidence_only",
+            "raw_partitions: []",
+            "tags:",
+            "  - 关键参数",
+            "  - 石英纤维隔热带",
+            "updated_at: 2026-06-25T00:00:00+08:00",
+            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "evidence_type: 知识卡整理",
+            "source_paths:",
+            "  - knowledge/okf/证据/quartz_fiber_tape/key_parameters.md",
+            "proves:",
+            "  - 耐高温1000度",
+            "  - 不刺痒",
+            "  - 不冒烟",
+            "confidence: high",
+            "related_products:",
+            "  - product/quartz_fiber_tape",
+        ],
+        "正式知识摘要：该产品可围绕耐高温1000度、不刺痒、不冒烟进行谨慎表达。",
     )
     image_assets = [
         ("quartz_product_photo", "石英纤维隔热带产品图片", "产品图片", "产品图片", "product.jpg"),

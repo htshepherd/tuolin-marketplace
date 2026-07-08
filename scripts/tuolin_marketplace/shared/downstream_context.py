@@ -20,7 +20,7 @@ TASK_TYPES = {
     "follow_up_email": {"audience": "external", "card_types": ["product", "sales_material", "customer_question"]},
     "video_creation": {
         "audience": "external",
-        "card_types": ["product", "content_asset"],
+        "card_types": ["product", "evidence", "content_asset"],
         "fixed_product_id": "product/quartz_fiber_tape",
         "product_alias_ids": ["product/quartz_fiber_exhaust_wrap"],
         "product_terms": [

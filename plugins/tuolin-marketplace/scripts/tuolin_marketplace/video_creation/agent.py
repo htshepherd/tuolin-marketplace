@@ -2107,6 +2107,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     product_cards = context.get("cards_by_type", {}).get("product", [])
     product = _select_video_product_card(product_cards)
     content_assets = context.get("cards_by_type", {}).get("content_asset", [])
+    evidence_cards = context.get("evidence", []) or context.get("cards_by_type", {}).get("evidence", [])
     language = state["language_version"]
     duration = state["duration_seconds"]
     duration_min, duration_max = _duration_tolerance(duration)
@@ -2163,7 +2164,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
             "draft_only_until_external_review": product.get("usage_scope") == "review_before_external",
             "review_before_external_rule": "可用于内部策划和 dry-run 草稿；正式外发成片前必须复核为 external_allowed，或删除高风险 claim。",
         },
-        "usable_product_knowledge": _usable_product_knowledge(product),
+        "usable_product_knowledge": _usable_product_knowledge(product, evidence_cards),
         "content_assets": content_asset_summaries,
         "material_availability": _material_availability_summary(content_asset_summaries),
         "visual_strategy": _visual_strategy(primary, supporting, content_assets),
@@ -4697,15 +4698,34 @@ def _contains_cjk(value: str) -> bool:
     return any("\u4e00" <= ch <= "\u9fff" for ch in value)
 
 
-def _usable_product_knowledge(product: dict[str, Any]) -> list[str]:
+def _usable_product_knowledge(product: dict[str, Any], evidence_cards: list[dict[str, Any]] | None = None) -> list[str]:
     items = []
     body = str(product.get("body_excerpt", "")).strip()
     if body:
         items.append(body)
+    for evidence in evidence_cards or []:
+        summary = _usable_evidence_knowledge(evidence)
+        if summary:
+            items.append(summary)
     aliases = product.get("aliases", [])
     if aliases:
         items.append("知识卡别名/对外名：" + "、".join(str(item) for item in aliases))
     return items[:5]
+
+
+def _usable_evidence_knowledge(evidence: dict[str, Any]) -> str:
+    title = str(evidence.get("title", "")).strip()
+    body = str(evidence.get("body_excerpt", "")).strip()
+    frontmatter = evidence.get("frontmatter", {})
+    proves = [str(item).strip() for item in frontmatter.get("proves", []) if str(item).strip()]
+    parts = []
+    if title:
+        parts.append(f"证据知识卡：{title}")
+    if proves:
+        parts.append("可引用要点：" + "、".join(proves))
+    if body:
+        parts.append(body)
+    return "｜".join(parts)
 
 
 def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any] | None:
