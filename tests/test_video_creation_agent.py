@@ -1207,17 +1207,27 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(result.phase, "completed")
             stitched = run_dir / "dreamina_generation" / "stitched_video.mp4"
             subtitles = run_dir / "dreamina_generation" / "editing_subtitles.md"
+            voiceover = run_dir / "dreamina_generation" / "voiceover_script.md"
+            notes = run_dir / "dreamina_generation" / "editing_notes.md"
             self.assertTrue(stitched.exists())
             self.assertTrue(subtitles.exists())
+            self.assertTrue(voiceover.exists())
+            self.assertTrue(notes.exists())
             subtitle_text = subtitles.read_text(encoding="utf-8")
             self.assertIn("| 镜头 | 时间段 | 建议字幕/旁白 |", subtitle_text)
             self.assertIn("00:00:00–00:00:05", subtitle_text)
+            self.assertIn("## 可复制旁白正文", voiceover.read_text(encoding="utf-8"))
+            self.assertIn("文本朗读", notes.read_text(encoding="utf-8"))
+            self.assertIn(str(voiceover), result.message)
+            self.assertIn(str(notes), result.message)
             manifest = json.loads((run_dir / "dreamina_generation" / "assembly_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["status"], "succeeded")
             self.assertTrue(manifest["policy"]["no_subtitles_burned"])
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["video_assembly"])
             self.assertEqual(state["files"]["assembled_video_mp4"], str(stitched))
+            self.assertEqual(state["files"]["voiceover_script_md"], str(voiceover))
+            self.assertEqual(state["files"]["editing_notes_md"], str(notes))
 
     def test_queries_manual_dreamina_submission_file_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

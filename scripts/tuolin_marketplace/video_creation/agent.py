@@ -986,15 +986,21 @@ def assemble_confirmed_video(
     assembly_json_path = run_dir / "dreamina_generation" / "assembly_manifest.json"
     assembly_md_path = run_dir / "dreamina_generation" / "assembly_manifest.md"
     subtitles_md_path = run_dir / "dreamina_generation" / "editing_subtitles.md"
+    voiceover_script_path = run_dir / "dreamina_generation" / "voiceover_script.md"
+    editing_notes_path = run_dir / "dreamina_generation" / "editing_notes.md"
     assembly_json_path.write_text(json.dumps(assembly, ensure_ascii=False, indent=2), encoding="utf-8")
     assembly_md_path.write_text(_render_video_assembly_manifest(assembly), encoding="utf-8")
     subtitles_md_path.write_text(_render_editing_subtitles(assembly), encoding="utf-8")
+    voiceover_script_path.write_text(_render_voiceover_script(assembly), encoding="utf-8")
+    editing_notes_path.write_text(_render_editing_notes(assembly), encoding="utf-8")
 
     timestamp = _timestamp(now)
     files = state.setdefault("files", {})
     files["assembly_manifest_json"] = str(assembly_json_path)
     files["assembly_manifest_md"] = str(assembly_md_path)
     files["editing_subtitles_md"] = str(subtitles_md_path)
+    files["voiceover_script_md"] = str(voiceover_script_path)
+    files["editing_notes_md"] = str(editing_notes_path)
     files["assembled_video_mp4"] = assembly["output_video_path"]
     if assembly["status"] == "succeeded":
         state["status"] = "video_assembled"
@@ -1018,7 +1024,15 @@ def assemble_confirmed_video(
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
-        output_paths=(str(assembly_md_path), str(assembly_json_path), str(subtitles_md_path), assembly["output_video_path"]),
+        output_paths=(
+            str(assembly_md_path),
+            str(assembly_json_path),
+            str(subtitles_md_path),
+            str(voiceover_script_path),
+            str(editing_notes_path),
+            assembly["output_video_path"],
+        ),
+        message=_video_assembly_editing_handoff_message(assembly, voiceover_script_path, editing_notes_path),
     )
 
 
@@ -3930,6 +3944,8 @@ def _render_video_assembly_manifest(manifest: dict[str, Any]) -> str:
         f"- 预计时长：{manifest['total_duration_seconds']} 秒",
         f"- 合并视频：{manifest['output_video_path']}",
         f"- 字幕/旁白人工剪辑稿：{Path(manifest['run_dir']) / 'dreamina_generation' / 'editing_subtitles.md'}",
+        f"- 剪映文本朗读旁白稿：{Path(manifest['run_dir']) / 'dreamina_generation' / 'voiceover_script.md'}",
+        f"- 剪映人工剪辑说明：{Path(manifest['run_dir']) / 'dreamina_generation' / 'editing_notes.md'}",
         "",
     ]
     blockers = manifest.get("blockers", [])
@@ -3950,7 +3966,9 @@ def _render_video_assembly_manifest(manifest: dict[str, Any]) -> str:
             "## 边界",
             "",
             "- 本步骤只把即梦生成镜头拼接成一个无配音、无字幕、无 BGM 的视频文件。",
+            "- `voiceover_script.md` 用于复制到剪映/CapCut 的文本朗读。",
             "- `editing_subtitles.md` 只供人工剪辑软件中添加字幕/配音参考，不会自动烧录字幕。",
+            "- `editing_notes.md` 说明剪映人工后期操作路径。",
             "",
         ]
     )
@@ -3980,6 +3998,83 @@ def _render_editing_subtitles(manifest: dict[str, Any]) -> str:
     for item in manifest.get("shot_inputs", []):
         lines.append(f"{item['start_time']}–{item['end_time']}  {item.get('subtitle_text') or ''}")
     return "\n".join(lines) + "\n"
+
+
+def _render_voiceover_script(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# 剪映文本朗读旁白稿",
+        "",
+        f"- 来源运行目录：{manifest['run_dir']}",
+        f"- 语言版本：{manifest.get('language_version')}",
+        f"- 合并视频：{manifest['output_video_path']}",
+        "",
+        "用途：复制下面的纯文本到剪映/CapCut 的“文本朗读”，生成配音后再用智能字幕识别字幕。",
+        "",
+        "## 可复制旁白正文",
+        "",
+    ]
+    for item in manifest.get("shot_inputs", []):
+        text = str(item.get("subtitle_text") or "").strip()
+        if text:
+            lines.append(text)
+    lines.extend(["", "## 分镜参考", ""])
+    for item in manifest.get("shot_inputs", []):
+        lines.append(f"- {item['start_time']}–{item['end_time']}｜{item.get('subtitle_text') or ''}")
+    return "\n".join(lines) + "\n"
+
+
+def _render_editing_notes(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# 剪映人工剪辑说明",
+        "",
+        f"- 合并视频：{manifest['output_video_path']}",
+        f"- 旁白稿：{Path(manifest['run_dir']) / 'dreamina_generation' / 'voiceover_script.md'}",
+        f"- 字幕参考：{Path(manifest['run_dir']) / 'dreamina_generation' / 'editing_subtitles.md'}",
+        f"- 预计时长：{manifest['total_duration_seconds']} 秒",
+        "",
+        "## 推荐剪映流程",
+        "",
+        "1. 新建 9:16 项目，导入 `stitched_video.mp4`。",
+        "2. 打开 `voiceover_script.md`，复制“可复制旁白正文”。",
+        "3. 在剪映/CapCut 使用“文本朗读”，选择英文男声或适合的工业产品旁白音色。",
+        "4. 用“智能字幕/识别字幕”从配音自动生成字幕。",
+        "5. 人工检查错字、断句和字幕位置，避开 TikTok/Shorts 顶部和底部 UI。",
+        "6. 添加合适 BGM，导出 1080×1920 MP4。",
+        "",
+        "## 字幕样式建议",
+        "",
+        "- 每屏 1–2 行。",
+        "- 使用白字、深色描边或阴影。",
+        "- 放在中下方安全区，不遮挡产品主体。",
+        "- 不做逐字卡拉 OK。",
+        "",
+        "## 边界",
+        "",
+        "- 本 Agent 不生成配音、不烧录字幕、不添加 BGM。",
+        "- 这三个文件用于人工在剪映中快速完成后期。",
+        "",
+    ]
+    blockers = manifest.get("blockers", [])
+    if blockers:
+        lines.extend(["## 合并阻塞项", ""])
+        for blocker in blockers:
+            lines.append(f"- {blocker}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _video_assembly_editing_handoff_message(manifest: dict[str, Any], voiceover_script_path: Path, editing_notes_path: Path) -> str:
+    return "\n".join(
+        [
+            "视频已合并，剪映后期请使用这三个核心文件：",
+            "",
+            f"- 合并视频：{manifest['output_video_path']}",
+            f"- 旁白文案：{voiceover_script_path}",
+            f"- 剪辑说明：{editing_notes_path}",
+            "",
+            "建议流程：导入合并视频 → 复制旁白文案做文本朗读 → 用智能字幕生成字幕 → 人工检查 → 加 BGM → 导出。",
+        ]
+    )
 
 
 def _subtitle_text_for_shot(shot: dict[str, Any]) -> str:
