@@ -12,7 +12,7 @@ This skill is part of `tuolin-marketplace`. It is a video-creation application-l
 - Initial scope only: 石英纤维隔热带 product videos.
 - Supported platforms: YouTube Shorts, TikTok, or both.
 - Supported output: one language-specific 9:16 Dreamina-generated video-shot set per run.
-- Supported durations: 60, 90, or 120 seconds.
+- Supported durations: 15, 20, 30, 45, 60, 90, or 120 seconds.
 - Default output resolution: 1080×1920.
 - Default Dreamina model for generated shots: `seedance2.0_vip`.
 

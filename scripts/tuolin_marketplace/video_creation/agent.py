@@ -19,7 +19,7 @@ INTERNAL_PRODUCT_NAME = "石英纤维隔热带"
 RUN_DIR_PRODUCT_SLUG = "quartz_fiber_tape"
 VIDEO_CREATION_PRODUCT_ALIAS_IDS = ["product/quartz_fiber_exhaust_wrap"]
 SUPPORTED_LANGUAGE_VERSIONS = {"zh", "en"}
-SUPPORTED_DURATIONS = {60, 90, 120}
+SUPPORTED_DURATIONS = {15, 20, 30, 45, 60, 90, 120}
 SUPPORTED_PLATFORMS = {"youtube_shorts", "tiktok"}
 DEFAULT_VIDEO_DURATION_SECONDS = 60
 DEFAULT_DREAMINA_MODEL = "seedance2.0_vip"
@@ -1810,9 +1810,9 @@ def normalize_duration(value: int) -> int:
     try:
         duration = int(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("视频时长只支持 60、90 或 120 秒") from exc
+        raise ValueError("视频时长只支持 15、20、30、45、60、90 或 120 秒") from exc
     if duration not in SUPPORTED_DURATIONS:
-        raise ValueError("视频时长只支持 60、90 或 120 秒")
+        raise ValueError("视频时长只支持 15、20、30、45、60、90 或 120 秒")
     return duration
 
 
@@ -2381,6 +2381,7 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
         "material_priority": plan["visual_strategy"]["material_priority"],
         "production_style": plan["production_style"],
         "creative_quality": plan["creative_quality"],
+        "actual_duration_seconds": sum(int(shot.get("duration_seconds", 0)) for shot in shots),
         "shots": shots,
         "policy": {
             "text_prompts_are_not_subtitles": True,
@@ -4667,13 +4668,15 @@ def _estimate_dreamina_credits(job_type: str, duration_seconds: int) -> int:
 
 
 def _duration_tolerance(duration: int) -> tuple[int, int]:
+    if duration in {15, 20, 30, 45}:
+        return duration, duration
     if duration == 60:
         return 55, 65
     if duration == 90:
         return 85, 95
     if duration == 120:
         return 115, 125
-    raise ValueError("视频时长只支持 60、90 或 120 秒")
+    raise ValueError("视频时长只支持 15、20、30、45、60、90 或 120 秒")
 
 
 def _external_names_from_product(product: dict[str, Any]) -> dict[str, str]:

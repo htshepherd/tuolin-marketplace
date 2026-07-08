@@ -133,6 +133,49 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertNotIn("bgm_provider", state["adapters"])
             self.assertTrue(Path(state["files"]["context"]).exists())
 
+    def test_short_video_durations_create_matching_storyboard_shot_counts(self) -> None:
+        cases = {
+            15: 3,
+            20: 4,
+            30: 6,
+            45: 9,
+        }
+        for duration, expected_shots in cases.items():
+            with self.subTest(duration=duration):
+                with tempfile.TemporaryDirectory() as tmp:
+                    paths = resolve_paths(Path(tmp), {})
+                    initialize_project(paths)
+                    _write_official_cards(paths)
+                    rebuild_agent_interface(paths)
+
+                    result = create_video_creation_run(
+                        paths,
+                        f"做一个{duration}秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用于 YouTube Shorts 和 TikTok。",
+                        language_version="en",
+                        platforms=["youtube_shorts", "tiktok"],
+                        duration_seconds=duration,
+                        target_audience="欧美工业采购商",
+                        core_objective="短视频快速展示产品价值",
+                        primary_direction="采购指南型",
+                        supporting_direction="产品细节型",
+                        now=datetime(2026, 6, 25, 14, 30, 5),
+                    )
+                    run_dir = Path(result.run_dir)
+                    state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+                    self.assertEqual(state["duration_seconds"], duration)
+
+                    generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+                    plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
+                    self.assertEqual(plan["format"]["duration_seconds"], duration)
+                    self.assertEqual(plan["format"]["duration_tolerance_seconds"], {"min": duration, "max": duration})
+
+                    confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
+                    generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+                    storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+                    self.assertEqual(len(storyboard["shots"]), expected_shots)
+                    self.assertEqual(storyboard["actual_duration_seconds"], duration)
+                    self.assertTrue(all(shot["duration_seconds"] == 5 for shot in storyboard["shots"]))
+
     def test_video_creation_resolves_legacy_quartz_product_id_and_draft_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -1389,7 +1432,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "视频平台只支持"):
                 create_video_creation_run(**{**base, "platforms": ["linkedin"]})
             with self.assertRaisesRegex(ValueError, "视频时长只支持"):
-                create_video_creation_run(**{**base, "duration_seconds": 30})
+                create_video_creation_run(**{**base, "duration_seconds": 10})
             with self.assertRaisesRegex(ValueError, "创意方向必须从固定 16 个视频创意方向中选择"):
                 create_video_creation_run(**{**base, "primary_direction": "车间介绍型"})
 

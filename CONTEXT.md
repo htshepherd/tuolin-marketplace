@@ -289,7 +289,7 @@ _Avoid_: final video editing review, music/subtitle review
 > **Domain expert:** "No. Confirm language first because it affects product naming, audience expression, prompts, and direction recommendations."
 >
 > **Dev:** "Can the initial workflow accept an arbitrary video duration?"
-> **Domain expert:** "No. Offer 60, 90, or 120 seconds, defaulting to 60 seconds."
+> **Domain expert:** "No. Offer a controlled set of short-video durations: 15, 20, 30, 45, 60, 90, or 120 seconds, defaulting to 60 seconds."
 >
 > **Dev:** "Does the first version need to support standard YouTube videos or LinkedIn?"
 > **Domain expert:** "No. Target YouTube Shorts and TikTok only."
