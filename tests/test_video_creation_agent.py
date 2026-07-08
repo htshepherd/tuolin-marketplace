@@ -1078,6 +1078,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             submission_md = run_dir / "dreamina_generation" / "dreamina_submission.md"
             manual_ps1 = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
             manual_template = run_dir / "dreamina_generation" / "manual_submission_template.json"
+            self.assertIn("请打开 Windows PowerShell", result.message)
+            self.assertIn("powershell.exe -ExecutionPolicy Bypass -File", result.message)
+            self.assertIn(str(manual_ps1), result.message)
+            self.assertIn("查询即梦结果", result.message)
             self.assertTrue(submission_json.exists())
             self.assertTrue(submission_md.exists())
             self.assertTrue(manual_ps1.exists())
@@ -1449,7 +1453,8 @@ class VideoCreationAgentTests(unittest.TestCase):
             handle_video_creation_reply(run_dir, "确认策划", now=datetime(2026, 6, 25, 15, 1, 0))
             handle_video_creation_reply(run_dir, "确认分镜", now=datetime(2026, 6, 25, 15, 3, 0))
             handle_video_creation_reply(run_dir, "确认即梦生成", now=datetime(2026, 6, 25, 15, 11, 0))
-            handle_video_creation_reply(run_dir, "提交即梦任务", now=datetime(2026, 6, 25, 15, 12, 0))
+            submitted = handle_video_creation_reply(run_dir, "提交即梦任务", now=datetime(2026, 6, 25, 15, 12, 0))
+            self.assertIn("powershell.exe -ExecutionPolicy Bypass -File", submitted.message)
             handle_video_creation_reply(run_dir, "查询即梦结果", now=datetime(2026, 6, 25, 15, 13, 0))
             final = handle_video_creation_reply(run_dir, "确认镜头", now=datetime(2026, 6, 25, 15, 14, 0))
 

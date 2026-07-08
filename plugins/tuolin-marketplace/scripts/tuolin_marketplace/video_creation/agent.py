@@ -337,6 +337,7 @@ class VideoCreationStepResult:
     status: str
     phase: str
     output_paths: tuple[str, ...]
+    message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -833,6 +834,7 @@ def submit_dreamina_jobs(
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(submission_md_path), str(submission_json_path), str(manual_script_path), str(manual_template_path)),
+        message=_manual_dreamina_submission_handoff_message(submission),
     )
 
 
@@ -3482,6 +3484,25 @@ def _manual_submission_template(submission: dict[str, Any]) -> dict[str, Any]:
     manual["policy"]["dry_run_does_not_consume_credits"] = False
     manual["policy"]["manual_execution_by_human"] = True
     return manual
+
+
+def _manual_dreamina_submission_handoff_message(submission: dict[str, Any]) -> str:
+    manual = submission.get("manual_execution", {})
+    powershell_script = str(manual.get("powershell_script") or "").strip()
+    if not powershell_script:
+        return "未生成真实提交 PowerShell 脚本；请检查 dreamina_generation/dreamina_submission.md。"
+    powershell_command = f'powershell.exe -ExecutionPolicy Bypass -File "{powershell_script}"'
+    return "\n".join(
+        [
+            "请打开 Windows PowerShell，复制并运行下面这条命令：",
+            "",
+            "```powershell",
+            powershell_command,
+            "```",
+            "",
+            "执行完成后，回到 Codex 回复：`查询即梦结果`。",
+        ]
+    )
 
 
 def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
