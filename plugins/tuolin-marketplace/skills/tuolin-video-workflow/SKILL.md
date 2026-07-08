@@ -46,14 +46,15 @@ Out of scope:
    - `generated/reports/video-creation/{timestamp}_quartz_fiber_tape_{zh|en}/`
 5. Show all 16 fixed video creative directions plus exactly 3 ranked dynamic recommendations in `requirements.md`.
 6. Stop and confirm one primary creative direction and at most one supporting direction. Do not generate `video_plan.md` before this confirmation.
-7. Generate `video_plan.md` only after creative direction confirmation, then wait for `确认策划`.
-8. Generate `storyboard.md`, `storyboard.json`, `prompts.md`, and `prompts.json`; wait for `确认分镜`.
-9. Plan Dreamina jobs and show job type, material, duration, estimated credit use, and risks.
-10. Wait for `确认即梦生成`.
-11. Submit/query Dreamina jobs internally or generate the manual PowerShell handoff for real Dreamina CLI submission.
-12. Allow shot-level retry such as `重做镜头 03`; show estimated credit use before retry.
-13. Wait for `确认镜头`.
-14. End the video-creation Agent run after the Dreamina shot set is confirmed.
+7. When the user confirms the creative direction through natural language, automatically generate `video_plan.md` / `video_plan.json`, then wait for `确认策划`.
+8. When the user says `确认策划`, automatically generate the Visual Storyboard: `storyboard.md`, `storyboard.json`, `prompts.md`, and `prompts.json`; then wait for `确认分镜`.
+9. `storyboard.md` must show inline reference-image previews copied into `storyboard_assets/`, the original image path, and duplicate-image warnings. Users may delete shots or replace a shot image by natural language before confirming.
+10. When the user says `确认分镜`, automatically plan Dreamina jobs and show job type, material, duration, estimated credit use, and risks.
+11. Wait for `确认即梦生成`.
+12. Submit/query Dreamina jobs internally or generate the manual PowerShell handoff for real Dreamina CLI submission.
+13. Allow shot-level retry such as `重做镜头 03`; show estimated credit use before retry.
+14. Wait for `确认镜头`.
+15. End the video-creation Agent run after the Dreamina shot set is confirmed.
 
 ## Fixed video creative directions
 
@@ -149,11 +150,13 @@ python3 scripts/resume_video_creation_run.py {run_dir}
 python3 scripts/handle_video_creation_reply.py {run_dir} "确认策划"
 ```
 
-`confirm_creative_direction.py` is required before `generate_video_plan.py` when the run was created without explicit directions. `generate_video_plan.py` writes `video_plan.md` and `video_plan.json`, then waits for `确认策划`. `confirm_video_plan.py` locks the plan and moves the run to the storyboard phase.
-`generate_storyboard.py` writes `storyboard.md`, `storyboard.json`, `prompts.md`, and `prompts.json`, then waits for `确认分镜`. `confirm_storyboard.py` locks the storyboard and moves the run directly to Dreamina job planning.
+`confirm_creative_direction.py` is required before `generate_video_plan.py` when the run was created without explicit directions. In the natural-language entrypoint, selecting a direction automatically generates `video_plan.md` and `video_plan.json`, then waits for `确认策划`. Direct maintenance scripts keep their single-step behavior for compatibility.
+`generate_storyboard.py` writes `storyboard.md`, `storyboard.json`, `prompts.md`, and `prompts.json`, then waits for `确认分镜`. `storyboard.md` must include inline image previews from `storyboard_assets/`, original image paths, and duplicate-reference warnings. In the natural-language entrypoint, `确认策划` automatically generates this Visual Storyboard.
+Before `确认分镜`, users may say `删除镜头 03` or `镜头 04 图片换成 E:/path/to/image.jpg`; the Agent updates the storyboard, recalculates duration if shots are deleted, and clears affected downstream Dreamina confirmations. If real Dreamina submission already exists, direct storyboard mutation is blocked and the user must use shot-level retry.
+`confirm_storyboard.py` locks the storyboard and moves the run to Dreamina job planning. In the natural-language entrypoint, `确认分镜` automatically generates `dreamina_generation/dreamina_jobs.md/json`.
 `generate_dreamina_jobs.py` writes `dreamina_generation/dreamina_jobs.md` and `dreamina_generation/dreamina_jobs.json`, then waits for `确认即梦生成`. `confirm_dreamina_generation.py` records user authorization and moves the run to the submission phase; it does not submit paid jobs.
 `submit_dreamina_jobs.py` defaults to dry-run and writes `dreamina_generation/dreamina_submission.md/json`. It also writes `dreamina_generation/submit_real_dreamina_jobs.ps1` and `dreamina_generation/manual_submission_template.json` so the human operator can perform real paid Dreamina submission in PowerShell when the Agent environment is not allowed to upload local assets or consume credits. The PowerShell script writes real submit IDs to `dreamina_generation/manual_submission.json`; when that file exists, `query_dreamina_results.py` reads it first and queries/downloads real Dreamina results. Pass `--execute` only in an environment explicitly allowed to call the real Dreamina CLI directly. `confirm_shots.py` locks accepted shots. `plan_shot_retry.py` and `confirm_shot_retry.py` handle one-shot retry authorization with estimated credit use. `submit_shot_retry.py` and `query_shot_retry_results.py` submit/query only the confirmed retry shot and merge the successful retry result back into `dreamina_results.json` without resubmitting other shots.
-`inspect_video_creation_adapters.py` checks local Dreamina and ffmpeg configuration without paid generation. `resume_video_creation_run.py` writes `workflow_status.md/json` so Codex can continue from the current `workflow_state.json` phase without restarting. `handle_video_creation_reply.py` routes supported natural-language replies such as `生成分镜`, `确认策划`, `修改策划，开场更突出痛点`, `确认分镜`, `修改分镜，减少泛泛介绍`, `修改镜头03，突出产品细节`, `规划即梦任务`, `确认即梦生成`, `提交即梦任务`, `查询即梦结果`, `重做镜头 03`, `确认重做镜头 03`, `提交重做镜头 03`, `查询重做镜头 03`, and `确认镜头` to the correct internal command. Upstream revisions clear affected downstream confirmations and keep a trace in `change_log.md`.
+`inspect_video_creation_adapters.py` checks local Dreamina and ffmpeg configuration without paid generation. `resume_video_creation_run.py` writes `workflow_status.md/json` so Codex can continue from the current `workflow_state.json` phase without restarting. `handle_video_creation_reply.py` routes supported natural-language replies such as `主方向：采购指南型，辅助方向：产品细节型`, `确认策划`, `修改策划，开场更突出痛点`, `确认分镜`, `删除镜头 03`, `镜头 04 图片换成 E:/path/to/image.jpg`, `修改分镜，减少泛泛介绍`, `修改镜头03，突出产品细节`, `确认即梦生成`, `提交即梦任务`, `查询即梦结果`, `重做镜头 03`, `确认重做镜头 03`, `提交重做镜头 03`, `查询重做镜头 03`, and `确认镜头` to the correct internal command. Upstream revisions clear affected downstream confirmations and keep a trace in `change_log.md`.
 
 Dreamina execution remains confirmation-gated and may still run as dry-run by default.
 

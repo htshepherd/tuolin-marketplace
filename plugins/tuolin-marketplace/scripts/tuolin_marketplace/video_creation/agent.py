@@ -594,6 +594,7 @@ def generate_storyboard(run_dir: Path, overwrite: bool = False, now: datetime | 
         raise ValueError("找不到 video_plan.json，请先生成并确认视频策划。")
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     storyboard = _build_storyboard_payload(state, plan, now or datetime.now())
+    _attach_storyboard_image_previews(run_dir, storyboard)
     prompts = _build_prompts_payload(storyboard, plan, now or datetime.now())
 
     storyboard_md_path.write_text(_render_storyboard(storyboard), encoding="utf-8")
@@ -1283,7 +1284,15 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
     direction_selection = _parse_creative_direction_selection(reply)
     if direction_selection:
         primary_direction, supporting_direction = direction_selection
-        return confirm_creative_direction(run_dir, primary_direction, supporting_direction, now=now)
+        confirm_creative_direction(run_dir, primary_direction, supporting_direction, now=now)
+        return generate_video_plan(run_dir, now=now)
+    image_replacement = _parse_shot_image_replacement_request(reply)
+    if image_replacement:
+        shot_id, image_path = image_replacement
+        return replace_storyboard_shot_image(run_dir, shot_id, image_path, now=now)
+    deleted_shots = _parse_shot_deletion_request(reply)
+    if deleted_shots:
+        return delete_storyboard_shots(run_dir, deleted_shots, now=now)
     plan_revision = _parse_plan_revision_request(normalized, reply)
     if plan_revision:
         return revise_video_plan(run_dir, plan_revision, now=now)
@@ -1297,11 +1306,13 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
     if normalized in {"生成视频策划", "生成策划"}:
         return generate_video_plan(run_dir, now=now)
     if normalized == "确认策划":
-        return confirm_video_plan(run_dir, now=now)
+        confirm_video_plan(run_dir, now=now)
+        return generate_storyboard(run_dir, overwrite=True, now=now)
     if normalized == "生成分镜":
         return generate_storyboard(run_dir, now=now)
     if normalized == "确认分镜":
-        return confirm_storyboard(run_dir, now=now)
+        confirm_storyboard(run_dir, now=now)
+        return generate_dreamina_jobs(run_dir, overwrite=True, now=now)
     if normalized == "规划即梦任务":
         return generate_dreamina_jobs(run_dir, now=now)
     if normalized == "确认即梦生成":
@@ -1383,6 +1394,146 @@ def revise_storyboard_shot(run_dir: Path, shot_id: str, change_request: str, now
     return _revise_storyboard_scope(run_dir, change_request, shot_id=_normalize_shot_id(shot_id), now=now)
 
 
+def delete_storyboard_shots(run_dir: Path, shot_ids: list[str], now: datetime | None = None) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    normalized_shot_ids = [_normalize_shot_id(shot_id) for shot_id in shot_ids]
+    if not normalized_shot_ids:
+        raise ValueError("删除镜头必须指定镜头编号。")
+    _assert_no_real_dreamina_submission_for_storyboard_change(run_dir)
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") == "completed":
+        raise ValueError("视频已完成，不能直接删除镜头；请新建一次视频创作运行。")
+
+    storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path = _storyboard_file_paths(run_dir, state)
+    _ensure_storyboard_files_exist([storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path])
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
+    existing_ids = {str(shot.get("shot_id") or "") for shot in storyboard.get("shots", [])}
+    missing_ids = [shot_id for shot_id in normalized_shot_ids if shot_id not in existing_ids]
+    if missing_ids:
+        raise ValueError(f"找不到镜头 {', '.join(missing_ids)}，不能删除。")
+    remaining_shots = [shot for shot in storyboard.get("shots", []) if str(shot.get("shot_id") or "") not in set(normalized_shot_ids)]
+    if not remaining_shots:
+        raise ValueError("不能删除全部镜头；请至少保留一个镜头。")
+
+    timestamp = _timestamp(now)
+    deleted_duration = sum(int(shot.get("duration_seconds", 0)) for shot in storyboard.get("shots", []) if str(shot.get("shot_id") or "") in set(normalized_shot_ids))
+    storyboard["shots"] = remaining_shots
+    storyboard["status"] = "revised_pending_confirmation"
+    storyboard["actual_duration_seconds"] = sum(int(shot.get("duration_seconds", 0)) for shot in remaining_shots)
+    storyboard["duration_change_notice"] = (
+        f"已删除镜头 {', '.join(normalized_shot_ids)}，减少约 {deleted_duration} 秒；"
+        f"当前分镜约 {storyboard['actual_duration_seconds']} 秒。"
+    )
+    storyboard.setdefault("change_requests", []).append(
+        _build_revision_record("storyboard", f"删除镜头 {', '.join(normalized_shot_ids)}", timestamp)
+    )
+    prompts = _build_prompts_payload(storyboard, plan, now or datetime.now())
+    prompts["status"] = "revised_pending_storyboard_confirmation"
+    prompts.setdefault("change_requests", []).append(
+        _build_revision_record("prompts", f"删除镜头 {', '.join(normalized_shot_ids)}", timestamp)
+    )
+    _save_storyboard_and_prompts_after_edit(
+        run_dir,
+        state,
+        storyboard,
+        prompts,
+        storyboard_json_path,
+        storyboard_md_path,
+        prompts_json_path,
+        prompts_md_path,
+        timestamp,
+        f"用户删除镜头 {', '.join(normalized_shot_ids)}，清除即梦及后续确认。",
+    )
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status="storyboard_revised",
+        phase="awaiting_storyboard_confirmation",
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+    )
+
+
+def replace_storyboard_shot_image(
+    run_dir: Path,
+    shot_id: str,
+    image_path: str | Path,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    normalized_shot_id = _normalize_shot_id(shot_id)
+    _assert_no_real_dreamina_submission_for_storyboard_change(run_dir)
+    source_path = Path(str(image_path).strip().strip("\"'“”"))
+    if not source_path.exists() or not source_path.is_file():
+        raise ValueError(f"找不到可用图片文件：{source_path}")
+    if source_path.suffix.lower() not in IMAGE_FILE_SUFFIXES:
+        raise ValueError(f"镜头图片必须是图片文件：{source_path}")
+
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") == "completed":
+        raise ValueError("视频已完成，不能直接替换镜头图片；请新建一次视频创作运行。")
+    storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path = _storyboard_file_paths(run_dir, state)
+    _ensure_storyboard_files_exist([storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path])
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
+    shot = next((item for item in storyboard.get("shots", []) if item.get("shot_id") == normalized_shot_id), None)
+    if not shot:
+        raise ValueError(f"找不到镜头 {normalized_shot_id}，不能替换图片。")
+
+    timestamp = _timestamp(now)
+    override_material = {
+        "id": f"user_image_override/shot_{normalized_shot_id}",
+        "title": source_path.name,
+        "media_types": ["image"],
+        "asset_category": "用户指定图片",
+        "files": [str(source_path.resolve())],
+        "human_face_risk": "none",
+        "usage_note": "用户在分镜阶段指定的本地图片，只作为即梦参考素材，不写入知识库事实。",
+    }
+    shot["selected_material"] = override_material
+    shot["material_mode"] = "image2video"
+    shot["ai_generated"] = True
+    shot["product_visible"] = True
+    shot["requires_real_product_reference"] = True
+    shot["first_frame_reference_id"] = override_material["id"]
+    shot["last_frame_reference_id"] = override_material["id"] if shot.get("role") == "closing_cta" else None
+    shot["frame_control_risk"] = _frame_control_risk(str(shot.get("role") or ""), True, override_material)
+    shot["human_face_risk"] = _material_human_face_risk(override_material)
+    shot["risk_notes"] = _shot_risk_notes("image2video", True, True)
+    shot["shot_design_validation"] = _validate_shot_design(shot)
+    shot["shot_image_override"] = {
+        "source_path": str(source_path.resolve()),
+        "applied_at": timestamp,
+    }
+    shot.setdefault("change_requests", []).append(
+        _build_revision_record(f"shot_{normalized_shot_id}", f"替换镜头图片为 {source_path}", timestamp)
+    )
+    storyboard["status"] = "revised_pending_confirmation"
+    prompts = _build_prompts_payload(storyboard, plan, now or datetime.now())
+    prompts["status"] = "revised_pending_storyboard_confirmation"
+    _save_storyboard_and_prompts_after_edit(
+        run_dir,
+        state,
+        storyboard,
+        prompts,
+        storyboard_json_path,
+        storyboard_md_path,
+        prompts_json_path,
+        prompts_md_path,
+        timestamp,
+        f"用户替换镜头 {normalized_shot_id} 图片，清除即梦及后续确认。",
+    )
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status="storyboard_revised",
+        phase="awaiting_storyboard_confirmation",
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+    )
+
+
 def _revise_storyboard_scope(
     run_dir: Path,
     change_request: str,
@@ -1453,6 +1604,66 @@ def _revise_storyboard_scope(
         phase=state["phase"],
         output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
     )
+
+
+def _storyboard_file_paths(run_dir: Path, state: dict[str, Any]) -> tuple[Path, Path, Path, Path]:
+    files = state.get("files", {})
+    storyboard_json_path = Path(files.get("storyboard_json", run_dir / "storyboard.json"))
+    storyboard_md_path = Path(files.get("storyboard_md", run_dir / "storyboard.md"))
+    prompts_json_path = Path(files.get("prompts_json", run_dir / "prompts.json"))
+    prompts_md_path = Path(files.get("prompts_md", run_dir / "prompts.md"))
+    return storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path
+
+
+def _ensure_storyboard_files_exist(paths: list[Path]) -> None:
+    missing = [path for path in paths if not path.exists()]
+    if missing:
+        raise ValueError(f"找不到可修改的分镜或 Prompt：{missing[0]}")
+
+
+def _save_storyboard_and_prompts_after_edit(
+    run_dir: Path,
+    state: dict[str, Any],
+    storyboard: dict[str, Any],
+    prompts: dict[str, Any],
+    storyboard_json_path: Path,
+    storyboard_md_path: Path,
+    prompts_json_path: Path,
+    prompts_md_path: Path,
+    timestamp: str,
+    change_message: str,
+) -> None:
+    _attach_storyboard_image_previews(run_dir, storyboard)
+    storyboard_json_path.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+    storyboard_md_path.write_text(_render_storyboard(storyboard), encoding="utf-8")
+    prompts_json_path.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
+    prompts_md_path.write_text(_render_prompts(prompts), encoding="utf-8")
+
+    state_path = run_dir / "workflow_state.json"
+    state["status"] = "storyboard_revised"
+    state["phase"] = "awaiting_storyboard_confirmation"
+    state["current_pending_confirmation"] = "确认分镜"
+    state["updated_at"] = timestamp
+    state["confirmations"]["storyboard"] = False
+    _clear_downstream_confirmations(state, after="storyboard")
+    _clear_downstream_file_references(state, after="storyboard")
+    _clear_transient_review_state(state)
+    _append_status_history(state, "storyboard_revised", timestamp)
+    _write_state(state_path, state)
+    _append_change(run_dir, timestamp, change_message)
+
+
+def _assert_no_real_dreamina_submission_for_storyboard_change(run_dir: Path) -> None:
+    manual_submission_path = run_dir / "dreamina_generation" / "manual_submission.json"
+    if not manual_submission_path.exists():
+        return
+    try:
+        manual_submission = json.loads(manual_submission_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        raise ValueError("manual_submission.json 格式异常，不能直接修改分镜；请先修复即梦提交状态。")
+    submissions = manual_submission.get("submissions", [])
+    if any(str(item.get("provider_task_id") or item.get("submit_id") or "").strip() for item in submissions):
+        raise ValueError("已存在真实即梦提交记录，不能直接修改分镜图片或删镜头；请使用“重做镜头 XX”走单镜头重做流程。")
 
 
 def normalize_language_version(value: str) -> str:
@@ -2082,6 +2293,78 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
     }
 
 
+def _attach_storyboard_image_previews(run_dir: Path, storyboard: dict[str, Any]) -> None:
+    preview_dir = run_dir / "storyboard_assets"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    project_dir = _project_dir_from_run_dir(run_dir)
+    for shot in storyboard.get("shots", []):
+        material = shot.get("selected_material") or {}
+        source = _first_compatible_material_file(_extract_material_paths(material), "image2video")
+        preview = {
+            "status": "missing",
+            "source_path": source or "",
+            "preview_path": "",
+            "message": "未匹配到可预览图片文件。",
+        }
+        if source:
+            resolved = Path(_resolve_material_path(source, project_dir))
+            preview["source_path"] = str(resolved)
+            if resolved.exists() and resolved.is_file() and resolved.suffix.lower() in IMAGE_FILE_SUFFIXES:
+                preview_name = f"shot_{shot.get('shot_id', 'xx')}_reference{resolved.suffix.lower()}"
+                preview_path = preview_dir / preview_name
+                shutil.copy2(resolved, preview_path)
+                preview = {
+                    "status": "copied",
+                    "source_path": str(resolved),
+                    "preview_path": preview_path.relative_to(run_dir).as_posix(),
+                    "message": "已复制到运行目录，便于在 storyboard.md 里直接预览。",
+                }
+            else:
+                preview["message"] = "素材路径已记录，但本机未找到可复制的图片文件。"
+        shot["image_preview"] = preview
+    storyboard["image_reference_summary"] = _storyboard_image_reference_summary(storyboard)
+
+
+def _storyboard_image_reference_summary(storyboard: dict[str, Any]) -> dict[str, Any]:
+    material_first_seen: dict[str, str] = {}
+    source_first_seen: dict[str, str] = {}
+    repeated_materials: list[dict[str, str]] = []
+    repeated_sources: list[dict[str, str]] = []
+    copied_count = 0
+    missing_count = 0
+    for shot in storyboard.get("shots", []):
+        shot_id = str(shot.get("shot_id") or "")
+        material = shot.get("selected_material") or {}
+        material_id = str(material.get("id") or "")
+        preview = shot.get("image_preview") or {}
+        source_path = str(preview.get("source_path") or "")
+        if preview.get("status") == "copied":
+            copied_count += 1
+        elif shot.get("selected_material"):
+            missing_count += 1
+        if material_id:
+            first_shot = material_first_seen.get(material_id)
+            if first_shot:
+                repeated_materials.append({"shot_id": shot_id, "first_shot_id": first_shot, "material_id": material_id})
+            else:
+                material_first_seen[material_id] = shot_id
+        if source_path:
+            first_shot = source_first_seen.get(source_path)
+            if first_shot:
+                repeated_sources.append({"shot_id": shot_id, "first_shot_id": first_shot, "source_path": source_path})
+            else:
+                source_first_seen[source_path] = shot_id
+    status = "warning" if repeated_materials or repeated_sources else "ok"
+    return {
+        "status": status,
+        "copied_preview_count": copied_count,
+        "missing_preview_count": missing_count,
+        "repeated_materials": repeated_materials,
+        "repeated_sources": repeated_sources,
+        "message": "存在重复图片参考，建议在确认分镜前换图或删减镜头。" if status == "warning" else "未发现重复图片参考。",
+    }
+
+
 def _build_prompts_payload(storyboard: dict[str, Any], plan: dict[str, Any], now: datetime) -> dict[str, Any]:
     capability_profile = _normalize_dreamina_capability_profile(plan.get("dreamina_capability_profile", {}))
     material_reference_map = _build_material_reference_map(storyboard, capability_profile)
@@ -2127,6 +2410,7 @@ def _build_prompts_payload(storyboard: dict[str, Any], plan: dict[str, Any], now
 
 
 def _render_storyboard(storyboard: dict[str, Any]) -> str:
+    image_summary = storyboard.get("image_reference_summary") or {}
     lines = [
         "# 视频分镜",
         "",
@@ -2134,16 +2418,40 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
         f"- 平台：{', '.join(storyboard['platforms'])}",
         f"- 画幅/分辨率：{storyboard['format']['aspect_ratio']}，{storyboard['format']['resolution']}",
         f"- 镜头数：{len(storyboard['shots'])}",
+        f"- 当前分镜预计时长：{storyboard.get('actual_duration_seconds') or sum(int(shot.get('duration_seconds', 0)) for shot in storyboard['shots'])} 秒",
         "",
         "## 素材优先级",
         "",
         storyboard["material_priority"],
         "",
-        "## 镜头列表",
+        "## 图片引用检查",
+        "",
+        f"- 状态：{image_summary.get('status', 'unknown')}",
+        f"- 已复制预览图：{image_summary.get('copied_preview_count', 0)}",
+        f"- 缺失预览图：{image_summary.get('missing_preview_count', 0)}",
+        f"- 说明：{image_summary.get('message', '未生成图片引用检查。')}",
         "",
     ]
+    repeated_materials = image_summary.get("repeated_materials") or []
+    repeated_sources = image_summary.get("repeated_sources") or []
+    if repeated_materials or repeated_sources:
+        lines.extend(["### 重复图片风险", ""])
+        for item in repeated_materials:
+            lines.append(f"- 镜头 {item['shot_id']} 与镜头 {item['first_shot_id']} 使用同一素材 ID：{item['material_id']}")
+        for item in repeated_sources:
+            lines.append(f"- 镜头 {item['shot_id']} 与镜头 {item['first_shot_id']} 使用同一图片路径：{item['source_path']}")
+        lines.append("")
+    if storyboard.get("duration_change_notice"):
+        lines.extend(["## 时长变更提示", "", storyboard["duration_change_notice"], ""])
+    lines.extend(
+        [
+        "## 镜头列表",
+        "",
+        ]
+    )
     for shot in storyboard["shots"]:
         material = shot["selected_material"]["id"] if shot.get("selected_material") else "无"
+        preview = shot.get("image_preview") or {}
         lines.extend(
             [
                 f"### 镜头 {shot['shot_id']}（{shot['duration_seconds']} 秒）",
@@ -2161,9 +2469,18 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
                 f"- 风险提示：{shot['risk_notes']}",
                 f"- 创意质量要求：{'; '.join(shot['creative_quality_checks'])}",
                 f"- 镜头验证：{shot['shot_design_validation']['status']}｜{'; '.join(shot['shot_design_validation']['messages'])}",
+                f"- 原始图片路径：{preview.get('source_path') or '无'}",
+                f"- 预览图状态：{preview.get('status') or 'none'}｜{preview.get('message') or '无'}",
                 "",
             ]
         )
+        if preview.get("preview_path"):
+            lines.extend(
+                [
+                    f"![镜头 {shot['shot_id']} 参考图]({preview['preview_path']})",
+                    "",
+                ]
+            )
     lines.extend(
         [
             "## 边界",
@@ -2171,6 +2488,7 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
             "- Prompt 是给即梦使用，不是字幕。",
             "- 展示具体产品的 AI 镜头必须使用真实产品图片作参考。",
             "- AI 模拟场景不能表述为真实案例、真实测试或客户现场。",
+            "- 可以在确认分镜前用自然语言删除镜头或替换镜头图片，例如：`删除镜头 03`、`镜头 04 图片换成 E:/path/to/image.jpg`。",
             "",
             "请确认分镜后继续规划即梦任务。",
         ]
@@ -3555,6 +3873,14 @@ def _resolve_material_path(value: str, project_dir: Path | None) -> str:
     return value
 
 
+def _project_dir_from_run_dir(run_dir: Path) -> Path | None:
+    try:
+        # {project}/generated/reports/video-creation/{run}
+        return run_dir.resolve().parents[3]
+    except IndexError:
+        return None
+
+
 def _project_dir_from_generated_output(output_path: Path) -> Path | None:
     try:
         # {project}/generated/reports/video-creation/{run}/dreamina_generation/generated_shots/shot.mp4
@@ -3796,6 +4122,43 @@ def _parse_shot_revision_request(normalized_reply: str, original_reply: str) -> 
     if match:
         return _normalize_shot_id(match.group(2)), original_reply.strip()
     return None
+
+
+def _parse_shot_image_replacement_request(reply: str) -> tuple[str, str] | None:
+    text = reply.strip()
+    if not text:
+        return None
+    if not re.search(r"(图片|素材|参考图|参考图片)", text):
+        return None
+    if not re.search(r"(换成|替换为|改成|使用|用)", text):
+        return None
+    shot_match = re.search(r"镜头\s*0?(\d{1,2})", text, flags=re.IGNORECASE)
+    if not shot_match:
+        return None
+    path_match = re.search(r"(?:换成|替换为|改成|使用|用)\s*[\"'“”]?(.+?)[\"'“”]?\s*$", text)
+    if not path_match:
+        return None
+    path = path_match.group(1).strip().strip("。；;，,")
+    if not path:
+        return None
+    return _normalize_shot_id(shot_match.group(1)), path
+
+
+def _parse_shot_deletion_request(reply: str) -> list[str] | None:
+    text = reply.strip()
+    if not text:
+        return None
+    if not re.search(r"(删除|删掉|删去|去掉|移除)", text):
+        return None
+    if "镜头" not in text:
+        return None
+    numbers = re.findall(r"镜头\s*0?(\d{1,2})", text)
+    if not numbers:
+        tail = text.split("镜头", 1)[-1]
+        numbers = re.findall(r"\d{1,2}", tail)
+    if not numbers:
+        return None
+    return [_normalize_shot_id(number) for number in numbers]
 
 
 def _parse_shot_retry_confirmation(reply: str) -> str | None:

@@ -230,9 +230,12 @@ class VideoCreationAgentTests(unittest.TestCase):
                 now=datetime(2026, 6, 25, 14, 35, 0),
             )
 
-            self.assertEqual(reply_result.status, "requirements_confirmed")
+            self.assertEqual(reply_result.status, "video_plan_ready")
+            self.assertEqual(reply_result.phase, "awaiting_video_plan_confirmation")
+            self.assertTrue((run_dir / "video_plan.md").exists())
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["creative_direction"]["primary"]["id"], "procurement_guide")
+            self.assertEqual(state["current_pending_confirmation"], "确认策划")
 
     def test_video_creation_run_captures_adapter_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -547,10 +550,12 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             result = handle_video_creation_reply(run_dir, "确认策划", now=datetime(2026, 6, 25, 15, 5, 0))
 
-            self.assertEqual(result.status, "video_plan_confirmed")
-            self.assertEqual(result.phase, "ready_for_storyboard")
+            self.assertEqual(result.status, "storyboard_ready")
+            self.assertEqual(result.phase, "awaiting_storyboard_confirmation")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["video_plan"])
+            self.assertEqual(state["current_pending_confirmation"], "确认分镜")
+            self.assertTrue((run_dir / "storyboard.md").exists())
 
     def test_handles_generation_reply_for_current_pending_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -652,6 +657,67 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["current_pending_confirmation"], "确认分镜")
             self.assertEqual(state["files"]["storyboard_json"], str(storyboard_json))
             self.assertEqual(state["files"]["prompts_json"], str(prompts_json))
+
+    def test_storyboard_markdown_embeds_reference_image_previews(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = _create_plan_confirmed_run(root)
+            _write_raw_image_files(root)
+
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            storyboard_md = (run_dir / "storyboard.md").read_text(encoding="utf-8")
+            self.assertEqual(storyboard["image_reference_summary"]["status"], "ok")
+            self.assertEqual(storyboard["image_reference_summary"]["copied_preview_count"], 12)
+            self.assertTrue((run_dir / "storyboard_assets" / "shot_02_reference.jpg").exists())
+            self.assertIn("![镜头 02 参考图](storyboard_assets/shot_02_reference.jpg)", storyboard_md)
+            self.assertIn("原始图片路径：", storyboard_md)
+            self.assertIn("图片引用检查", storyboard_md)
+
+    def test_natural_language_can_delete_storyboard_shot_and_recalculate_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_plan_confirmed_run(Path(tmp))
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+
+            result = handle_video_creation_reply(run_dir, "删除镜头 03", now=datetime(2026, 6, 25, 15, 12, 0))
+
+            self.assertEqual(result.status, "storyboard_revised")
+            self.assertEqual(result.phase, "awaiting_storyboard_confirmation")
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            prompts = json.loads((run_dir / "prompts.json").read_text(encoding="utf-8"))
+            self.assertNotIn("03", [shot["shot_id"] for shot in storyboard["shots"]])
+            self.assertNotIn("03", [item["shot_id"] for item in prompts["prompts"]])
+            self.assertEqual(storyboard["actual_duration_seconds"], 55)
+            self.assertIn("减少约 5 秒", (run_dir / "storyboard.md").read_text(encoding="utf-8"))
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertFalse(state["confirmations"]["storyboard"])
+            self.assertNotIn("dreamina_jobs_json", state["files"])
+
+    def test_natural_language_can_replace_storyboard_shot_image(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = _create_plan_confirmed_run(root)
+            _write_raw_image_files(root)
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+            override_path = root / "manual-shot-03.jpg"
+            override_path.write_bytes(b"manual image")
+
+            result = handle_video_creation_reply(
+                run_dir,
+                f"镜头 03 图片换成 {override_path}",
+                now=datetime(2026, 6, 25, 15, 13, 0),
+            )
+
+            self.assertEqual(result.status, "storyboard_revised")
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            prompts = json.loads((run_dir / "prompts.json").read_text(encoding="utf-8"))
+            shot_03 = next(shot for shot in storyboard["shots"] if shot["shot_id"] == "03")
+            prompt_03 = next(item for item in prompts["prompts"] if item["shot_id"] == "03")
+            self.assertEqual(shot_03["selected_material"]["id"], "user_image_override/shot_03")
+            self.assertEqual(prompt_03["reference_material_id"], "user_image_override/shot_03")
+            self.assertEqual(shot_03["image_preview"]["status"], "copied")
+            self.assertIn("manual-shot-03.jpg", (run_dir / "storyboard.md").read_text(encoding="utf-8"))
 
     def test_storyboard_does_not_silently_overwrite_existing_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1227,9 +1293,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             handle_video_creation_reply(run_dir, "生成策划", now=datetime(2026, 6, 25, 15, 0, 0))
             handle_video_creation_reply(run_dir, "确认策划", now=datetime(2026, 6, 25, 15, 1, 0))
-            handle_video_creation_reply(run_dir, "生成分镜", now=datetime(2026, 6, 25, 15, 2, 0))
             handle_video_creation_reply(run_dir, "确认分镜", now=datetime(2026, 6, 25, 15, 3, 0))
-            handle_video_creation_reply(run_dir, "规划即梦任务", now=datetime(2026, 6, 25, 15, 10, 0))
             handle_video_creation_reply(run_dir, "确认即梦生成", now=datetime(2026, 6, 25, 15, 11, 0))
             handle_video_creation_reply(run_dir, "提交即梦任务", now=datetime(2026, 6, 25, 15, 12, 0))
             handle_video_creation_reply(run_dir, "查询即梦结果", now=datetime(2026, 6, 25, 15, 13, 0))
@@ -1457,6 +1521,26 @@ def _write_legacy_quartz_video_cards(paths) -> None:
 def _write_card(path: Path, frontmatter_lines: list[str], body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("---\n" + "\n".join(frontmatter_lines) + "\n---\n\n" + body + "\n", encoding="utf-8")
+
+
+def _write_raw_image_files(root: Path) -> None:
+    image_dir = root / "raw" / "01_产品" / "02_石英纤维隔热带" / "02_产品图片"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    for file_name in [
+        "product.jpg",
+        "product-02.jpg",
+        "product-03.jpg",
+        "texture-01.jpg",
+        "texture-02.jpg",
+        "texture-03.jpg",
+        "application-01.jpg",
+        "application-02.jpg",
+        "application-03.jpg",
+        "test-01.jpg",
+        "test-02.jpg",
+        "closing-01.jpg",
+    ]:
+        (image_dir / file_name).write_bytes(f"fake image {file_name}".encode("utf-8"))
 
 
 def _create_ready_run(

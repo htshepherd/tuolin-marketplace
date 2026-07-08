@@ -41,7 +41,7 @@ A formal review of uncertain knowledge-base facts before they can become approve
 _Avoid_: marketing plan review
 
 **Video Language Version**:
-A user-selected Chinese or English deliverable whose narration and subtitles use the selected language.
+A user-selected Chinese or English video-creation run whose product naming, planning language, prompts, and review copy use the selected language. Voiceover and subtitles are added outside the current video Agent.
 _Avoid_: base master, visual master, final master
 
 **Video Creative Direction**:
@@ -65,7 +65,7 @@ The internal mapping from Tuolin's fixed video creative directions to industrial
 _Avoid_: Apple/Vercel consumer-product style labels as user-facing categories
 
 **Industrial Visual Quality Gate**:
-The automated video quality gate that checks industrial-product planning quality, real-material references, structured Dreamina prompts, job validation, subtitles, BGM, timing, and final-review readiness.
+The automated planning and Dreamina-job gate that checks industrial-product planning quality, real-image references, structured prompts, job validation, repeated image references, and shot-review readiness.
 _Avoid_: automatic creative approval, platform-restricted-word module detached from knowledge facts
 
 **Quartz Fiber Tape Video Scope**:
@@ -92,45 +92,21 @@ _Avoid_: video_script, treating video creation as only narration writing
 One language-specific quartz-fiber-tape video production record stored under `generated/reports/video-creation/`.
 _Avoid_: formal knowledge, raw evidence archive
 
-**Video Narration Audio**:
-The workflow-generated spoken audio in the selected video language version.
-_Avoid_: user-supplied WAV prerequisite, narration in a different language
+**Visual Storyboard**:
+The user-confirmed shot list that shows each shot's visual intent, selected image reference, local image path, inline thumbnail, material role, and risk notes before any paid Dreamina generation.
+_Avoid_: text-only shot list, hidden image selection, confirming only after generation
 
-**Video Background Music**:
-Commercially usable music selected automatically to match the confirmed creative direction and embedded in the delivered video.
-_Avoid_: requiring the user to choose a track before planning, downloading TikTok trending songs
+**Shot Image Override**:
+A user-provided local image path used to replace the selected image reference for a specific storyboard shot.
+_Avoid_: adding a new product fact, bypassing product-knowledge claims, replacing all shots accidentally
 
-**Music Brief**:
-The planning output that specifies the required mood, pacing, intensity, and usage constraints for background music.
-_Avoid_: an actual music file, a TikTok song reference
+**Dreamina Shot Plan**:
+The final pre-submission plan that maps each confirmed storyboard shot to a Dreamina task, prompt, image reference, expected credit use, and manual submission command.
+_Avoid_: paid submission, final edited video, audio/subtitle package
 
-**Music Provider Adapter**:
-The independent capability that retrieves or generates commercially usable music from a **Music Brief** and records source and licensing metadata.
-_Avoid_: embedding music-provider logic in creative planning
-
-**Narration Provider Adapter**:
-The independent capability that generates narration audio and sentence-level timing in the selected language.
-_Avoid_: relying on Dreamina CLI for text-to-speech
-
-**Narration Voice Selection**:
-The user choice of one voice after hearing three samples recommended for the selected language, audience, and creative direction.
-_Avoid_: generating full narration before choosing a voice
-
-**Burned-in Video Subtitles**:
-Always-visible subtitles rendered into the video image in the selected language version.
-_Avoid_: optional subtitle track, subtitles in a different language
-
-**Video Information Overlay**:
-Controlled on-screen text for titles, confirmed parameters, short benefit labels, and calls to action in the selected language.
-_Avoid_: unsupported claims, uncontrolled text-heavy cards
-
-**Video End Logo**:
-The transparent logo from project configuration, displayed once at the end of the video.
-_Avoid_: full-video watermark, hard-coded logo path
-
-**Video Quality Gate**:
-The automated pre-preview check that separates blocking render defects from user-reviewable warnings.
-_Avoid_: automatic creative approval
+**Shot Review**:
+The user review of generated Dreamina clips, including acceptance, deletion, or single-shot retry decisions before the run is marked complete.
+_Avoid_: final video editing review, music/subtitle review
 
 ## Relationships
 
@@ -155,8 +131,8 @@ _Avoid_: automatic creative approval
 - A **Knowledge Review** may affect formal knowledge cards, but it does not review marketing campaign quality.
 - Every video production run must select exactly one **Video Language Version** before creative planning proceeds.
 - Chinese and English videos are first-class deliverables; neither is modeled as a derivative of a master.
-- A Chinese **Video Language Version** contains Chinese narration, Chinese subtitles, and background music.
-- An English **Video Language Version** contains English narration, English subtitles, and background music.
+- A Chinese **Video Language Version** uses Chinese product naming, Chinese planning copy, and Chinese review text where applicable.
+- An English **Video Language Version** uses English product naming, English planning copy, and English review text where applicable.
 - One video production run produces only the **Video Language Version** confirmed by the user.
 - Every video production run must confirm one **Video Creative Direction** before the formal video plan is generated.
 - The 20 publishing image style categories do not define or constrain **Video Creative Directions**.
@@ -175,33 +151,35 @@ _Avoid_: automatic creative approval
 - `dexhunter/seedance2-skill` is internalized as Seedance/Dreamina prompt grammar and structure, not as a business taxonomy source.
 - The **Creative Quality Matrix by Video Direction** must be selected from the confirmed primary **Video Creative Direction** and carried through plan, storyboard, prompt generation, Dreamina job planning, and quality gate.
 - The **Industrial Product Video Style Matrix** is selected internally from the confirmed directions; users still choose the fixed video creative directions rather than style labels.
-- The initial workflow order is: identify a quartz-fiber-tape video request; confirm the **Video Language Version**; collect platform, duration, audience, and core objective; show recommendations and all 16 directions; confirm the direction selection; then generate the formal video plan.
+- The initial workflow order is: identify a quartz-fiber-tape video request; confirm the **Video Language Version**; collect platform, duration, audience, and core objective; show recommendations and all 16 directions; confirm the direction selection; generate the formal video plan; generate the **Visual Storyboard**; generate the **Dreamina Shot Plan**; hand off paid Dreamina submission; query results; then complete **Shot Review**.
 - A formal video plan must not be generated before both the language version and creative direction are confirmed.
+- After the user confirms a creative direction, the workflow may generate the formal video plan automatically; the user should not have to issue a separate "生成策划" command unless they explicitly want manual control.
+- After the user confirms the formal video plan, the workflow may generate the **Visual Storyboard** automatically; the user should not have to issue a separate "生成分镜" command unless they explicitly want manual control.
+- After the user confirms the **Visual Storyboard**, the workflow may generate the **Dreamina Shot Plan** automatically; the user should not have to issue a separate "规划即梦任务" command unless they explicitly wants manual control.
+- The user-facing video workflow keeps confirmation gates for creative direction, plan, visual storyboard, Dreamina paid generation, and shot review, but hides routine generation commands behind those confirmations.
 - The initial workflow supports only 60-, 90-, and 120-second videos; 60 seconds is the default.
 - The initial workflow targets YouTube Shorts and TikTok only; standard horizontal YouTube videos and other platforms are outside the initial scope.
 - All initial YouTube Shorts and TikTok deliverables use a 9:16 vertical aspect ratio; the workflow does not maintain platform-specific framing variants.
 - A run may target TikTok, YouTube Shorts, or both.
 - When both platforms are selected, they share one 9:16 deliverable; the workflow records both targets but does not render duplicate platform files.
-- For multi-platform runs, subtitles, logos, and information overlays use the intersection of TikTok and YouTube Shorts safe areas.
+- For multi-platform runs, visual composition should preserve the intersection of TikTok and YouTube Shorts safe areas.
 - The initial video workflow does not generate platform titles, post copy, descriptions, or hashtags; those belong to a later publishing skill.
 - Each 60-, 90-, or 120-second run produces one complete video; the initial workflow does not split longer videos into a series.
 - The **Knowledge Producer** supplies formal product knowledge to both the LinkedIn consumer and the **Video Creation Consumer**.
 - The LinkedIn consumer and **Video Creation Consumer** are separate application scenarios with separate workflows and outputs.
 - The **Video Creation Consumer** must read Chinese and English external product names from published knowledge cards instead of defining them itself.
 - The **Video Creation Consumer** uses **Video Creation Context** as its only task-specific knowledge entrypoint.
-- **Video Creation Context** supports the full workflow from creative direction through final video delivery.
+- **Video Creation Context** supports the full workflow from creative direction through Dreamina shot generation and shot review.
 - **Video Workflow Entrypoint** is the only user-facing video skill.
-- The Dreamina runner is an internal execution capability invoked by the workflow; users do not trigger it separately or copy run-directory paths between skills.
-- Narration and music provider adapters are also internal capabilities; users interact only with voice samples, narration confirmations, and video previews through the workflow.
-- Provider names, commands, and intermediate file handoffs are not part of the ordinary user workflow.
-- Narration and music integrations use provider-neutral adapter contracts and output formats.
-- The initial workflow design does not bind a specific narration or music provider, and replacing a provider must not change workflow phases or business-facing filenames.
+- Dreamina submission is represented as a safe manual handoff when the Agent environment cannot perform paid external submission directly.
+- The user should not need to copy internal script parameters; when manual execution is required, the workflow provides a single PowerShell command.
+- The working Dreamina CLI submission, manual-submission JSON, resumable PowerShell handoff, result query, and download path are stable execution infrastructure; upstream workflow improvements must not casually modify this execution path.
 - The initial **Video Creation Context** is requested only for the quartz-fiber-tape product identified from the user's natural-language video request.
 - The initial **Video Creation Context** contains the quartz-fiber-tape product card and only the content-asset cards explicitly related to that product.
 - The initial video consumer does not expand retrieval through keyword search and does not read knowledge for other products.
 - Each **Video Creation Run** is stored at `generated/reports/video-creation/{timestamp}_quartz_fiber_tape_{zh|en}/`.
 - A **Video Creation Run** is an application-layer deliverable and must not be written into the formal knowledge layer or raw archive.
-- A **Video Creation Run** retains requirements and direction decisions, plan, storyboard, prompts, narration script, voice samples, narration audio and timing, Dreamina jobs and shot files, music and licensing metadata, subtitle files, previews, confirmed deliverable, workflow state, and change log.
+- A **Video Creation Run** retains requirements and direction decisions, plan, visual storyboard, prompts, Dreamina shot plan, manual submission records, generated shot files, shot-review state, workflow state, and change log.
 - Video creation run directories support audit and partial regeneration and must not be treated as disposable indexes merely because they live under `generated/reports/`.
 - Video creation requires the knowledge base to be organized and its Agent interface to be available before a run starts.
 - The initial workflow does not monitor or switch knowledge revisions during an active run.
@@ -209,76 +187,44 @@ _Avoid_: automatic creative approval
 - The video consumer does not organize knowledge, scan raw, or bypass the formal interface with ad hoc facts.
 - User-provided wording preferences may influence creative treatment, but task-specific product facts, parameters, performance claims, or promises that are absent from formal knowledge cannot enter a video.
 - New product facts must be confirmed and published through the knowledge producer before video creation uses them; the video consumer has no one-run fact exception.
-- When real application footage is unavailable, Dreamina may generate a simulated application scene only for applications confirmed by formal knowledge.
+- The video workflow uses formal knowledge-card text and image content assets; knowledge-base video files are not used for planning or Dreamina task generation in the current scope.
+- When real application imagery is unavailable, Dreamina may generate a simulated application scene only for applications confirmed by formal knowledge.
 - AI-generated scenes must be identified as generated in the run record and must not be represented as a real customer case, real test record, or product-performance evidence.
 - Generated scenes must not introduce unsupported equipment details, parameters, applications, or performance outcomes.
-- Shot material selection follows this strict fallback order: real product video, real application video, real product image animated into video, real application image animated into video, AI-simulated scene, then text-only generated video.
+- Shot material selection follows this strict fallback order: real product image animated into video, real application image animated into video, AI-simulated scene, then text-only generated video.
 - A lower-priority material mode is used only when higher-priority modes cannot satisfy the shot.
-- Any generated shot that visibly contains the product must use real product imagery as an image-to-video or multimodal visual reference.
+- Any generated shot that visibly contains the product must use real product or real application imagery as an image-to-video visual reference.
+- A **Visual Storyboard** must show each selected image as an inline thumbnail or preview, not only as a local path or content-asset ID.
+- A **Visual Storyboard** should copy each selected reference image into the run directory, render that run-local copy as a Markdown image preview, and still display the original absolute source path for traceability.
+- Run-local storyboard image previews improve review reliability for Windows paths, Chinese filenames, spaces, and Markdown renderers without changing the stable Dreamina CLI submission path.
+- A **Visual Storyboard** must make repeated image references visible before paid Dreamina submission.
+- Accidental repeated image references across multiple paid Dreamina shots should block confirmation unless the user explicitly approves the repetition as a deliberate visual choice.
+- Users may revise the **Visual Storyboard** with natural language, including deleting shots, shortening the shot list, changing shot order, or replacing a specific shot's image.
+- A **Shot Image Override** may use a local image path supplied directly in the Codex conversation, but it only changes the visual reference for that shot; it does not create or approve new product facts.
+- When a user supplies a **Shot Image Override**, the workflow should validate that the file exists, is an image type supported by Dreamina, and does not introduce clear-face or unsupported-claim risk before regenerating prompts or the **Dreamina Shot Plan**.
+- Before storyboard confirmation, users may freely replace shot images, delete shots, reorder shots, or revise shot intent; the workflow regenerates storyboard-dependent prompts and Dreamina jobs without credit risk.
+- After Dreamina generation confirmation, storyboard image replacement is not a direct edit. If no real submission happened, the workflow must explicitly roll back to storyboard review; if real submission happened, changes must use the single-shot retry flow so accepted submit IDs and downloaded results remain stable.
 - Text-only video generation is allowed only for environmental or transitional shots that do not depict the specific product.
 - Dreamina generation defaults to `seedance2.0_vip` at 1080P because the operating account has premium access.
-- Final 9:16 deliverables use 1080 by 1920 pixels.
-- Dreamina job review still displays estimated credit use before paid submission.
+- Dreamina clips use 9:16 1080 by 1920 pixels unless the user explicitly chooses another supported configuration.
+- **Dreamina Shot Plan** review displays estimated credit use before paid submission.
 - Generated shots default to five seconds, may range from four to fifteen seconds, and should normally remain within four to eight seconds for short-form pacing.
-- A 60-second run must finish within 55-65 seconds, a 90-second run within 85-95 seconds, and a 120-second run within 115-125 seconds.
-- Runs outside the selected duration tolerance must revise narration or shot timing rather than truncate audio or pad with empty footage.
+- A 60-second run should plan roughly twelve five-second shots unless the user deletes or merges shots.
+- If the user deletes shots, the workflow should show the new estimated total duration before regenerating the **Dreamina Shot Plan**.
+- Users may intentionally shorten a video below the original duration target by deleting shots. If the new duration materially deviates from the original target, the workflow must surface the new estimated duration and ask whether to accept the shorter target or add replacement shots before paid generation.
 - Inquiry-conversion videos require a call to action; other creative directions may use a light call to action when appropriate.
 - Call-to-action details must come from formal knowledge or project configuration and must not be hard-coded in the video skills.
-- The **Video Creation Consumer** generates **Video Narration Audio** automatically; the user is not required to provide an audio file.
-- The Dreamina runner mixes generated narration into the selected video deliverable during assembly.
-- The **Video Creation Consumer** automatically selects **Video Background Music** according to the confirmed creative direction.
-- The delivered video embeds **Video Background Music** directly.
-- The workflow must not download, copy, or embed TikTok trending songs; it selects commercially usable music with a suitable style.
-- Video planning produces a **Music Brief** but does not obtain the audio track itself.
-- A **Music Provider Adapter** turns the brief into a usable music file and records its source and licensing information.
-- If no music provider is available, the run cannot be marked complete.
-- Background music has no separate mandatory user-confirmation gate; it is reviewed as part of the final video preview.
-- A request to replace background music reruns music selection and audiovisual assembly without invalidating the confirmed storyboard, generated visual clips, or narration.
-- A **Narration Provider Adapter** generates the selected-language narration audio and sentence-level timing data.
-- Dreamina CLI generates visual clips and may accept existing audio references, but it does not replace the narration or music provider adapters.
-- Before generating complete narration, the workflow presents three recommended voice samples and requires one **Narration Voice Selection**.
-- After storyboard confirmation, the workflow first presents the complete narration text and waits for `确认旁白文案`.
-- Voice samples are generated only after narration text confirmation.
-- The three samples use the same 8-12 second excerpt from the actual narration so the voices can be compared fairly.
-- The English version uses a middle-aged Western male voice.
-- The Chinese version uses a natural, fluent middle-aged male Chinese voice without an intentionally Western accent.
-- The user selects a sample with a natural-language reply such as `声音选 2`.
-- After voice selection, the workflow generates a complete narration preview before submitting visual-generation jobs.
-- The user must confirm the narration voice, pace, pronunciation, and content before visual generation proceeds.
-- Confirmed narration timing drives shot duration and visual-generation planning.
-- The natural-language command `确认旁白` locks the current narration text, voice, and timing and allows Dreamina job planning to proceed.
-- A narration revision clears the prior confirmation, regenerates the preview and timing, and requires a new `确认旁白`.
-- Dreamina job planning occurs only after `确认旁白`.
-- Before submission, the user reviews job type, selected material, duration, and estimated credit use.
+- Before submission, the user reviews job type, selected image, image thumbnail, duration, and estimated credit use.
 - Paid visual-generation jobs are submitted only after the user says `确认即梦生成`.
 - Failed or unsatisfactory Dreamina shots may be regenerated individually without resubmitting accepted shots.
 - Before a shot-level retry, the workflow shows that shot's estimated credit use and waits for explicit authorization such as `重做镜头 03`.
-- After all visual jobs finish, the workflow assembles a shot preview using confirmed narration and temporary subtitles but no final background music.
-- The user may request shot-level regeneration from the shot preview.
-- The command `确认镜头` locks the accepted visual clips and permits final music selection, final subtitle rendering, and final assembly.
-- Final assembly produces a final preview that remains incomplete until the user says `确认成片`.
-- Before final confirmation, the user may request changes to music, subtitle styling, audio levels, or specified shots.
-- Automated quality checks cannot mark the run complete; only `确认成片` does.
-- The shot-review file is named `shot_preview.mp4`.
-- The pre-confirmation final render is named `final_preview.mp4`.
-- The confirmed Chinese deliverable is named `quartz_fiber_tape_zh_9x16.mp4`; the confirmed English deliverable is named `quartz_fiber_tape_en_9x16.mp4`.
-- Video output filenames must not use the term `master`.
-- Initial video deliverables use **Burned-in Video Subtitles** rather than an optional subtitle track.
-- **Burned-in Video Subtitles** use the same language as the narration and selected **Video Language Version**.
-- Subtitles use short sentence units, with one or two lines per screen.
-- Subtitle timing follows narration sentences rather than word-by-word karaoke timing.
-- Subtitle placement must remain inside the safe area between the top and bottom platform UI regions.
-- Video deliverables may include **Video Information Overlays** in addition to subtitles.
-- Overlays are limited to titles, formally confirmed parameters, short benefit labels, and calls to action.
-- Overlay content must use the selected language, come from formal knowledge or approved configuration, and remain inside platform-safe areas.
-- The workflow displays the configured **Video End Logo** once at the end by default and does not apply a full-video watermark.
-- A missing configured logo produces a warning but does not block final assembly.
-- **Video Quality Gate** blocks final preview for corrupt files, missing audio tracks, missing subtitles, wrong language, incorrect resolution or aspect ratio, out-of-tolerance duration, black frames, or missing shots.
-- Subtitle density, loud music, rough transitions, missing logo, and weaker visual consistency are warnings shown to the user rather than automatic blockers.
-- Blocking defects must be repaired before final preview; warnings remain visible for the user's `确认成片` decision.
+- After all visual jobs finish, the workflow records the generated shot results for **Shot Review**.
+- The user may request shot-level deletion, replacement, or regeneration from **Shot Review**.
+- The command `确认镜头` locks the accepted Dreamina clips and marks the video-creation run complete.
+- Audio, subtitles, BGM, logos, final editing, publishing titles, post copy, descriptions, and hashtags are outside the current video Agent and belong to manual editing or later publishing workflows.
 - A **Video Creation Run** persists its current workflow phase and confirmations in `workflow_state.json`.
 - Resuming a run restores the latest valid phase and asks only for the current pending confirmation instead of restarting or repeating locked work.
-- Automated final-video checks may inspect audiovisual synchronization, subtitle timing, and audio levels, but they do not replace the user's final preview confirmation.
+- Automated checks may inspect Dreamina shot planning and generated-shot availability, but they do not replace the user's **Shot Review** confirmation.
 
 ## Example Dialogue
 
@@ -322,10 +268,7 @@ _Avoid_: automatic creative approval
 > **Domain expert:** "No. It is a **Desktop Delivery Copy** for boss review and manual operation; the canonical campaign folder remains unchanged."
 >
 > **Dev:** "Should the video workflow create a master before choosing a language?"
-> **Domain expert:** "No. Ask the user to choose the Chinese or English **Video Language Version** first, then produce that version directly."
->
-> **Dev:** "Can an English video retain Chinese narration or omit English subtitles?"
-> **Domain expert:** "No. Its narration and subtitles must both be English; the Chinese version follows the same rule in Chinese."
+> **Domain expert:** "No. Ask the user to choose the Chinese or English **Video Language Version** first. The current Agent generates Dreamina video shots for that version; voiceover and subtitles are outside this Agent."
 >
 > **Dev:** "Should we offer the 20 LinkedIn image styles as video categories?"
 > **Domain expert:** "No. Those belong to publishing images. Recommend and confirm a separate **Video Creative Direction** before video planning."
@@ -343,7 +286,7 @@ _Avoid_: automatic creative approval
 > **Domain expert:** "Show three ranked combinations with rationale, material coverage, missing materials, and AI-generation risk, alongside all 16 fixed directions."
 >
 > **Dev:** "Should creative direction be chosen before the video language?"
-> **Domain expert:** "No. Confirm language first because it affects audience expression, narration rhythm, and direction recommendations."
+> **Domain expert:** "No. Confirm language first because it affects product naming, audience expression, prompts, and direction recommendations."
 >
 > **Dev:** "Can the initial workflow accept an arbitrary video duration?"
 > **Domain expert:** "No. Offer 60, 90, or 120 seconds, defaulting to 60 seconds."
@@ -358,7 +301,7 @@ _Avoid_: automatic creative approval
 > **Domain expert:** "No. Record both targets and use the same 9:16 deliverable."
 >
 > **Dev:** "Which platform safe area applies when both targets are selected?"
-> **Domain expert:** "Use the intersection of both safe areas so one render remains readable on each platform."
+> **Domain expert:** "Use the intersection of both safe areas so one 9:16 visual output remains usable on each platform."
 >
 > **Dev:** "Should the video workflow also prepare TikTok and Shorts post copy?"
 > **Domain expert:** "No. Deliver the video only; a later publishing skill owns publishing metadata and copy."
@@ -372,17 +315,14 @@ _Avoid_: automatic creative approval
 > **Dev:** "Should the video agent hard-code the product's Chinese and English external names?"
 > **Domain expert:** "No. Product naming is owned by the **Knowledge Producer** and must be consumed from the published knowledge cards."
 >
-> **Dev:** "Should complete video production continue using `video_script`?"
-> **Domain expert:** "No. Rename the task context to **Video Creation Context** because the workflow produces a complete video, not only a script."
+> **Dev:** "Should video production continue using `video_script`?"
+> **Domain expert:** "No. Rename the task context to **Video Creation Context** because the workflow plans and generates Dreamina video shots, not only a script."
 >
-> **Dev:** "Should users invoke the Dreamina runner after confirming prompts?"
-> **Domain expert:** "No. Keep `tuolin-video-workflow` as the single natural-language entrypoint and call the runner internally."
+> **Dev:** "Should users invoke a separate Dreamina runner skill after confirming prompts?"
+> **Domain expert:** "No. Keep `tuolin-video-workflow` as the single natural-language entrypoint. If paid submission must happen locally, hand off one safe PowerShell command."
 >
-> **Dev:** "Should narration and music providers be exposed as separate user skills?"
-> **Domain expert:** "No. Keep them behind the video workflow and expose only business choices and previews."
->
-> **Dev:** "Must we choose narration and music vendors before defining the workflow?"
-> **Domain expert:** "No. Define provider-neutral adapter contracts first and select replaceable providers during implementation."
+> **Dev:** "Can upstream user-flow improvements rewrite the working Dreamina CLI submission code?"
+> **Domain expert:** "No. Treat the current CLI submission, resumable handoff, submit-id recording, query, and download behavior as stable infrastructure unless a specific execution bug is being fixed."
 >
 > **Dev:** "Can the initial video consumer search broadly for additional product or asset cards?"
 > **Domain expert:** "No. Read the quartz-fiber-tape product card and its explicitly related content assets only."
@@ -402,14 +342,17 @@ _Avoid_: automatic creative approval
 > **Dev:** "Can the user verbally approve a new performance claim only for this video?"
 > **Domain expert:** "No. Put new facts through the knowledge producer first; only creative wording preferences may remain task-local."
 >
-> **Dev:** "Can Dreamina invent an application scene when no real footage exists?"
+> **Dev:** "Can the video workflow use knowledge-base video files for planning or Dreamina generation?"
+> **Domain expert:** "No. In the current scope, use formal knowledge-card text and image content assets only."
+>
+> **Dev:** "Can Dreamina invent an application scene when no real application image exists?"
 > **Domain expert:** "Yes, but only for a formally confirmed application, with clear generated-asset traceability and no implication that it is a real case or test."
 >
 > **Dev:** "Should text-to-video be used whenever it gives a more cinematic result?"
 > **Domain expert:** "No. Preserve real product and application materials first and descend through the fixed fallback order only when necessary."
 >
 > **Dev:** "Can a text-only prompt generate the product itself?"
-> **Domain expert:** "No. Any visible product must be grounded in real product imagery."
+> **Domain expert:** "No. Any visible product must be grounded in real product or application imagery."
 >
 > **Dev:** "Should the initial workflow default to 720P to reduce cost?"
 > **Domain expert:** "No. Use premium `seedance2.0_vip` generation at 1080P and show the estimated credit use before submission."
@@ -417,83 +360,50 @@ _Avoid_: automatic creative approval
 > **Dev:** "Must every Dreamina shot be exactly five seconds?"
 > **Domain expert:** "No. Five seconds is the default; use four to fifteen seconds as needed, normally staying within four to eight seconds."
 >
-> **Dev:** "Can an overlong render be delivered by cutting off the narration?"
-> **Domain expert:** "No. Keep the final duration within the selected ±5-second tolerance by revising the narration or shots."
+> **Dev:** "Can a 60-second run become shorter if the user deletes shots?"
+> **Domain expert:** "Yes, but show the new estimated total duration before regenerating the **Dreamina Shot Plan**."
 >
 > **Dev:** "Must every video end with an inquiry request?"
 > **Domain expert:** "No. Require it for inquiry-conversion videos and use it selectively elsewhere, with details sourced from knowledge or configuration."
 >
-> **Dev:** "Must the user prepare a narration WAV before assembly?"
-> **Domain expert:** "No. The video workflow generates narration in the selected language and passes it to assembly."
+> **Dev:** "Can the user confirm a storyboard if it only lists local paths?"
+> **Domain expert:** "No. The **Visual Storyboard** must show inline image previews for each selected shot image."
 >
-> **Dev:** "Must the user choose background music manually?"
-> **Domain expert:** "No. Select music automatically according to the creative direction."
+> **Dev:** "Should storyboard previews link directly to raw Windows paths?"
+> **Domain expert:** "No. Copy the selected image into the run directory and render that copy in Markdown, while retaining the original absolute source path for traceability."
 >
-> **Dev:** "Can the workflow copy a popular TikTok track into the delivered video?"
-> **Domain expert:** "No. Embed commercially usable music with a matching style instead."
+> **Dev:** "Can multiple Dreamina shots accidentally reuse the same image?"
+> **Domain expert:** "No. Repeated image references must be visible and should block confirmation unless the user explicitly approves the repetition."
 >
-> **Dev:** "Can planning claim that background music is complete after writing a style description?"
-> **Domain expert:** "No. A provider adapter must return a usable track with source and licensing metadata before the video is complete."
+> **Dev:** "Can the user replace a shot image from the Codex conversation?"
+> **Domain expert:** "Yes. They can provide a local image path as a **Shot Image Override** for a specific shot; validate the file before regenerating prompts or the **Dreamina Shot Plan**."
 >
-> **Dev:** "Must the user approve music before visual generation?"
-> **Domain expert:** "No. Review it in the final preview; replacing it only requires remixing and reassembly."
+> **Dev:** "Can the user freely replace shot images after confirming Dreamina generation?"
+> **Domain expert:** "No. Before storyboard confirmation, replacement is a normal storyboard revision. After Dreamina generation confirmation, either roll back explicitly if nothing was submitted, or use the single-shot retry flow if real submit IDs already exist."
 >
-> **Dev:** "Can Dreamina CLI generate the complete narration and music package?"
-> **Domain expert:** "No. Use separate narration and music provider adapters, then assemble their outputs with the generated visuals."
+> **Dev:** "Can the user delete storyboard shots with natural language?"
+> **Domain expert:** "Yes. Deleting or shortening shots is allowed before paid submission; show the revised duration and regenerate downstream prompts and Dreamina jobs."
 >
-> **Dev:** "Can the workflow choose a narration voice silently?"
-> **Domain expert:** "No. Recommend three samples and let the user select one before generating the complete narration."
+> **Dev:** "Can a 60-second request become a 30-second video after shot deletion?"
+> **Domain expert:** "Yes, if the user confirms the new shorter target. Do not silently treat a materially shorter video as still satisfying the original 60-second request."
 >
-> **Dev:** "Should voice samples be generated before the narration text is approved?"
-> **Domain expert:** "No. Follow `确认分镜 → 确认旁白文案 → 声音选择 → 完整试听 → 确认旁白`."
+> **Dev:** "Can Dreamina jobs be submitted immediately after storyboard confirmation?"
+> **Domain expert:** "No. First show the **Dreamina Shot Plan**, selected image previews, and estimated credit use, then wait for `确认即梦生成`."
 >
-> **Dev:** "Should the three samples use different scripts?"
-> **Domain expert:** "No. Use the same 8-12 second narration excerpt and vary only voices that fit the selected language profile."
->
-> **Dev:** "Should the Chinese version imitate a Western accent?"
-> **Domain expert:** "No. Use a natural, fluent middle-aged male Chinese voice; reserve the Western male profile for English."
->
-> **Dev:** "Should we generate all visual clips before anyone hears the narration?"
-> **Domain expert:** "No. Generate and confirm the complete narration first, then use its timing to drive visual generation."
->
-> **Dev:** "Does changing one narration sentence preserve the previous confirmation?"
-> **Domain expert:** "No. Regenerate the preview and require `确认旁白` again."
->
-> **Dev:** "Can Dreamina jobs be submitted immediately after narration confirmation?"
-> **Domain expert:** "No. First show the job plan and estimated credit use, then wait for `确认即梦生成`."
+> **Dev:** "Should users have to say `生成策划`, `生成分镜`, or `规划即梦任务` during normal operation?"
+> **Domain expert:** "No. After each confirmation, the workflow should generate the next artifact automatically and stop only at the next meaningful confirmation gate."
 >
 > **Dev:** "Does one bad generated shot require regenerating the whole video?"
 > **Domain expert:** "No. Authorize and regenerate only that shot while preserving accepted shots."
 >
-> **Dev:** "Should final music and subtitle rendering happen before the user checks the generated shots?"
-> **Domain expert:** "No. First provide a narration-led shot preview with temporary subtitles; continue to final assembly only after `确认镜头`."
+> **Dev:** "Should audio, subtitles, BGM, logos, and final editing happen inside this Agent?"
+> **Domain expert:** "No. The current Agent stops after Dreamina shot generation and **Shot Review**; final editing is manual or owned by a later workflow."
 >
-> **Dev:** "Can a technically valid render automatically complete the workflow?"
-> **Domain expert:** "No. The user must watch the final preview and say `确认成片`."
->
-> **Dev:** "Should the confirmed output still be named a master?"
-> **Domain expert:** "No. Use the language-specific quartz-fiber-tape filename and reserve explicit preview names for intermediate renders."
->
-> **Dev:** "Should subtitles be delivered as a track viewers can disable?"
-> **Domain expert:** "No. Burn them into the picture so they are visible by default on TikTok and YouTube Shorts."
->
-> **Dev:** "Should subtitles highlight every spoken word?"
-> **Domain expert:** "No. Show one or two lines per sentence, synchronize them to sentence timing, and keep them clear of platform UI."
->
-> **Dev:** "Must the final video prohibit all text except subtitles?"
-> **Domain expert:** "No. Allow controlled titles, confirmed parameters, short benefit labels, and calls to action."
->
-> **Dev:** "Should the logo remain visible throughout the video?"
-> **Domain expert:** "No. Use the configured transparent logo once at the end; warn but continue if it is unavailable."
->
-> **Dev:** "Can a final preview be produced when the audio track is missing?"
-> **Domain expert:** "No. Repair blocking quality defects first; present non-blocking warnings to the user with the preview."
+> **Dev:** "Can technically valid Dreamina clips automatically complete the workflow?"
+> **Domain expert:** "No. The user must review the generated shots and say `确认镜头`."
 >
 > **Dev:** "Should an interrupted video run restart from requirement collection?"
 > **Domain expert:** "No. Restore `workflow_state.json` and continue from the current pending confirmation."
->
-> **Dev:** "Can automated audiovisual checks approve the final video on behalf of the user?"
-> **Domain expert:** "No. Automation reports synchronization and rendering issues; the user confirms the final preview."
 
 ## Flagged Ambiguities
 
