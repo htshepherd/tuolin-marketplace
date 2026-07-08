@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import json
-import hashlib
-import os
 import re
-import shlex
 import shutil
 import subprocess
-import wave
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -153,7 +149,7 @@ INDUSTRIAL_CAMERA_LANGUAGE = {
 PRODUCT_DISPLAY_TEMPLATES = {
     "opening_environment": "industrial need setup, no specific product claim unless product reference is provided",
     "product_hero": "quartz fiber tape roll hero display, stable product silhouette, clean edge and woven surface visible",
-    "product_detail": "woven texture macro, edge thickness detail, flexible tape form, no itchy handling claim beyond confirmed narration",
+    "product_detail": "woven texture macro, edge thickness detail, flexible tape form, no itchy handling claim beyond confirmed knowledge",
     "benefit_visual": "controlled industrial benefit visual, no exaggerated flame result, no fake certification",
     "application_context": "wrapping or sealing application explanation based only on confirmed use context, AI scenes labeled as visual explanation",
     "closing_cta": "product freeze-frame style closing, light B2B CTA composition, no generated subtitles or platform UI",
@@ -648,10 +644,9 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认分镜。")
 
     timestamp = _timestamp(now)
-    video_only = state.get("workflow_mode") == "video_only"
     state["status"] = "storyboard_confirmed"
-    state["phase"] = "ready_for_dreamina_jobs" if video_only else "ready_for_narration_script"
-    state["current_pending_confirmation"] = "规划即梦任务" if video_only else "生成旁白文案"
+    state["phase"] = "ready_for_dreamina_jobs"
+    state["current_pending_confirmation"] = "规划即梦任务"
     state["updated_at"] = timestamp
     state["confirmations"]["storyboard"] = True
     _append_status_history(state, "storyboard_confirmed", timestamp)
@@ -659,9 +654,7 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
     _append_change(
         run_dir,
         timestamp,
-        "确认视频分镜，进入即梦任务规划阶段（视频-only 模式，跳过旁白和字幕）。"
-        if video_only
-        else "确认视频分镜，进入旁白文案阶段。",
+        "确认视频分镜，进入即梦任务规划阶段（仅生成即梦视频镜头）。",
     )
 
     return VideoCreationStepResult(
@@ -675,86 +668,10 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
 
 def generate_narration_script(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") not in {"ready_for_narration_script", "awaiting_narration_script_confirmation"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成旁白文案。")
-    if not state.get("confirmations", {}).get("storyboard"):
-        raise ValueError("分镜尚未确认，不能生成旁白文案。")
-
-    script_md_path = run_dir / "narration" / "script.md"
-    script_json_path = run_dir / "narration" / "script.json"
-    if (script_md_path.exists() or script_json_path.exists()) and not overwrite:
-        raise FileExistsError(f"旁白文案已存在，未覆盖：{script_md_path}")
-
-    plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
-    storyboard = _load_json_file(Path(state["files"]["storyboard_json"]), "storyboard.json")
-    narration = _build_narration_script_payload(state, plan, storyboard, now or datetime.now())
-    if narration["language_version"] == "en" and _narration_contains_cjk(narration):
-        raise ValueError("英文旁白文案中检测到中文字符，必须先修正创意方向标签或旁白模板。")
-    script_md_path.write_text(_render_narration_script(narration), encoding="utf-8")
-    script_json_path.write_text(json.dumps(narration, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    state["status"] = "narration_script_ready"
-    state["phase"] = "awaiting_narration_script_confirmation"
-    state["current_pending_confirmation"] = "确认旁白文案"
-    state["updated_at"] = timestamp
-    state["confirmations"]["narration_script"] = False
-    _clear_downstream_confirmations(state, after="narration_script")
-    state.setdefault("files", {})["narration_script_md"] = str(script_md_path)
-    state.setdefault("files", {})["narration_script_json"] = str(script_json_path)
-    _append_status_history(state, "narration_script_ready", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "生成完整旁白文案，等待确认旁白文案。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(script_md_path), str(script_json_path)),
-    )
 
 
 def confirm_narration_script(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    script_md_path = Path(state.get("files", {}).get("narration_script_md", run_dir / "narration" / "script.md"))
-    script_json_path = Path(state.get("files", {}).get("narration_script_json", run_dir / "narration" / "script.json"))
-    if not script_md_path.exists() or not script_json_path.exists():
-        raise ValueError("找不到可确认的旁白文案，请先生成 narration/script.md。")
-    if state.get("phase") != "awaiting_narration_script_confirmation":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认旁白文案。")
-
-    timestamp = _timestamp(now)
-    state["status"] = "narration_script_confirmed"
-    state["phase"] = "ready_for_voice_samples"
-    state["current_pending_confirmation"] = "生成声音样本"
-    state["updated_at"] = timestamp
-    state["confirmations"]["narration_script"] = True
-    state["narration_script_lock"] = {
-        "locked_at": timestamp,
-        "md_path": str(script_md_path),
-        "json_path": str(script_json_path),
-        "md_sha256": _sha256_file(script_md_path),
-        "json_sha256": _sha256_file(script_json_path),
-        "policy": "已确认旁白文案后不得由 Agent 自动改写；如需修改，必须回到分镜/旁白文案阶段重新生成并重新确认。",
-    }
-    _append_status_history(state, "narration_script_confirmed", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "确认旁白文案，进入声音样本阶段。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(script_md_path), str(script_json_path)),
-    )
 
 
 def generate_voice_samples(
@@ -764,99 +681,10 @@ def generate_voice_samples(
     runner: Runner = subprocess.run,
 ) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") not in {"ready_for_voice_samples", "awaiting_voice_selection"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成声音样本。")
-    if not state.get("confirmations", {}).get("narration_script"):
-        raise ValueError("旁白文案尚未确认，不能生成声音样本。")
-    _assert_narration_script_locked(state)
-
-    script = _load_json_file(Path(state["files"]["narration_script_json"]), "narration/script.json")
-    samples_dir = run_dir / "narration" / "voice_samples"
-    samples_dir.mkdir(parents=True, exist_ok=True)
-    samples_json_path = run_dir / "narration" / "voice_samples.json"
-    if samples_json_path.exists() and not overwrite:
-        raise FileExistsError(f"声音样本已存在，未覆盖：{samples_json_path}")
-    excerpt = _voice_sample_excerpt(script)
-    samples = []
-    for index, profile in enumerate(_voice_profiles(state["language_version"]), start=1):
-        sample_path = samples_dir / f"sample_{index}.wav"
-        if sample_path.exists() and not overwrite:
-            raise FileExistsError(f"声音样本已存在，未覆盖：{sample_path}")
-        provider = _generate_tts_audio(
-            state,
-            text=excerpt,
-            output_path=sample_path,
-            voice_profile=profile,
-            mode="sample",
-            runner=runner,
-            fallback_duration_seconds=2.0 + index * 0.15,
-        )
-        samples.append(
-            {
-                "sample_id": index,
-                "voice_profile": profile,
-                "excerpt": excerpt,
-                "audio_path": str(sample_path),
-                "provider": provider,
-            }
-        )
-    samples_json_path.write_text(json.dumps({"samples": samples, "excerpt": excerpt}, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    state["status"] = "voice_samples_ready"
-    state["phase"] = "awaiting_voice_selection"
-    state["current_pending_confirmation"] = "声音选 1/2/3"
-    state["updated_at"] = timestamp
-    state["confirmations"]["voice"] = False
-    _clear_downstream_confirmations(state, after="voice")
-    state.setdefault("files", {})["voice_samples_json"] = str(samples_json_path)
-    _append_status_history(state, "voice_samples_ready", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "生成 3 个声音样本，等待选择声音。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=tuple(sample["audio_path"] for sample in samples) + (str(samples_json_path),),
-    )
 
 
 def select_voice(run_dir: Path, sample_id: int, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") != "awaiting_voice_selection":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能选择声音。")
-    samples_path = Path(state.get("files", {}).get("voice_samples_json", run_dir / "narration" / "voice_samples.json"))
-    samples = _load_json_file(samples_path, "voice_samples.json")
-    selected = next((item for item in samples.get("samples", []) if int(item["sample_id"]) == int(sample_id)), None)
-    if not selected:
-        raise ValueError("声音样本只能选择 1、2 或 3")
-
-    timestamp = _timestamp(now)
-    state["status"] = "voice_selected"
-    state["phase"] = "ready_for_full_narration"
-    state["current_pending_confirmation"] = "生成完整旁白"
-    state["updated_at"] = timestamp
-    state["confirmations"]["voice"] = True
-    state["selected_voice"] = selected
-    _append_status_history(state, "voice_selected", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"选择声音样本 {sample_id}，进入完整旁白生成阶段。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(selected["audio_path"], str(samples_path)),
-    )
 
 
 def generate_full_narration(
@@ -866,90 +694,10 @@ def generate_full_narration(
     runner: Runner = subprocess.run,
 ) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") not in {"ready_for_full_narration", "awaiting_narration_confirmation"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成完整旁白。")
-    if not state.get("confirmations", {}).get("voice"):
-        raise ValueError("尚未选择声音，不能生成完整旁白。")
-    _assert_narration_script_locked(state)
-
-    script = _load_json_file(Path(state["files"]["narration_script_json"]), "narration/script.json")
-    narration_path = run_dir / "narration" / "narration.wav"
-    timing_path = run_dir / "narration" / "timing.json"
-    preview_path = run_dir / "narration" / "narration_preview.md"
-    if (narration_path.exists() or timing_path.exists()) and not overwrite:
-        raise FileExistsError(f"完整旁白已存在，未覆盖：{narration_path}")
-    duration = int(state["duration_seconds"])
-    provider = _generate_tts_audio(
-        state,
-        text=script.get("full_text", ""),
-        output_path=narration_path,
-        voice_profile=state.get("selected_voice", {}).get("voice_profile", {}),
-        mode="full",
-        runner=runner,
-        fallback_duration_seconds=float(duration),
-    )
-    timing = _build_sentence_timing(script, duration, state.get("selected_voice", {}), now or datetime.now())
-    timing["tts_provider"] = provider
-    timing_path.write_text(json.dumps(timing, ensure_ascii=False, indent=2), encoding="utf-8")
-    preview_path.write_text(_render_narration_preview(script, timing, state.get("selected_voice", {})), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    state["status"] = "narration_ready"
-    state["phase"] = "awaiting_narration_confirmation"
-    state["current_pending_confirmation"] = "确认旁白"
-    state["updated_at"] = timestamp
-    state["confirmations"]["narration"] = False
-    _clear_downstream_confirmations(state, after="narration")
-    files = state.setdefault("files", {})
-    files["narration_audio"] = str(narration_path)
-    files["narration_timing"] = str(timing_path)
-    files["narration_preview"] = str(preview_path)
-    _append_status_history(state, "narration_ready", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "生成完整旁白音频和句级时间轴，等待确认旁白。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(narration_path), str(timing_path), str(preview_path)),
-    )
 
 
 def confirm_narration(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    files = state.get("files", {})
-    narration_path = Path(files.get("narration_audio", run_dir / "narration" / "narration.wav"))
-    timing_path = Path(files.get("narration_timing", run_dir / "narration" / "timing.json"))
-    if not narration_path.exists() or not timing_path.exists():
-        raise ValueError("找不到可确认的完整旁白，请先生成 narration.wav 和 timing.json。")
-    if state.get("phase") != "awaiting_narration_confirmation":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认旁白。")
-
-    timestamp = _timestamp(now)
-    state["status"] = "narration_confirmed"
-    state["phase"] = "ready_for_dreamina_jobs"
-    state["current_pending_confirmation"] = "规划即梦任务"
-    state["updated_at"] = timestamp
-    state["confirmations"]["narration"] = True
-    _append_status_history(state, "narration_confirmed", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "确认旁白，进入即梦任务规划阶段。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(narration_path), str(timing_path)),
-    )
 
 
 def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime | None = None) -> VideoCreationStepResult:
@@ -958,10 +706,6 @@ def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime
     state = _load_state(state_path)
     if state.get("phase") not in {"ready_for_dreamina_jobs", "awaiting_dreamina_generation_confirmation"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能规划即梦任务。")
-    video_only = state.get("workflow_mode") == "video_only"
-    if not video_only and not state.get("confirmations", {}).get("narration"):
-        raise ValueError("旁白尚未确认，不能规划即梦任务。")
-
     jobs_md_path = run_dir / "dreamina_generation" / "dreamina_jobs.md"
     jobs_json_path = run_dir / "dreamina_generation" / "dreamina_jobs.json"
     if (jobs_md_path.exists() or jobs_json_path.exists()) and not overwrite:
@@ -971,8 +715,6 @@ def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime
     storyboard = _load_json_file(Path(state["files"]["storyboard_json"]), "storyboard.json")
     prompts = _load_json_file(Path(state["files"]["prompts_json"]), "prompts.json")
     timing = {}
-    if not video_only:
-        timing = _load_json_file(Path(state["files"]["narration_timing"]), "narration/timing.json")
     jobs = _build_dreamina_jobs_payload(state, plan, storyboard, prompts, timing, now or datetime.now())
     jobs_md_path.write_text(_render_dreamina_jobs(jobs), encoding="utf-8")
     jobs_json_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1159,10 +901,9 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
     shot_preview_md_path.write_text(_render_shot_preview_manifest(shot_preview), encoding="utf-8")
 
     timestamp = _timestamp(now)
-    video_only = state.get("workflow_mode") == "video_only"
     state["status"] = "shots_confirmed"
-    state["phase"] = "completed" if video_only else "ready_for_final_assembly"
-    state["current_pending_confirmation"] = None if video_only else "生成成片预览"
+    state["phase"] = "completed"
+    state["current_pending_confirmation"] = None
     state["updated_at"] = timestamp
     state["confirmations"]["shots"] = True
     state.setdefault("files", {})["shot_preview_manifest_json"] = str(shot_preview_json_path)
@@ -1173,9 +914,7 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
     _append_change(
         run_dir,
         timestamp,
-        "确认全部镜头，视频-only 模式已完成即梦视频生成。"
-        if video_only
-        else "确认全部镜头，进入成片组装阶段。",
+        "确认全部镜头，已完成即梦视频镜头生成。",
     )
 
     return VideoCreationStepResult(
@@ -1451,74 +1190,6 @@ def assemble_final_preview(
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("workflow_mode") == "video_only":
-        raise ValueError("视频-only 模式不生成成片预览、字幕或 BGM。")
-    if state.get("phase") not in {"ready_for_final_assembly", "ready_for_quality_gate"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成成片预览。")
-    if not state.get("confirmations", {}).get("shots"):
-        raise ValueError("镜头尚未确认，不能生成成片预览。")
-
-    timing = _load_json_file(Path(state["files"]["narration_timing"]), "narration/timing.json")
-    results = _load_json_file(Path(state["files"]["dreamina_results_json"]), "dreamina_results.json")
-    subtitles_path = run_dir / "subtitles" / "final_subtitles.srt"
-    bgm_license_path = run_dir / "audio" / "bgm_license.json"
-    bgm_brief_path = run_dir / "audio" / "bgm_brief.md"
-    manifest_json_path = run_dir / "dreamina_generation" / "final_preview_manifest.json"
-    manifest_md_path = run_dir / "dreamina_generation" / "final_preview_manifest.md"
-    preview_path = run_dir / "dreamina_generation" / "final_preview.mp4"
-    concat_path = run_dir / "dreamina_generation" / "shot_concat.txt"
-
-    subtitles = _build_srt_subtitles(timing)
-    subtitles_path.write_text(subtitles, encoding="utf-8")
-    bgm_license = (
-        _load_json_file(bgm_license_path, "bgm_license.json")
-        if bgm_license_path.exists()
-        else _build_bgm_license_payload(state, now or datetime.now())
-    )
-    bgm_license_path.write_text(json.dumps(bgm_license, ensure_ascii=False, indent=2), encoding="utf-8")
-    bgm_brief_path.write_text(_render_bgm_brief(bgm_license), encoding="utf-8")
-    command = ffmpeg_command or _state_adapter_command(state, "ffmpeg_command", "ffmpeg")
-    manifest = _build_final_preview_manifest(
-        state,
-        results,
-        subtitles_path,
-        bgm_license_path,
-        preview_path,
-        concat_path,
-        execute,
-        command,
-        runner,
-        now or datetime.now(),
-    )
-    manifest_json_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    manifest_md_path.write_text(_render_final_preview_manifest(manifest), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    state["status"] = "final_preview_ready" if manifest["status"] in {"dry_run_ready", "assembled"} else "final_preview_blocked"
-    state["phase"] = "ready_for_quality_gate"
-    state["current_pending_confirmation"] = "运行质量门禁"
-    state["updated_at"] = timestamp
-    files = state.setdefault("files", {})
-    files["final_subtitles_srt"] = str(subtitles_path)
-    files["bgm_license_json"] = str(bgm_license_path)
-    files["bgm_brief_md"] = str(bgm_brief_path)
-    files["final_preview_manifest_json"] = str(manifest_json_path)
-    files["final_preview_manifest_md"] = str(manifest_md_path)
-    files["final_preview_mp4"] = str(preview_path)
-    _append_status_history(state, state["status"], timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"生成成片预览组装清单，状态：{state['status']}。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(manifest_md_path), str(manifest_json_path), str(subtitles_path), str(bgm_license_path)),
-    )
 
 
 def select_bgm_track(
@@ -1531,89 +1202,10 @@ def select_bgm_track(
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") not in {"ready_for_quality_gate", "awaiting_manual_quality_check"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能记录 BGM 授权。")
-    if not title.strip() or not source.strip() or not license_name.strip():
-        raise ValueError("BGM 必须填写 title、source 和 license。")
-    audio_path = local_path.expanduser().resolve()
-    if not audio_path.exists():
-        raise ValueError(f"找不到 BGM 本地文件：{audio_path}")
-
-    bgm_license_path = Path(state.get("files", {}).get("bgm_license_json", run_dir / "audio" / "bgm_license.json"))
-    payload = _load_json_file(bgm_license_path, "bgm_license.json") if bgm_license_path.exists() else _build_bgm_license_payload(state, now or datetime.now())
-    payload["status"] = "selected"
-    payload["selected_at"] = (now or datetime.now()).isoformat()
-    payload["selected_track"] = {
-        "title": title.strip(),
-        "source": source.strip(),
-        "license": license_name.strip(),
-        "license_url": license_url.strip(),
-        "local_path": str(audio_path),
-    }
-    bgm_license_path.parent.mkdir(parents=True, exist_ok=True)
-    bgm_license_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    bgm_brief_path = run_dir / "audio" / "bgm_brief.md"
-    bgm_brief_path.write_text(_render_bgm_brief(payload), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    state["updated_at"] = timestamp
-    state.setdefault("files", {})["bgm_license_json"] = str(bgm_license_path)
-    state.setdefault("files", {})["bgm_brief_md"] = str(bgm_brief_path)
-    state["selected_bgm"] = payload["selected_track"]
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"记录 BGM 授权：{title.strip()}。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(bgm_license_path), str(bgm_brief_path)),
-    )
 
 
 def run_quality_gate(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("workflow_mode") == "video_only":
-        raise ValueError("视频-only 模式不运行成片质量门禁。")
-    if state.get("phase") not in {"ready_for_quality_gate", "awaiting_manual_quality_check"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能运行质量门禁。")
-    report = _build_quality_report(run_dir, state, now or datetime.now())
-    report_json_path = run_dir / "quality_report.json"
-    report_md_path = run_dir / "quality_report.md"
-    report_json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    report_md_path.write_text(_render_quality_report(report), encoding="utf-8")
-
-    timestamp = _timestamp(now)
-    blockers = report["blocking_defects"]
-    state["status"] = "quality_gate_failed" if blockers else "quality_gate_passed"
-    state["phase"] = "ready_for_quality_gate" if blockers else "awaiting_manual_quality_check"
-    state["current_pending_confirmation"] = "修复质量门禁问题" if blockers else "记录人工音视频检查"
-    state["updated_at"] = timestamp
-    state.setdefault("files", {})["quality_report_json"] = str(report_json_path)
-    state.setdefault("files", {})["quality_report_md"] = str(report_md_path)
-    state["quality_gate"] = {
-        "status": report["status"],
-        "blocking_defect_count": len(blockers),
-        "checked_at": timestamp,
-    }
-    _append_status_history(state, state["status"], timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"运行质量门禁，阻塞问题 {len(blockers)} 个。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(report_md_path), str(report_json_path)),
-    )
 
 
 def record_manual_quality_check(
@@ -1624,79 +1216,10 @@ def record_manual_quality_check(
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") != "awaiting_manual_quality_check":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能记录人工音视频检查。")
-    if not audio_ok or not visual_ok:
-        raise ValueError("人工音视频检查未通过，不能进入确认成片。")
-
-    timestamp = _timestamp(now)
-    check = {
-        "checked_at": timestamp,
-        "audio_ok": bool(audio_ok),
-        "visual_ok": bool(visual_ok),
-        "notes": notes,
-        "method": "人工打开视频剪辑软件或播放器检查音频、画面、字幕同步和整体节奏。",
-    }
-    check_path = run_dir / "manual_quality_check.json"
-    check_path.write_text(json.dumps(check, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    state["status"] = "manual_quality_check_confirmed"
-    state["phase"] = "awaiting_final_video_confirmation"
-    state["current_pending_confirmation"] = "确认成片"
-    state["updated_at"] = timestamp
-    state["manual_quality_check"] = check
-    state.setdefault("files", {})["manual_quality_check_json"] = str(check_path)
-    _append_status_history(state, "manual_quality_check_confirmed", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "记录人工音视频检查通过，等待确认成片。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(check_path),),
-    )
 
 
 def confirm_final_video(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("workflow_mode") == "video_only":
-        raise ValueError("视频-only 模式没有最终成片预览可确认。")
-    if state.get("phase") != "awaiting_final_video_confirmation":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认成片。")
-    if not state.get("manual_quality_check", {}).get("audio_ok") or not state.get("manual_quality_check", {}).get("visual_ok"):
-        raise ValueError("缺少已通过的人工音视频检查，不能确认成片。")
-    preview_path = Path(state.get("files", {}).get("final_preview_mp4", run_dir / "dreamina_generation" / "final_preview.mp4"))
-    if not preview_path.exists():
-        raise ValueError(f"找不到成片预览文件，不能确认成片：{preview_path}")
-
-    final_path = run_dir / state["outputs"]["final_filename"]
-    shutil.copyfile(preview_path, final_path)
-    timestamp = _timestamp(now)
-    state["status"] = "final_video_confirmed"
-    state["phase"] = "completed"
-    state["current_pending_confirmation"] = None
-    state["updated_at"] = timestamp
-    state["confirmations"]["final_video"] = True
-    state.setdefault("files", {})["final_video"] = str(final_path)
-    _append_status_history(state, "final_video_confirmed", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"确认成片并输出最终视频：{final_path.name}。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(final_path),),
-    )
 
 
 def inspect_video_creation_adapters(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
@@ -1806,32 +1329,6 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
 
 def request_bgm_replacement(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     raise ValueError(_removed_audio_subtitle_feature_message())
-    run_dir = run_dir.expanduser().resolve()
-    state_path = run_dir / "workflow_state.json"
-    state = _load_state(state_path)
-    if state.get("phase") not in {"ready_for_quality_gate", "awaiting_manual_quality_check", "awaiting_final_video_confirmation"}:
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能更换背景音乐。")
-
-    timestamp = _timestamp(now)
-    state["status"] = "bgm_replacement_requested"
-    state["phase"] = "ready_for_quality_gate"
-    state["current_pending_confirmation"] = "选择新的可商用 BGM 并重新生成成片预览"
-    state["updated_at"] = timestamp
-    state["confirmations"]["final_video"] = False
-    state.pop("manual_quality_check", None)
-    for key in ["manual_quality_check_json", "quality_report_json", "quality_report_md"]:
-        state.setdefault("files", {}).pop(key, None)
-    _append_status_history(state, "bgm_replacement_requested", timestamp)
-    _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "用户要求更换背景音乐；保留已确认策划、分镜、镜头和旁白，等待选择新的 BGM。")
-
-    return VideoCreationStepResult(
-        run_dir=str(run_dir),
-        workflow_state_path=str(state_path),
-        status=state["status"],
-        phase=state["phase"],
-        output_paths=(str(state_path),),
-    )
 
 
 def revise_video_plan(run_dir: Path, change_request: str, now: datetime | None = None) -> VideoCreationStepResult:
@@ -2143,12 +1640,8 @@ def _initial_workflow_state(
             "creative_direction": creative_confirmed,
             "video_plan": False,
             "storyboard": False,
-            "narration_script": False,
-            "voice": False,
-            "narration": False,
             "dreamina_generation": False,
             "shots": False,
-            "final_video": False,
         },
         "context": {
             "context_id": context["context_id"],
@@ -2388,25 +1881,10 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
                 "MapleShaw/seedance2.0-prompt-skill",
             ],
         },
-        "music_brief": _music_brief(primary, language),
-        "subtitle_policy": {
-            "burned_in": True,
-            "language_matches_narration": True,
-            "max_lines_per_screen": 2,
-            "sentence_level_timing": True,
-            "no_word_by_word_karaoke": True,
-            "safe_area": "TikTok 与 YouTube Shorts 顶部/底部 UI 安全区交集",
-        },
         "overlay_policy": {
             "allowed": ["标题", "正式确认参数", "短卖点标签", "CTA"],
             "source": "正式知识或项目配置",
             "inquiry_conversion_requires_cta": primary["id"] == "inquiry_conversion",
-        },
-        "audio_policy": {
-            "narration_required": True,
-            "bgm_required": True,
-            "dreamina_does_not_generate_audio": True,
-            "music_must_be_commercially_usable": True,
         },
         "generation_policy": {
             "dreamina_model": DEFAULT_DREAMINA_MODEL,
@@ -2515,19 +1993,14 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             "",
             "- Prompt 使用结构化英文写法：时间段、主体、参考素材、动作/运镜、环境、材质细节、禁止项。",
             "- 产品可见镜头必须使用真实产品图片参考；纯 text2video 只能用于环境或过渡镜头。",
+            "- 不同镜头必须优先使用不同图片参考；如果素材不足或重复引用，不能进入真实即梦提交。",
             "- Prompt 不生成字幕、不生成平台 UI、不引入知识卡之外的认证、参数或测试结论。",
             "",
-            "## 音乐 brief",
+            "## 生成范围",
             "",
-            f"- 情绪：{plan['music_brief']['mood']}",
-            f"- 节奏：{plan['music_brief']['pace']}",
-            f"- 强度：{plan['music_brief']['intensity']}",
-            f"- 授权要求：{plan['music_brief']['license_requirement']}",
-            "",
-            "## 字幕与叠加层",
-            "",
-            "- 字幕：烧录字幕，与旁白同语言，每屏 1-2 行，按句级时间轴同步，不做逐字卡拉 OK。",
-            "- 叠加层：只允许标题、正式确认参数、短卖点标签和 CTA，必须来自正式知识或配置。",
+            "- 本 Agent 只生成即梦视频镜头计划、提交交接文件和视频镜头合成所需文件。",
+            "- 不生成配音、不生成字幕、不生成背景音乐；这些由人工视频剪辑流程另行处理。",
+            "- 不生成平台标题、发布文案、描述或 hashtags。",
             "",
             "## 禁止事项",
             "",
@@ -2553,22 +2026,24 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
     shot_duration = 5
     shot_count = max(1, duration // shot_duration)
     content_assets = plan.get("content_assets", [])
-    product_asset = content_assets[0] if content_assets else None
     primary = plan["creative_direction"]["primary"]
     external_name = _display_product_name(plan)
     shots = []
+    used_material_ids: set[str] = set()
     for index in range(1, shot_count + 1):
         shot_id = f"{index:02d}"
         role = _shot_role(index, shot_count)
-        product_visible = role not in {"opening_environment", "closing_cta"} or bool(product_asset)
-        material_mode = _shot_material_mode(role, product_asset, product_visible)
-        selected_material = product_asset if material_mode in {"image2video", "reuse_image"} else None
+        selected_material = _select_material_for_shot(content_assets, role, used_material_ids)
+        if selected_material and selected_material.get("id"):
+            used_material_ids.add(str(selected_material["id"]))
+        product_visible = role not in {"opening_environment", "closing_cta"} or bool(selected_material)
+        material_mode = _shot_material_mode(role, selected_material, product_visible)
         ai_generated = material_mode in {"image2video", "text2video", "ai_simulated_scene"}
         shot = {
             "shot_id": shot_id,
             "duration_seconds": shot_duration,
             "role": role,
-            "visual_description": _shot_visual_description(role, external_name, primary, bool(product_asset)),
+            "visual_description": _shot_visual_description(role, external_name, primary, bool(selected_material)),
             "message": _shot_message(role, primary, external_name),
             "product_visible": product_visible,
             "material_mode": material_mode,
@@ -2580,8 +2055,7 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
             "frame_control_risk": _frame_control_risk(role, product_visible, selected_material),
             "human_face_risk": _material_human_face_risk(selected_material),
             "human_face_policy": "allow_partial_hands_or_back_view_only",
-            "risk_notes": _shot_risk_notes(material_mode, product_visible, bool(product_asset)),
-            "narration_intent": _shot_narration_intent(role, external_name),
+            "risk_notes": _shot_risk_notes(material_mode, product_visible, bool(selected_material)),
             "creative_quality_checks": _shot_creative_quality_checks(role, primary, plan["creative_quality"]),
         }
         shot["shot_design_validation"] = _validate_shot_design(shot)
@@ -2604,7 +2078,7 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
             "text2video_only_for_environment_or_transition": True,
             "ai_scenes_not_real_cases_or_tests": True,
         },
-        "next_step": "确认分镜后生成完整旁白文案。",
+        "next_step": "确认分镜后规划即梦任务。",
     }
 
 
@@ -2695,10 +2169,10 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
             "## 边界",
             "",
             "- Prompt 是给即梦使用，不是字幕。",
-            "- 展示具体产品的 AI 镜头必须使用真实产品图/视频作参考。",
+            "- 展示具体产品的 AI 镜头必须使用真实产品图片作参考。",
             "- AI 模拟场景不能表述为真实案例、真实测试或客户现场。",
             "",
-            "请确认分镜后继续生成旁白文案。",
+            "请确认分镜后继续规划即梦任务。",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -2771,9 +2245,70 @@ def _shot_role(index: int, total: int) -> str:
     return cycle[(index - 2) % len(cycle)]
 
 
-def _shot_material_mode(role: str, product_asset: dict[str, Any] | None, product_visible: bool) -> str:
-    if product_asset:
-        media_types = set(product_asset.get("media_types", []))
+def _select_material_for_shot(
+    content_assets: list[dict[str, Any]],
+    role: str,
+    used_material_ids: set[str],
+) -> dict[str, Any] | None:
+    candidates = []
+    for position, asset in enumerate(content_assets):
+        material_id = str(asset.get("id") or "")
+        if not material_id or material_id in used_material_ids:
+            continue
+        media_types = {str(item).lower() for item in asset.get("media_types", [])}
+        if "image" not in media_types:
+            continue
+        role_score = _material_role_score(asset, role)
+        path_score = 1000 if _material_has_image_reference(asset) else 0
+        candidates.append((-(path_score + role_score), position, asset))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return candidates[0][2]
+
+
+def _material_has_image_reference(asset: dict[str, Any]) -> bool:
+    return bool(_first_compatible_material_file(_extract_material_paths(asset), "image2video"))
+
+
+def _material_role_score(asset: dict[str, Any], role: str) -> int:
+    category = _material_visual_category(asset)
+    scores_by_role = {
+        "opening_environment": {"application": 90, "product": 70, "product_detail": 60, "test_context": 50, "closing": 20, "general": 10},
+        "product_hero": {"product": 100, "product_detail": 80, "application": 50, "test_context": 40, "closing": 20, "general": 10},
+        "product_detail": {"product_detail": 100, "product": 80, "application": 50, "test_context": 40, "closing": 20, "general": 10},
+        "benefit_visual": {"test_context": 100, "application": 85, "product_detail": 70, "product": 50, "closing": 20, "general": 10},
+        "application_context": {"application": 100, "product": 60, "product_detail": 50, "test_context": 40, "closing": 20, "general": 10},
+        "closing_cta": {"closing": 120, "product": 100, "product_detail": 80, "application": 60, "test_context": 40, "general": 10},
+    }
+    return scores_by_role.get(role, {}).get(category, 0)
+
+
+def _material_visual_category(asset: dict[str, Any]) -> str:
+    values = [
+        str(asset.get("id") or ""),
+        str(asset.get("title") or ""),
+        str(asset.get("asset_category") or ""),
+        " ".join(str(item) for item in asset.get("tags", [])),
+        " ".join(str(item) for item in asset.get("files", [])),
+    ]
+    text = " ".join(values).lower()
+    if any(term in text for term in ["收尾", "closing", "cta"]):
+        return "closing"
+    if any(term in text for term in ["织纹", "细节", "边缘", "厚度", "texture", "detail", "macro", "edge"]):
+        return "product_detail"
+    if any(term in text for term in ["应用", "场景", "排气", "排烟", "包覆", "安装", "exhaust", "pipe", "wrap", "application"]):
+        return "application"
+    if any(term in text for term in ["测试", "验证", "检测", "报告", "喷枪", "test", "validation", "report", "flame"]):
+        return "test_context"
+    if any(term in text for term in ["产品", "实拍", "卷装", "product", "hero", "roll"]):
+        return "product"
+    return "general"
+
+
+def _shot_material_mode(role: str, selected_material: dict[str, Any] | None, product_visible: bool) -> str:
+    if selected_material:
+        media_types = {str(item).lower() for item in selected_material.get("media_types", [])}
         if "image" in media_types:
             return "image2video" if product_visible else "reuse_image"
     if product_visible:
@@ -2854,20 +2389,6 @@ def _material_human_face_risk(material: dict[str, Any] | None) -> str:
         return "none"
     value = str(material.get("human_face_risk") or "none").strip().lower()
     return value if value in {"none", "unclear", "clear_face"} else "unclear"
-
-
-def _shot_narration_intent(role: str, product_name: str) -> str:
-    if role == "opening_environment":
-        return "用一句话提出工业隔热或施工痛点。"
-    if role == "product_hero":
-        return f"介绍 {product_name}。"
-    if role == "product_detail":
-        return "说明材料细节和使用友好性，但不新增无证据参数。"
-    if role == "benefit_visual":
-        return "表达已确认核心卖点。"
-    if role == "application_context":
-        return "说明产品可用于已确认应用场景。"
-    return "提示联系或索取规格信息。"
 
 
 def _build_material_reference_map(storyboard: dict[str, Any], capability_profile: dict[str, Any]) -> dict[str, Any]:
@@ -3034,19 +2555,10 @@ def _material_local_paths(material: dict[str, Any]) -> list[str]:
 
 
 def _material_reference_limit_blockers(material_reference_map: dict[str, Any], capability_profile: dict[str, Any]) -> list[str]:
-    counts = material_reference_map.get("counts", {})
-    checks = [
-        ("images", "图片", "max_images"),
-        ("videos", "视频", "max_videos"),
-        ("audios", "音频", "max_audios"),
-        ("total_files", "总文件数", "max_total_files"),
-    ]
     blockers = []
-    for count_key, label, limit_key in checks:
-        count = int(counts.get(count_key, 0))
-        limit = int(capability_profile.get(limit_key, DEFAULT_DREAMINA_CAPABILITY_PROFILE[limit_key]))
-        if count > limit:
-            blockers.append(f"Seedance 多模态输入超限：{label} {count} 个，配置上限 {limit} 个。")
+    # The reference map covers the whole multi-shot video. Each shot is submitted
+    # as a separate Dreamina image2video task, so Seedance's per-task file-count
+    # limits must not be applied to the full 12-shot reference list.
     for reference in material_reference_map.get("references", []):
         if not reference.get("label"):
             blockers.append(f"素材 {reference.get('material_id')} 缺少编号引用。")
@@ -3291,298 +2803,6 @@ def _prompt_motion_for_role(role: str) -> str:
     return f"{industrial_language or ''} Clean closing movement with product and CTA-safe composition, leave room away from TikTok and Shorts UI zones."
 
 
-def _build_narration_script_payload(state: dict[str, Any], plan: dict[str, Any], storyboard: dict[str, Any], now: datetime) -> dict[str, Any]:
-    product_name = _display_product_name(plan)
-    language = state["language_version"]
-    primary_direction_label = _creative_direction_label_for_language(plan["creative_direction"]["primary"], language)
-    sentences = []
-    for shot in storyboard["shots"]:
-        text = _narration_sentence_for_shot(shot, product_name, language, primary_direction_label)
-        sentences.append(
-            {
-                "shot_id": shot["shot_id"],
-                "duration_seconds": shot["duration_seconds"],
-                "text": text,
-                "intent": shot.get("narration_intent", ""),
-            }
-        )
-    return {
-        "schema_version": "narration-script-v1",
-        "generated_at": now.isoformat(),
-        "status": "draft_pending_confirmation",
-        "language_version": language,
-        "voice_requirement": _voice_requirement(language),
-        "sentences": sentences,
-        "full_text": " ".join(item["text"] for item in sentences),
-        "policy": {
-            "same_language_as_video": True,
-            "no_new_product_facts": True,
-            "confirm_before_voice_samples": True,
-            "voice_samples_same_excerpt": True,
-        },
-        "next_step": "确认旁白文案后生成 3 个声音样本。",
-    }
-
-
-def _creative_direction_label_for_language(direction: dict[str, Any], language: str) -> str:
-    if language != "en":
-        return str(direction.get("name") or direction.get("id") or "")
-    return {
-        "product_overview": "product overview",
-        "single_core_benefit": "single core benefit",
-        "multiple_benefit_overview": "multiple benefit overview",
-        "product_detail": "product detail",
-        "application_demonstration": "application demonstration",
-        "customer_pain_point_solution": "customer pain point solution",
-        "installation_demonstration": "installation demonstration",
-        "usage_precautions": "usage precautions",
-        "technical_education": "technical education",
-        "performance_test": "performance test",
-        "faq": "FAQ-style explanation",
-        "material_comparison_selection": "material comparison and selection",
-        "specification_customization": "specification and customization",
-        "procurement_guide": "procurement guide",
-        "real_case_study": "real case study",
-        "inquiry_conversion": "inquiry conversion",
-    }.get(str(direction.get("id") or ""), str(direction.get("name") or direction.get("id") or ""))
-
-
-def _narration_contains_cjk(narration: dict[str, Any]) -> bool:
-    text_parts = [str(narration.get("full_text", ""))]
-    for sentence in narration.get("sentences", []):
-        text_parts.append(str(sentence.get("text", "")))
-    combined = "\n".join(text_parts)
-    return bool(re.search(r"[\u4e00-\u9fff]", combined))
-
-
-def _render_narration_script(script: dict[str, Any]) -> str:
-    lines = [
-        "# 旁白文案",
-        "",
-        f"- 语言版本：{script['language_version']}",
-        f"- 声音要求：{script['voice_requirement']}",
-        "",
-        "## 完整旁白",
-        "",
-        script["full_text"],
-        "",
-        "## 分句脚本",
-        "",
-    ]
-    for item in script["sentences"]:
-        lines.extend(
-            [
-                f"### 镜头 {item['shot_id']}",
-                "",
-                f"- 建议时长：{item['duration_seconds']} 秒",
-                f"- 旁白：{item['text']}",
-                f"- 意图：{item['intent']}",
-                "",
-            ]
-        )
-    lines.extend(
-        [
-            "## 边界",
-            "",
-            "- 旁白语言必须与视频语言版本一致。",
-            "- 旁白不得引入正式知识中没有的新事实、参数、性能结论或认证承诺。",
-            "- 确认旁白文案后，才能生成 3 个同文本声音样本。",
-            "",
-            "请确认旁白文案后继续生成声音样本。",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
-def _narration_sentence_for_shot(shot: dict[str, Any], product_name: str, language: str, primary_direction_label: str) -> str:
-    role = shot["role"]
-    if language == "en":
-        if role == "opening_environment":
-            return "High-temperature insulation work needs materials that are reliable, clean, and easy to handle."
-        if role == "product_hero":
-            return f"{product_name} is designed for industrial heat-insulation wrapping and sealing applications."
-        if role == "product_detail":
-            return "Its woven surface and flexible tape form help installers handle detailed wrapping work more consistently."
-        if role == "benefit_visual":
-            return f"This video focuses on the confirmed product value behind {primary_direction_label}, without overstating test results."
-        if role == "application_context":
-            return "Use it only in confirmed application scenarios, and treat any simulated scene as a visual explanation."
-        return "For specifications, samples, or purchasing details, contact Tuolin with your application requirements."
-    if role == "opening_environment":
-        return "高温隔热和包覆施工，需要可靠、干净、易操作的材料。"
-    if role == "product_hero":
-        return f"{product_name} 面向工业隔热包覆和密封应用。"
-    if role == "product_detail":
-        return "织带表面和柔性形态，有助于施工人员处理细节包覆。"
-    if role == "benefit_visual":
-        return f"本视频围绕{primary_direction_label}表达已确认价值，不夸大测试结果。"
-    if role == "application_context":
-        return "应用画面只基于已确认场景，AI 模拟画面仅用于解释。"
-    return "如需规格、样品或采购信息，请把具体应用需求发给拓霖。"
-
-
-def _voice_requirement(language: str) -> str:
-    if language == "en":
-        return "natural, credible middle-aged Western male voice"
-    return "自然、流畅的中年男声中文，不刻意使用外国口音"
-
-
-def _voice_profiles(language: str) -> list[dict[str, str]]:
-    if language == "en":
-        return [
-            {"voice_id": "en_middle_aged_western_male_1", "description": "Natural, credible middle-aged Western male voice, steady pace."},
-            {"voice_id": "en_middle_aged_western_male_2", "description": "Warmer middle-aged Western male voice, slightly slower and reassuring."},
-            {"voice_id": "en_middle_aged_western_male_3", "description": "Clear industrial narrator, middle-aged Western male, concise delivery."},
-        ]
-    return [
-        {"voice_id": "zh_middle_aged_male_1", "description": "自然、流畅的中年男声中文，语速中等。"},
-        {"voice_id": "zh_middle_aged_male_2", "description": "稳重可信的中年男声中文，语速略慢。"},
-        {"voice_id": "zh_middle_aged_male_3", "description": "清晰干净的工业产品讲解男声中文。"},
-    ]
-
-
-def _voice_sample_excerpt(script: dict[str, Any]) -> str:
-    text = script.get("full_text", "").strip()
-    if not text:
-        return ""
-    sentences = [item["text"] for item in script.get("sentences", [])]
-    if len(sentences) >= 2:
-        return " ".join(sentences[:2])
-    return text[:220]
-
-
-def _generate_tts_audio(
-    state: dict[str, Any],
-    *,
-    text: str,
-    output_path: Path,
-    voice_profile: dict[str, Any],
-    mode: str,
-    runner: Runner,
-    fallback_duration_seconds: float,
-) -> str:
-    provider = str(state.get("adapters", {}).get("tts_provider") or "mock")
-    if provider == "mock":
-        _write_mock_wav(output_path, duration_seconds=fallback_duration_seconds)
-        return "mock_narration_provider"
-    if provider != "external_command":
-        raise ValueError(f"不支持的 TTS provider：{provider}。当前支持 mock 或 external_command。")
-    command_value = str(state.get("adapters", {}).get("tts_command") or "").strip()
-    if not command_value:
-        raise ValueError("tts_provider=external_command 时必须配置 video_creation.tts_command。")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        *_split_command(command_value),
-        "--mode",
-        mode,
-        "--language",
-        str(state.get("language_version") or ""),
-        "--voice-id",
-        str(voice_profile.get("voice_id") or ""),
-        "--voice-description",
-        str(voice_profile.get("description") or ""),
-        "--text",
-        text,
-        "--output",
-        str(output_path),
-    ]
-    completed = runner(command, capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        stderr = (completed.stderr or completed.stdout or "").strip()
-        raise RuntimeError(f"TTS 外部命令失败：{stderr or completed.returncode}")
-    if not output_path.exists():
-        raise RuntimeError(f"TTS 外部命令未生成音频文件：{output_path}")
-    return "external_command"
-
-
-def _split_command(command: str) -> list[str]:
-    return shlex.split(command, posix=(os.name != "nt")) if command else []
-
-
-def _assert_narration_script_locked(state: dict[str, Any]) -> None:
-    lock = state.get("narration_script_lock")
-    if not isinstance(lock, dict):
-        raise ValueError("旁白文案尚未锁定，不能继续生成声音或完整旁白。")
-    md_path = Path(lock.get("md_path", ""))
-    json_path = Path(lock.get("json_path", ""))
-    if not md_path.exists() or not json_path.exists():
-        raise ValueError("已确认的旁白文案文件缺失，不能继续。")
-    if _sha256_file(md_path) != lock.get("md_sha256") or _sha256_file(json_path) != lock.get("json_sha256"):
-        raise ValueError("旁白文案已确认后被修改。请不要让 Agent 自动改写脚本；如需修改，必须重新生成并重新确认旁白文案。")
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _write_mock_wav(path: Path, duration_seconds: float = 1.0, sample_rate: int = 8000) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    frame_count = max(1, int(duration_seconds * sample_rate))
-    with wave.open(str(path), "wb") as handle:
-        handle.setnchannels(1)
-        handle.setsampwidth(2)
-        handle.setframerate(sample_rate)
-        handle.writeframes(b"\x00\x00" * frame_count)
-
-
-def _build_sentence_timing(script: dict[str, Any], total_duration: int, selected_voice: dict[str, Any], now: datetime) -> dict[str, Any]:
-    sentences = script.get("sentences", [])
-    total_script_duration = sum(float(item.get("duration_seconds", 0)) for item in sentences) or float(total_duration)
-    cursor = 0.0
-    timed = []
-    for index, item in enumerate(sentences, start=1):
-        ratio = float(item.get("duration_seconds", 0)) / total_script_duration if total_script_duration else 0
-        duration = round(total_duration * ratio, 3)
-        if index == len(sentences):
-            end = float(total_duration)
-        else:
-            end = round(cursor + duration, 3)
-        timed.append(
-            {
-                "index": index,
-                "shot_id": item["shot_id"],
-                "start_seconds": round(cursor, 3),
-                "end_seconds": round(end, 3),
-                "text": item["text"],
-            }
-        )
-        cursor = end
-    return {
-        "schema_version": "narration-timing-v1",
-        "generated_at": now.isoformat(),
-        "language_version": script["language_version"],
-        "total_duration_seconds": total_duration,
-        "voice": selected_voice,
-        "sentence_timing": timed,
-    }
-
-
-def _render_narration_preview(script: dict[str, Any], timing: dict[str, Any], selected_voice: dict[str, Any]) -> str:
-    lines = [
-        "# 旁白预览",
-        "",
-        f"- 语言版本：{script['language_version']}",
-        f"- 声音：{selected_voice.get('voice_profile', {}).get('description', '未选择')}",
-        f"- 总时长：{timing['total_duration_seconds']} 秒",
-        "",
-        "## 句级时间轴",
-        "",
-    ]
-    for item in timing["sentence_timing"]:
-        lines.append(f"- {item['start_seconds']:.3f}s–{item['end_seconds']:.3f}s｜镜头 {item['shot_id']}｜{item['text']}")
-    lines.extend(
-        [
-            "",
-            "请检查旁白文案、声音、语速、发音和节奏。确认后回复：确认旁白。",
-        ]
-    )
-    return "\n".join(lines) + "\n"
-
-
 def _build_dreamina_jobs_payload(
     state: dict[str, Any],
     plan: dict[str, Any],
@@ -3592,15 +2812,12 @@ def _build_dreamina_jobs_payload(
     now: datetime,
 ) -> dict[str, Any]:
     prompt_by_shot = {item["shot_id"]: item for item in prompts.get("prompts", [])}
-    timing_by_shot = {item["shot_id"]: item for item in timing.get("sentence_timing", [])}
     capability_profile = _state_dreamina_capability_profile(state)
     material_reference_map = prompts.get("material_reference_map") or _build_material_reference_map(storyboard, capability_profile)
     material_limit_blockers = _material_reference_limit_blockers(material_reference_map, capability_profile)
-    video_only = state.get("workflow_mode") == "video_only"
     jobs = []
     for shot in storyboard.get("shots", []):
         prompt = prompt_by_shot.get(shot["shot_id"], {})
-        sentence_timing = timing_by_shot.get(shot["shot_id"], {})
         job_type = _dreamina_job_type_for_shot(shot)
         blocked_reason = _dreamina_blocked_reason(shot, job_type)
         validation = _validate_dreamina_job(shot, prompt, job_type, blocked_reason, capability_profile, material_limit_blockers)
@@ -3635,9 +2852,8 @@ def _build_dreamina_jobs_payload(
                 "blocked_reason": blocked_reason,
                 "validation": validation,
             }
-        if not video_only:
-            job["narration_timing"] = sentence_timing
         jobs.append(job)
+    _apply_dreamina_material_diversity_gate(jobs)
     estimated_total = sum(int(job["estimated_credits"]) for job in jobs)
     return {
         "schema_version": "dreamina-jobs-v1",
@@ -3656,7 +2872,6 @@ def _build_dreamina_jobs_payload(
         "source_files": {
             "storyboard_json": state["files"]["storyboard_json"],
             "prompts_json": state["files"]["prompts_json"],
-            **({} if video_only else {"narration_timing": state["files"]["narration_timing"]}),
         },
         "material_reference_map": material_reference_map,
         "estimated_total_credits": estimated_total,
@@ -3668,7 +2883,7 @@ def _build_dreamina_jobs_payload(
             "text2video_not_allowed_for_visible_product": True,
             "blocked_jobs_prevent_confirmation": True,
             "job_validation_required": True,
-            "video_only_mode": video_only,
+            "video_only_mode": True,
         },
     }
 
@@ -4135,7 +3350,7 @@ def _query_dreamina_results_payload(
         "run_dir": submission["run_dir"],
         "results": results,
         "policy": {
-            "confirm_shots_before_final_assembly": True,
+            "confirm_shots_before_completion": True,
             "retry_failed_or_unsatisfactory_shots_only": True,
         },
     }
@@ -4176,23 +3391,16 @@ def _render_dreamina_results(results: dict[str, Any]) -> str:
 
 
 def _build_shot_preview_manifest(run_dir: Path, state: dict[str, Any], results: dict[str, Any], now: datetime) -> dict[str, Any]:
-    video_only = state.get("workflow_mode") == "video_only"
-    timing_path = Path(state.get("files", {}).get("narration_timing", run_dir / "narration" / "timing.json"))
     return {
         "schema_version": "shot-preview-manifest-v1",
         "generated_at": now.isoformat(),
         "status": "dry_run_ready",
         "run_dir": str(run_dir),
         "shot_outputs": [item.get("output_path", "") for item in results.get("results", [])],
-        "narration_audio": state.get("files", {}).get("narration_audio", ""),
-        "temporary_subtitles_source": str(timing_path) if not video_only else "",
         "preview_path": str(run_dir / "dreamina_generation" / "shot_preview.mp4"),
-        "contains_confirmed_narration": not video_only,
-        "contains_temporary_subtitles": not video_only,
-        "contains_final_bgm": False,
         "policy": {
             "used_for_shot_review_only": True,
-            "final_bgm_not_included": True,
+            "video_only": True,
             "confirmed_shots_not_resubmitted": True,
         },
     }
@@ -4204,12 +3412,9 @@ def _render_shot_preview_manifest(manifest: dict[str, Any]) -> str:
         "",
         f"- 状态：{manifest['status']}",
         f"- 镜头数量：{len(manifest['shot_outputs'])}",
-        f"- 旁白：{manifest['narration_audio'] or '无'}",
-        f"- 临时字幕来源：{manifest['temporary_subtitles_source'] or '无'}",
         f"- 预览输出：{manifest['preview_path']}",
-        f"- 包含最终 BGM：{'是' if manifest['contains_final_bgm'] else '否'}",
         "",
-        "该预览只用于确认镜头；视频-only 模式不会继续生成旁白、字幕或 BGM。",
+        "该预览只用于确认即梦视频镜头；配音、字幕、BGM 不属于本 Agent 输出范围。",
         "",
     ]
     return "\n".join(lines)
@@ -4394,455 +3599,6 @@ def _normalize_shot_id(shot_id: str) -> str:
     raise ValueError("镜头编号必须是 01、02、03 这类格式，或数字 1、2、3。")
 
 
-def _build_srt_subtitles(timing: dict[str, Any]) -> str:
-    blocks = []
-    for index, item in enumerate(timing.get("sentence_timing", []), start=1):
-        text = _subtitle_text(str(item.get("text", "")))
-        blocks.append(
-            "\n".join(
-                [
-                    str(index),
-                    f"{_srt_timestamp(float(item['start_seconds']))} --> {_srt_timestamp(float(item['end_seconds']))}",
-                    text,
-                ]
-            )
-        )
-    return "\n\n".join(blocks) + "\n"
-
-
-def _subtitle_text(text: str) -> str:
-    cleaned = " ".join(text.strip().split())
-    if not cleaned:
-        return ""
-    if _contains_cjk(cleaned):
-        if len(cleaned) <= 18:
-            return cleaned
-        split_at = min(len(cleaned) - 1, max(1, len(cleaned) // 2))
-        return cleaned[:split_at] + "\n" + cleaned[split_at:]
-    words = cleaned.split()
-    if len(words) <= 7:
-        return cleaned
-    split_at = max(1, min(len(words) - 1, len(words) // 2))
-    return " ".join(words[:split_at]) + "\n" + " ".join(words[split_at:])
-
-
-def _srt_timestamp(value: float) -> str:
-    milliseconds = int(round(value * 1000))
-    hours, remainder = divmod(milliseconds, 3_600_000)
-    minutes, remainder = divmod(remainder, 60_000)
-    seconds, milliseconds = divmod(remainder, 1000)
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
-
-
-def _build_bgm_license_payload(state: dict[str, Any], now: datetime) -> dict[str, Any]:
-    return {
-        "schema_version": "bgm-license-v1",
-        "generated_at": now.isoformat(),
-        "status": "metadata_required_before_real_publish",
-        "music_policy": {
-            "commercially_usable_required": True,
-            "do_not_use_tiktok_trending_song": True,
-            "must_not_cover_narration": True,
-        },
-        "selection_brief": {
-            "language_version": state["language_version"],
-            "mood": "modern industrial, clean, trustworthy",
-            "pace": "short-video medium tempo",
-            "vocal": "instrumental preferred; no lyrics competing with narration",
-        },
-        "selected_track": {
-            "title": "",
-            "source": "",
-            "license": "",
-            "license_url": "",
-            "local_path": "",
-        },
-    }
-
-
-def _render_bgm_brief(payload: dict[str, Any]) -> str:
-    brief = payload["selection_brief"]
-    lines = [
-        "# BGM 选择与授权记录",
-        "",
-        f"- 状态：{payload['status']}",
-        f"- 情绪：{brief['mood']}",
-        f"- 节奏：{brief['pace']}",
-        f"- 人声：{brief['vocal']}",
-        "",
-        "## 必填授权元数据",
-        "",
-        "- title",
-        "- source",
-        "- license",
-        "- license_url",
-        "- local_path",
-        "",
-        "## 边界",
-        "",
-        "- 必须可商用。",
-        "- 不使用 TikTok 热门歌曲替代授权音乐。",
-        "- 音乐不得压过旁白。",
-        "",
-    ]
-    return "\n".join(lines)
-
-
-def _build_final_preview_manifest(
-    state: dict[str, Any],
-    results: dict[str, Any],
-    subtitles_path: Path,
-    bgm_license_path: Path,
-    preview_path: Path,
-    concat_path: Path,
-    execute: bool,
-    ffmpeg_command: str,
-    runner: Runner,
-    now: datetime,
-) -> dict[str, Any]:
-    shot_paths = [str(item.get("output_path", "")) for item in results.get("results", [])]
-    local_shot_paths = [Path(path) for path in shot_paths if path and not path.startswith(("http://", "https://"))]
-    missing = [str(path) for path in local_shot_paths if not path.exists()]
-    bgm = _load_json_file(bgm_license_path, "bgm_license.json") if bgm_license_path.exists() else {}
-    selected_bgm = bgm.get("selected_track", {})
-    selected_bgm_path = str(selected_bgm.get("local_path", "")).strip()
-    logo_path = _resolve_logo_path(str(state.get("adapters", {}).get("logo_path", "")), Path(state["run_dir"]))
-    logo_status = "available" if logo_path and logo_path.exists() else "missing_or_not_configured"
-    command: list[str] = []
-    ffmpeg_result: dict[str, Any] | None = None
-    status = "dry_run_ready"
-    if execute:
-        if missing:
-            status = "missing_inputs"
-        else:
-            concat_path.write_text("".join(f"file '{path}'\n" for path in local_shot_paths), encoding="utf-8")
-            command = [
-                ffmpeg_command,
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(concat_path),
-                "-i",
-                state["files"]["narration_audio"],
-            ]
-            if selected_bgm_path:
-                command.extend(["-i", selected_bgm_path])
-            command.extend(
-                [
-                    "-vf",
-                    f"subtitles={subtitles_path}",
-                    "-shortest",
-                    "-c:v",
-                    "libx264",
-                    "-c:a",
-                    "aac",
-                    str(preview_path),
-                ]
-            )
-            completed = runner(command, capture_output=True, text=True, check=False)
-            status = "assembled" if completed.returncode == 0 else "assembly_failed"
-            ffmpeg_result = {
-                "returncode": completed.returncode,
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-                "error": None if completed.returncode == 0 else _completed_error(completed),
-            }
-    return {
-        "schema_version": "final-preview-manifest-v1",
-        "generated_at": now.isoformat(),
-        "status": status,
-        "mode": "execute" if execute else "dry_run",
-        "run_dir": state["run_dir"],
-        "language_version": state["language_version"],
-        "platforms": state["platforms"],
-        "shot_outputs": shot_paths,
-        "missing_inputs": missing,
-        "narration_audio": state["files"]["narration_audio"],
-        "subtitles_srt": str(subtitles_path),
-        "subtitles_burned_in": True,
-        "bgm_license": str(bgm_license_path),
-        "selected_bgm_audio": selected_bgm_path,
-        "bgm_embedded": bool(selected_bgm_path),
-        "logo_path": str(logo_path) if logo_path else "",
-        "logo_status": logo_status,
-        "logo_end_only": True,
-        "preview_path": str(preview_path),
-        "final_output_filename": state["outputs"]["final_filename"],
-        "expected_duration_seconds": int(state["duration_seconds"]),
-        "duration_tolerance_seconds": {
-            "min": _duration_tolerance(int(state["duration_seconds"]))[0],
-            "max": _duration_tolerance(int(state["duration_seconds"]))[1],
-        },
-        "ffmpeg_command": command,
-        "ffmpeg_result": ffmpeg_result,
-        "policy": {
-            "short_sentence_subtitles": True,
-            "subtitle_safe_area_required": True,
-            "manual_audio_visual_check_required": True,
-            "no_master_filename": True,
-        },
-    }
-
-
-def _render_final_preview_manifest(manifest: dict[str, Any]) -> str:
-    lines = [
-        "# 成片预览组装清单",
-        "",
-        f"- 状态：{manifest['status']}",
-        f"- 模式：{manifest['mode']}",
-        f"- 语言版本：{manifest['language_version']}",
-        f"- 平台：{', '.join(manifest['platforms'])}",
-        f"- 预览输出：{manifest['preview_path']}",
-        f"- 最终文件名：{manifest['final_output_filename']}",
-        "",
-        "## 组成",
-        "",
-        f"- 镜头数量：{len(manifest['shot_outputs'])}",
-        f"- 旁白：{manifest['narration_audio']}",
-        f"- 字幕：{manifest['subtitles_srt']}（烧录：{'是' if manifest.get('subtitles_burned_in') else '否'}）",
-        f"- BGM 授权记录：{manifest['bgm_license']}",
-        f"- BGM 音频：{manifest.get('selected_bgm_audio') or '未选择'}（嵌入：{'是' if manifest.get('bgm_embedded') else '否'}）",
-        f"- 结尾 logo：{manifest.get('logo_path') or '未配置'}（{manifest.get('logo_status')}）",
-        f"- 预期时长：{manifest.get('expected_duration_seconds')} 秒，容差 {manifest.get('duration_tolerance_seconds', {}).get('min')}-{manifest.get('duration_tolerance_seconds', {}).get('max')} 秒",
-        "",
-    ]
-    if manifest["missing_inputs"]:
-        lines.extend(["## 缺失输入", ""])
-        lines.extend(f"- {item}" for item in manifest["missing_inputs"])
-        lines.append("")
-    lines.extend(
-        [
-            "## 下一步",
-            "",
-            "运行质量门禁；门禁通过后人工打开视频剪辑软件或播放器检查音频和画面。",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _build_quality_report(run_dir: Path, state: dict[str, Any], now: datetime) -> dict[str, Any]:
-    files = state.get("files", {})
-    blockers: list[dict[str, str]] = []
-    warnings: list[dict[str, str]] = []
-    preview_path = Path(files.get("final_preview_mp4", run_dir / "dreamina_generation" / "final_preview.mp4"))
-    subtitles_path = Path(files.get("final_subtitles_srt", run_dir / "subtitles" / "final_subtitles.srt"))
-    bgm_license_path = Path(files.get("bgm_license_json", run_dir / "audio" / "bgm_license.json"))
-    manifest_path = Path(files.get("final_preview_manifest_json", run_dir / "dreamina_generation" / "final_preview_manifest.json"))
-    manifest = _load_json_file(manifest_path, "final_preview_manifest.json") if manifest_path.exists() else {}
-
-    if "master" in state["outputs"]["final_filename"].lower() or "母版" in state["outputs"]["final_filename"]:
-        blockers.append({"code": "forbidden_master_filename", "message": "最终文件名不能包含 master 或母版。"})
-    if not preview_path.exists():
-        blockers.append({"code": "missing_final_preview_mp4", "message": "缺少可人工检查的 final_preview.mp4。"})
-    if not subtitles_path.exists():
-        blockers.append({"code": "missing_subtitles", "message": "缺少短句字幕 SRT。"})
-    else:
-        subtitle_issues = _subtitle_quality_issues(subtitles_path)
-        blockers.extend(subtitle_issues)
-    if not bgm_license_path.exists():
-        blockers.append({"code": "missing_bgm_license", "message": "缺少 BGM 授权元数据。"})
-    else:
-        bgm = _load_json_file(bgm_license_path, "bgm_license.json")
-        selected = bgm.get("selected_track", {})
-        required_bgm_fields = ["title", "source", "license", "local_path"]
-        missing_bgm_fields = [field for field in required_bgm_fields if not str(selected.get(field, "")).strip()]
-        if missing_bgm_fields:
-            blockers.append(
-                {
-                    "code": "bgm_track_not_selected",
-                    "message": "BGM 必须选择真实曲目并记录 title、source、license 和 local_path。",
-                }
-            )
-        else:
-            bgm_path = Path(str(selected["local_path"])).expanduser()
-            if not bgm_path.exists():
-                blockers.append({"code": "missing_bgm_file", "message": f"找不到 BGM 本地文件：{bgm_path}"})
-    if manifest.get("status") == "dry_run_ready" and not preview_path.exists():
-        blockers.append({"code": "dry_run_preview_only", "message": "当前只是 dry-run 组装清单，尚未生成真实 final_preview.mp4。"})
-    if manifest and not manifest.get("contains_final_bgm", True) and manifest.get("schema_version") == "shot-preview-manifest-v1":
-        blockers.append({"code": "shot_preview_used_as_final", "message": "镜头预览不能作为最终成片预览。"})
-    if manifest and not manifest.get("subtitles_burned_in"):
-        blockers.append({"code": "subtitles_not_burned_in", "message": "最终成片必须烧录字幕。"})
-    if manifest and not manifest.get("bgm_embedded"):
-        blockers.append({"code": "bgm_not_embedded", "message": "最终成片必须嵌入已授权 BGM。"})
-    if manifest and not manifest.get("logo_end_only"):
-        blockers.append({"code": "logo_policy_missing", "message": "透明 logo 必须按结尾一次策略记录。"})
-    if manifest and manifest.get("logo_status") != "available":
-        warnings.append({"code": "logo_missing_or_not_configured", "message": "透明 logo 缺失或未配置；按 PRD 记录警告，不阻塞成片。"})
-    if manifest and "duration_tolerance_seconds" in manifest:
-        expected = int(manifest.get("expected_duration_seconds", 0))
-        tolerance = manifest["duration_tolerance_seconds"]
-        if not (int(tolerance["min"]) <= expected <= int(tolerance["max"])):
-            blockers.append({"code": "duration_out_of_tolerance", "message": "成片预期时长不在对应容差内。"})
-    if not state.get("confirmations", {}).get("shots"):
-        blockers.append({"code": "shots_not_confirmed", "message": "镜头尚未确认。"})
-    planning_issues = _video_creation_planning_quality_issues(state)
-    blockers.extend(planning_issues["blockers"])
-    warnings.extend(planning_issues["warnings"])
-
-    return {
-        "schema_version": "video-quality-report-v1",
-        "checked_at": now.isoformat(),
-        "status": "failed" if blockers else "passed",
-        "run_dir": str(run_dir),
-        "blocking_defects": blockers,
-        "warnings": warnings,
-        "manual_check_required": True,
-        "checks": {
-            "preview_exists": preview_path.exists(),
-            "subtitles_exist": subtitles_path.exists(),
-            "bgm_license_exists": bgm_license_path.exists(),
-            "shots_confirmed": bool(state.get("confirmations", {}).get("shots")),
-            "final_filename": state["outputs"]["final_filename"],
-            "bgm_embedded": bool(manifest.get("bgm_embedded")),
-            "subtitles_burned_in": bool(manifest.get("subtitles_burned_in")),
-            "logo_status": manifest.get("logo_status", ""),
-            "creative_quality_matrix_checked": planning_issues["creative_quality_matrix_checked"],
-            "prompt_standard_checked": planning_issues["prompt_standard_checked"],
-            "dreamina_job_validation_checked": planning_issues["dreamina_job_validation_checked"],
-        },
-    }
-
-
-def _video_creation_planning_quality_issues(state: dict[str, Any]) -> dict[str, Any]:
-    blockers: list[dict[str, str]] = []
-    warnings: list[dict[str, str]] = []
-    files = state.get("files", {})
-    plan = _optional_json_file(files.get("video_plan_json"))
-    storyboard = _optional_json_file(files.get("storyboard_json"))
-    prompts = _optional_json_file(files.get("prompts_json"))
-    jobs = _optional_json_file(files.get("dreamina_jobs_json"))
-
-    if plan:
-        if not plan.get("creative_quality"):
-            blockers.append({"code": "missing_creative_quality_matrix", "message": "视频策划缺少按创意方向切换的质量矩阵。"})
-        if not plan.get("production_style"):
-            blockers.append({"code": "missing_product_video_style", "message": "视频策划缺少工业产品视频风格矩阵映射。"})
-        boundary = plan.get("knowledge_boundary", {})
-        if boundary.get("draft_only_until_external_review"):
-            blockers.append(
-                {
-                    "code": "product_requires_external_review",
-                    "message": "产品知识卡 usage_scope 为 review_before_external；可做内部策划/dry-run，但正式成片外发前必须复核为 external_allowed 或删除高风险 claim。",
-                }
-            )
-        absorbed = {item.get("source") for item in plan.get("external_skill_absorption", [])}
-        if "dexhunter/seedance2-skill" not in absorbed:
-            warnings.append({"code": "seedance_prompt_reference_not_recorded", "message": "策划未记录 dexhunter/seedance2-skill 的 Prompt 规则吸收来源。"})
-    if storyboard:
-        for shot in storyboard.get("shots", []):
-            validation = shot.get("shot_design_validation", {})
-            if validation.get("status") == "blocked":
-                blockers.append({"code": "blocked_shot_design", "message": f"镜头 {shot.get('shot_id')} 设计验证未通过：{'; '.join(validation.get('messages', []))}"})
-            if not shot.get("creative_quality_checks"):
-                blockers.append({"code": "missing_shot_creative_quality", "message": f"镜头 {shot.get('shot_id')} 缺少创意质量要求。"})
-            if shot.get("frame_control_risk"):
-                warnings.append({"code": "frame_control_risk", "message": f"镜头 {shot.get('shot_id')}：{shot.get('frame_control_risk')}"})
-            if shot.get("human_face_risk") == "clear_face":
-                blockers.append({"code": "clear_human_face_reference", "message": f"镜头 {shot.get('shot_id')} 使用了清晰可辨识真人脸部素材。"})
-            elif shot.get("human_face_risk") == "unclear":
-                warnings.append({"code": "unclear_human_face_reference", "message": f"镜头 {shot.get('shot_id')} 素材人脸风险不明确，建议裁切、打码或替换。"})
-    if prompts:
-        for item in prompts.get("prompts", []):
-            if item.get("prompt_standard") not in {"tuolin-industrial-seedance-v1", "tuolin-industrial-seedance-v2"}:
-                blockers.append({"code": "invalid_prompt_standard", "message": f"镜头 {item.get('shot_id')} 未使用拓霖工业即梦 Prompt 标准。"})
-            components = item.get("prompt_components", {})
-            required = set(prompts.get("prompt_policy", {}).get("structure", []))
-            missing = [key for key in required if not str(components.get(key, "")).strip()]
-            if missing:
-                blockers.append({"code": "missing_prompt_components", "message": f"镜头 {item.get('shot_id')} Prompt 组件缺失：{', '.join(missing)}"})
-            if item.get("reference_required") and not item.get("reference_material_id"):
-                blockers.append({"code": "missing_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但未绑定素材 ID。"})
-            if item.get("reference_required") and not item.get("numbered_reference_label"):
-                blockers.append({"code": "missing_numbered_prompt_reference", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少 @图片 编号引用。"})
-            if item.get("reference_required") and not str(item.get("reference_usage") or "").strip():
-                blockers.append({"code": "missing_prompt_reference_usage", "message": f"镜头 {item.get('shot_id')} 需要真实参考素材但缺少用途说明。"})
-            if item.get("prompt_standard") == "tuolin-industrial-seedance-v2":
-                if not str(components.get("time_segments") or "").strip():
-                    blockers.append({"code": "missing_prompt_time_segments", "message": f"镜头 {item.get('shot_id')} 缺少分时段 Prompt。"})
-                if not str(components.get("product_display_template") or "").strip():
-                    blockers.append({"code": "missing_product_display_template", "message": f"镜头 {item.get('shot_id')} 缺少工业产品展示模板。"})
-                forbidden = _forbidden_entertainment_terms_in_prompt(item.get("prompt", ""))
-                if forbidden:
-                    blockers.append({"code": "forbidden_entertainment_prompt_pattern", "message": f"镜头 {item.get('shot_id')} Prompt 包含不允许的娱乐化表达：{', '.join(forbidden)}"})
-            quality_checks = item.get("prompt_quality_checks") or _prompt_quality_checks(item)
-            for issue in quality_checks.get("blockers", []):
-                blockers.append({"code": str(issue.get("code", "prompt_quality_blocker")), "message": f"镜头 {item.get('shot_id')}：{issue.get('message', '')}"})
-            for issue in quality_checks.get("warnings", []):
-                warnings.append({"code": str(issue.get("code", "prompt_quality_warning")), "message": f"镜头 {item.get('shot_id')}：{issue.get('message', '')}"})
-    if jobs:
-        for job in jobs.get("jobs", []):
-            validation = job.get("validation", {})
-            if validation.get("status") == "blocked":
-                blockers.append({"code": "blocked_dreamina_job_validation", "message": f"镜头 {job.get('shot_id')} 即梦任务验证未通过：{'; '.join(validation.get('messages', []))}"})
-    return {
-        "blockers": blockers,
-        "warnings": warnings,
-        "creative_quality_matrix_checked": bool(plan and plan.get("creative_quality")),
-        "prompt_standard_checked": bool(prompts and prompts.get("prompt_policy")),
-        "dreamina_job_validation_checked": bool(jobs and jobs.get("policy", {}).get("job_validation_required")),
-    }
-
-
-def _optional_json_file(path_value: Any) -> dict[str, Any]:
-    if not path_value:
-        return {}
-    path = Path(str(path_value))
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _subtitle_quality_issues(path: Path) -> list[dict[str, str]]:
-    issues: list[dict[str, str]] = []
-    content = path.read_text(encoding="utf-8")
-    for block in [item for item in content.split("\n\n") if item.strip()]:
-        lines = block.splitlines()
-        text_lines = lines[2:]
-        if len(text_lines) > 2:
-            issues.append({"code": "subtitle_too_many_lines", "message": f"字幕块超过 2 行：{lines[0]}"})
-    return issues
-
-
-def _render_quality_report(report: dict[str, Any]) -> str:
-    lines = [
-        "# 视频质量门禁报告",
-        "",
-        f"- 状态：{report['status']}",
-        f"- 阻塞问题：{len(report['blocking_defects'])}",
-        f"- 警告：{len(report['warnings'])}",
-        f"- 需要人工检查：{'是' if report['manual_check_required'] else '否'}",
-        "",
-        "## 阻塞问题",
-        "",
-    ]
-    if report["blocking_defects"]:
-        for item in report["blocking_defects"]:
-            lines.append(f"- {item['code']}：{item['message']}")
-    else:
-        lines.append("- 无")
-    lines.extend(["", "## 警告", ""])
-    if report["warnings"]:
-        for item in report["warnings"]:
-            lines.append(f"- {item['code']}：{item['message']}")
-    else:
-        lines.append("- 无")
-    lines.extend(
-        [
-            "",
-            "## 下一步",
-            "",
-            "阻塞问题为 0 后，人工打开视频剪辑软件或播放器检查音频、画面、字幕同步和整体节奏。",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
 def _build_adapter_inspection_report(run_dir: Path, state: dict[str, Any], now: datetime) -> dict[str, Any]:
     adapters = state.get("adapters", {})
     capability_profile = _state_dreamina_capability_profile(state)
@@ -5000,14 +3756,7 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
 
 
 def _normalize_user_reply(reply: str) -> str:
-    return re.sub(r"\s+", " ", reply.strip()).lower().replace("ｂｇｍ", "bgm")
-
-
-def _parse_voice_selection(reply: str) -> int | None:
-    match = re.search(r"(?:声音|voice)\s*(?:选|选择|choose)?\s*([123])", reply)
-    if match:
-        return int(match.group(1))
-    return None
+    return re.sub(r"\s+", " ", reply.strip()).lower()
 
 
 def _parse_creative_direction_selection(reply: str) -> tuple[str, str | None] | None:
@@ -5075,11 +3824,6 @@ def _parse_shot_retry_request(reply: str) -> str | None:
     if match and not reply.startswith("确认"):
         return _normalize_shot_id(match.group(1))
     return None
-
-
-def _is_manual_quality_pass_reply(reply: str) -> bool:
-    pass_tokens = ["人工音视频检查通过", "人工检查通过", "音视频检查通过", "音画检查通过", "音频画面正常"]
-    return any(token in reply for token in pass_tokens)
 
 
 def _command_check(name: str, command: str, required: bool) -> dict[str, str]:
@@ -5192,6 +3936,40 @@ def _dreamina_blocked_reason(shot: dict[str, Any], job_type: str) -> str | None:
     if shot.get("material_mode") == "ai_simulated_scene" and shot.get("product_visible"):
         return "AI 模拟场景不能在无真实产品参考时展示具体产品。"
     return "素材缺失或当前规则不允许生成。"
+
+
+def _apply_dreamina_material_diversity_gate(jobs: list[dict[str, Any]]) -> None:
+    seen_materials: dict[str, str] = {}
+    previous_material_id = ""
+    for job in jobs:
+        if job.get("job_type") != "image2video":
+            previous_material_id = ""
+            continue
+        material_id = str(job.get("reference_material_id") or "")
+        if not material_id:
+            previous_material_id = ""
+            continue
+        blockers: list[str] = []
+        if material_id == previous_material_id:
+            blockers.append("连续镜头重复使用同一张图片参考素材，禁止提交以避免生成重复视频。")
+        first_seen_shot = seen_materials.get(material_id)
+        if first_seen_shot:
+            blockers.append(f"图片参考素材已在镜头 {first_seen_shot} 使用，当前镜头必须更换不同图片。")
+        if blockers:
+            validation = job.setdefault("validation", {"status": "ok", "messages": [], "blockers": [], "warnings": []})
+            validation_blockers = validation.setdefault("blockers", [])
+            validation_messages = validation.setdefault("messages", [])
+            for blocker in blockers:
+                if blocker not in validation_blockers:
+                    validation_blockers.append(blocker)
+                if blocker not in validation_messages:
+                    validation_messages.append(blocker)
+            validation["status"] = "blocked"
+            job["status"] = "blocked"
+            job["blocked_reason"] = "; ".join(blockers)
+        else:
+            seen_materials[material_id] = str(job.get("shot_id") or "")
+        previous_material_id = material_id
 
 
 def _validate_dreamina_job(
@@ -5350,12 +4128,13 @@ def _material_availability_summary(content_assets: list[dict[str, Any]]) -> dict
                 " ".join(files),
             ]
         )
+        label_searchable = " ".join([str(asset.get("title", "")), str(asset.get("asset_category", ""))])
         is_image = "image" in media_types or _has_file_suffix(files, IMAGE_FILE_SUFFIXES)
         if is_image:
             counts["image_assets"] += 1
         if files:
             counts["assets_with_local_paths"] += 1
-        if _contains_any(searchable, ["产品图片", "product image", "product photo", "产品实拍", "精选图"]):
+        if _contains_any(label_searchable, ["产品图片", "product image", "product photo", "产品实拍", "精选图"]):
             counts["product_image_assets"] += 1 if is_image else 0
         if _contains_any(searchable, ["应用场景", "application", "exhaust", "pipe", "包覆", "管道"]):
             counts["application_assets"] += 1
@@ -5488,25 +4267,6 @@ def _validate_shot_design(shot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _music_brief(primary: dict[str, str], language: str) -> dict[str, str]:
-    if primary["id"] in {"performance_test", "technical_education"}:
-        mood = "克制、专业、技术感"
-        pace = "中等偏快"
-    elif primary["id"] in {"inquiry_conversion", "procurement_guide"}:
-        mood = "可信、稳重、商务感"
-        pace = "中等"
-    else:
-        mood = "现代工业、干净、可信"
-        pace = "短视频中等节奏"
-    return {
-        "mood": mood,
-        "pace": pace,
-        "intensity": "背景存在感适中，不压过旁白",
-        "language_context": language,
-        "license_requirement": "必须可商用，记录来源和授权元数据，不使用 TikTok 热门歌曲。",
-    }
-
-
 def _load_state(state_path: Path) -> dict[str, Any]:
     if not state_path.exists():
         raise ValueError(f"找不到视频创作 workflow_state.json：{state_path}")
@@ -5552,36 +4312,26 @@ def _clear_downstream_confirmations(state: dict[str, Any], after: str) -> None:
     order = [
         "video_plan",
         "storyboard",
-        "narration_script",
-        "voice",
-        "narration",
         "dreamina_generation",
         "shots",
-        "final_video",
     ]
     if after not in order:
         return
+    confirmations = state.setdefault("confirmations", {})
     for key in order[order.index(after) + 1 :]:
-        state["confirmations"][key] = False
+        confirmations[key] = False
 
 
 def _clear_downstream_file_references(state: dict[str, Any], after: str) -> None:
     order = [
         "video_plan",
         "storyboard",
-        "narration_script",
-        "voice",
-        "narration",
         "dreamina_generation",
         "shots",
-        "final_video",
     ]
     keys_by_stage = {
         "video_plan": {"video_plan_md", "video_plan_json"},
         "storyboard": {"storyboard_md", "storyboard_json", "prompts_md", "prompts_json"},
-        "narration_script": {"narration_script_md", "narration_script_json"},
-        "voice": {"voice_samples_md", "voice_samples_json"},
-        "narration": {"narration_audio", "narration_timing", "narration_manifest"},
         "dreamina_generation": {
             "dreamina_jobs_md",
             "dreamina_jobs_json",
@@ -5594,18 +4344,7 @@ def _clear_downstream_file_references(state: dict[str, Any], after: str) -> None
             "shot_preview_manifest_json",
             "shot_preview_manifest_md",
             "shot_preview_mp4",
-            "final_subtitles_srt",
-            "bgm_license_json",
-            "bgm_brief_md",
-            "final_preview_manifest_json",
-            "final_preview_manifest_md",
-            "final_preview_mp4",
-            "quality_report_json",
-            "quality_report_md",
-            "manual_quality_check_json",
-            "final_video_mp4",
         },
-        "final_video": {"final_video_mp4"},
     }
     if after not in order:
         return
@@ -5622,9 +4361,6 @@ def _clear_transient_review_state(state: dict[str, Any]) -> None:
     for key in [
         "dreamina_authorization",
         "pending_shot_retry",
-        "quality_gate",
-        "manual_quality_check",
-        "final_video",
     ]:
         state.pop(key, None)
 

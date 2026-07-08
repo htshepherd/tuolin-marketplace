@@ -115,6 +115,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["platforms"], ["youtube_shorts", "tiktok"])
             self.assertEqual(state["duration_seconds"], 60)
             self.assertEqual(state["workflow_mode"], "video_only")
+            self.assertNotIn("narration_script", state["confirmations"])
+            self.assertNotIn("voice", state["confirmations"])
+            self.assertNotIn("narration", state["confirmations"])
+            self.assertNotIn("final_video", state["confirmations"])
             self.assertEqual(state["creative_direction"]["primary"]["id"], "multiple_benefit_overview")
             self.assertEqual(state["creative_direction"]["supporting"]["id"], "product_detail")
             self.assertEqual(state["context"]["task_type"], "video_creation")
@@ -359,7 +363,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "存在 blocked 即梦任务"):
                 confirm_dreamina_generation(run_dir, now=datetime(2026, 6, 25, 15, 35, 0))
 
-    def test_multimodal_material_limit_blocks_dreamina_confirmation(self) -> None:
+    def test_multishot_reference_count_does_not_apply_seedance_per_task_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = resolve_paths(
@@ -367,7 +371,7 @@ class VideoCreationAgentTests(unittest.TestCase):
                 {
                     "video_creation": {
                         "dreamina_capability_profile": {
-                            "max_images": 0,
+                            "max_images": 1,
                         }
                     }
                 },
@@ -392,10 +396,11 @@ class VideoCreationAgentTests(unittest.TestCase):
             generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
 
             jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
-            self.assertEqual(jobs["material_reference_map"]["counts"]["images"], 1)
-            self.assertTrue(any("Seedance 多模态输入超限" in "; ".join(job["validation"]["messages"]) for job in jobs["jobs"]))
-            with self.assertRaisesRegex(ValueError, "存在 blocked 即梦任务"):
-                confirm_dreamina_generation(run_dir, now=datetime(2026, 6, 25, 15, 35, 0))
+            self.assertEqual(jobs["material_reference_map"]["counts"]["images"], 12)
+            self.assertFalse(any("Seedance 多模态输入超限" in "; ".join(job["validation"]["messages"]) for job in jobs["jobs"]))
+            self.assertTrue(all(job["validation"]["status"] == "ok" for job in jobs["jobs"]))
+            result = confirm_dreamina_generation(run_dir, now=datetime(2026, 6, 25, 15, 35, 0))
+            self.assertEqual(result.status, "dreamina_generation_confirmed")
 
     def test_clear_human_face_material_blocks_dreamina_jobs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -449,9 +454,11 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("content_asset/quartz_product_photo", plan_text)
             self.assertNotIn("content_asset/quartz_product_video", plan_text)
             self.assertIn("## 视频创作素材准备度", plan_text)
-            self.assertIn("产品图片素材：1", plan_text)
-            self.assertIn("可用于 image2video 的图片参考素材：1", plan_text)
-            self.assertIn("音乐 brief", plan_text)
+            self.assertIn("产品图片素材：4", plan_text)
+            self.assertIn("可用于 image2video 的图片参考素材：12", plan_text)
+            self.assertIn("## 生成范围", plan_text)
+            self.assertIn("不生成配音、不生成字幕、不生成背景音乐", plan_text)
+            self.assertNotIn("音乐 brief", plan_text)
             self.assertIn("不得使用 video_script", plan_text)
             self.assertIn("不得使用母版/master", plan_text)
             self.assertIn("请确认策划后继续生成分镜", plan_text)
@@ -469,11 +476,16 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("hook", plan["creative_quality"])
             self.assertIn("dexhunter/seedance2-skill", {item["source"] for item in plan["external_skill_absorption"]})
             self.assertTrue(plan["prompt_policy"]["visible_product_requires_real_reference"])
-            self.assertEqual(plan["material_availability"]["counts"]["product_image_assets"], 1)
-            self.assertEqual(plan["material_availability"]["counts"]["usable_visual_reference_assets"], 1)
+            self.assertEqual(plan["material_availability"]["counts"]["product_image_assets"], 4)
+            self.assertEqual(plan["material_availability"]["counts"]["usable_visual_reference_assets"], 12)
             self.assertNotIn("product_video_assets", plan["material_availability"]["counts"])
-            self.assertEqual(plan["material_availability"]["usable_visual_references"][0]["id"], "content_asset/quartz_product_photo")
-            self.assertEqual([asset["id"] for asset in plan["content_assets"]], ["content_asset/quartz_product_photo"])
+            self.assertEqual(len(plan["content_assets"]), 12)
+            content_asset_ids = {asset["id"] for asset in plan["content_assets"]}
+            self.assertIn("content_asset/quartz_product_photo", content_asset_ids)
+            self.assertIn("content_asset/quartz_application_pipe_01", content_asset_ids)
+            self.assertNotIn("music_brief", plan)
+            self.assertNotIn("subtitle_policy", plan)
+            self.assertNotIn("audio_policy", plan)
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertFalse(state["confirmations"]["video_plan"])
@@ -590,12 +602,14 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(all(shot["shot_design_validation"]["status"] == "ok" for shot in storyboard["shots"]))
             self.assertTrue(any(shot["material_mode"] == "image2video" for shot in storyboard["shots"]))
             self.assertFalse(any(shot["material_mode"] == "text2video" and shot["product_visible"] for shot in storyboard["shots"]))
+            selected_ids = [shot["selected_material"]["id"] for shot in storyboard["shots"] if shot.get("selected_material")]
+            self.assertEqual(len(selected_ids), len(set(selected_ids)))
             product_hero = next(shot for shot in storyboard["shots"] if shot["role"] == "product_hero")
             product_detail = next(shot for shot in storyboard["shots"] if shot["role"] == "product_detail")
             closing_cta = next(shot for shot in storyboard["shots"] if shot["role"] == "closing_cta")
             self.assertEqual(product_hero["first_frame_reference_id"], "content_asset/quartz_product_photo")
-            self.assertEqual(product_detail["first_frame_reference_id"], "content_asset/quartz_product_photo")
-            self.assertEqual(closing_cta["last_frame_reference_id"], "content_asset/quartz_product_photo")
+            self.assertEqual(product_detail["first_frame_reference_id"], "content_asset/quartz_texture_detail_01")
+            self.assertEqual(closing_cta["last_frame_reference_id"], "content_asset/quartz_closing_product_01")
             self.assertEqual(product_hero["human_face_risk"], "none")
 
             prompts_text = prompts_md.read_text(encoding="utf-8")
@@ -610,9 +624,11 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(prompts["prompt_policy"]["structure"][0], "timebox")
             self.assertTrue(prompts["prompt_policy"]["conflict_rules"])
             self.assertTrue(prompts["prompt_policy"]["duration_complexity_policy"])
-            self.assertEqual(prompts["material_reference_map"]["counts"]["images"], 1)
+            self.assertEqual(prompts["material_reference_map"]["counts"]["images"], 12)
             self.assertEqual(prompts["material_reference_map"]["references"][0]["label"], "@图片1")
-            self.assertIn("真实产品", prompts["material_reference_map"]["references"][0]["usages"][0])
+            reference_material_ids = [item["material_id"] for item in prompts["material_reference_map"]["references"]]
+            self.assertEqual(len(reference_material_ids), len(set(reference_material_ids)))
+            self.assertTrue(any("真实产品" in usage for item in prompts["material_reference_map"]["references"] for usage in item["usages"]))
             self.assertTrue(any(item["reference_required"] for item in prompts["prompts"]))
             self.assertTrue(all(item["prompt_standard"] == "tuolin-industrial-seedance-v2" for item in prompts["prompts"]))
             self.assertTrue(all(item["prompt_quality_checks"]["status"] == "ok" for item in prompts["prompts"]))
@@ -625,7 +641,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(any("last-frame reference" in item["prompt"] for item in prompts["prompts"]))
             self.assertFalse(any("short drama" in item["prompt"].lower() or "dance" in item["prompt"].lower() or "xianxia" in item["prompt"].lower() for item in prompts["prompts"]))
             referenced = [item for item in prompts["prompts"] if item["reference_required"]]
-            self.assertTrue(all(item["numbered_reference_label"] == "@图片1" for item in referenced))
+            self.assertEqual(
+                [item["numbered_reference_label"] for item in referenced],
+                [f"@图片{index}" for index in range(1, len(referenced) + 1)],
+            )
             self.assertTrue(all(item["reference_usage"] for item in referenced))
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
@@ -653,7 +672,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(result.phase, "ready_for_dreamina_jobs")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["storyboard"])
-            self.assertFalse(state["confirmations"]["narration_script"])
+            self.assertNotIn("narration_script", state["confirmations"])
+            self.assertNotIn("voice", state["confirmations"])
+            self.assertNotIn("narration", state["confirmations"])
             self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
             self.assertEqual(
                 [item["status"] for item in state["status_history"]],
@@ -687,8 +708,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(shots.phase, "completed")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertIsNone(state["current_pending_confirmation"])
-            self.assertFalse(state["confirmations"]["narration_script"])
-            self.assertFalse(state["confirmations"]["narration"])
+            self.assertNotIn("narration_script", state["confirmations"])
+            self.assertNotIn("voice", state["confirmations"])
+            self.assertNotIn("narration", state["confirmations"])
+            self.assertNotIn("final_video", state["confirmations"])
 
     def test_cannot_generate_storyboard_before_plan_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -720,7 +743,7 @@ class VideoCreationAgentTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, removed_message):
                     call()
 
-    def test_handles_voice_selection_reply(self) -> None:
+    def test_rejects_removed_voice_selection_reply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_storyboard_confirmed_run(Path(tmp))
 
@@ -729,7 +752,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_generates_dreamina_jobs_after_storyboard_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_confirmed_run(Path(tmp))
+            run_dir = _create_storyboard_confirmed_run(Path(tmp))
 
             result = generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
 
@@ -749,7 +772,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(jobs["status"], "planned_pending_user_confirmation")
             self.assertEqual(jobs["format"]["model"], "seedance2.0_vip")
             self.assertEqual(jobs["format"]["dreamina_resolution"], "1080P")
-            self.assertEqual(jobs["material_reference_map"]["counts"]["images"], 1)
+            self.assertEqual(jobs["material_reference_map"]["counts"]["images"], 12)
             self.assertTrue(jobs["policy"]["do_not_submit_before_confirmation"])
             self.assertTrue(jobs["policy"]["job_validation_required"])
             self.assertEqual(len(jobs["jobs"]), 12)
@@ -757,10 +780,13 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(all(job["job_type"] == "image2video" for job in jobs["jobs"]))
             self.assertTrue(all(job["estimated_credits"] == 8 for job in jobs["jobs"]))
             self.assertTrue(all("narration_timing" not in job for job in jobs["jobs"]))
-            self.assertTrue(all(job["numbered_reference_label"] == "@图片1" for job in jobs["jobs"]))
+            material_ids = [job["reference_material_id"] for job in jobs["jobs"]]
+            reference_labels = [job["numbered_reference_label"] for job in jobs["jobs"]]
+            self.assertEqual(len(material_ids), len(set(material_ids)))
+            self.assertEqual(reference_labels, [f"@图片{index}" for index in range(1, 13)])
             self.assertTrue(all(job["reference_usage"] for job in jobs["jobs"]))
             self.assertTrue(any(job["first_frame_reference_id"] == "content_asset/quartz_product_photo" for job in jobs["jobs"]))
-            self.assertTrue(any(job["last_frame_reference_id"] == "content_asset/quartz_product_photo" for job in jobs["jobs"]))
+            self.assertTrue(any(job["last_frame_reference_id"] == "content_asset/quartz_closing_product_01" for job in jobs["jobs"]))
             self.assertTrue(all(job["human_face_risk"] == "none" for job in jobs["jobs"]))
             self.assertTrue(all(job["validation"]["status"] == "ok" for job in jobs["jobs"]))
 
@@ -786,7 +812,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_dreamina_jobs_do_not_silently_overwrite_existing_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_confirmed_run(Path(tmp))
+            run_dir = _create_storyboard_confirmed_run(Path(tmp))
             generate_dreamina_jobs(run_dir)
 
             with self.assertRaises(FileExistsError):
@@ -801,7 +827,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
     def test_blocked_dreamina_jobs_prevent_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_confirmed_run_without_assets(Path(tmp))
+            run_dir = _create_storyboard_confirmed_run_without_assets(Path(tmp))
             generate_dreamina_jobs(run_dir)
 
             jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
@@ -809,9 +835,32 @@ class VideoCreationAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "存在 blocked 即梦任务"):
                 confirm_dreamina_generation(run_dir)
 
+    def test_duplicate_dreamina_image_references_are_blocked_before_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_storyboard_confirmed_run(Path(tmp))
+            prompts_path = run_dir / "prompts.json"
+            prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
+            first_reference = prompts["prompts"][0]
+            for item in prompts["prompts"][1:]:
+                item["reference_material_id"] = first_reference["reference_material_id"]
+                item["numbered_reference_label"] = first_reference["numbered_reference_label"]
+                item["reference_usage"] = first_reference["reference_usage"]
+                item["first_frame_reference_id"] = first_reference["first_frame_reference_id"]
+                item["last_frame_reference_id"] = first_reference["last_frame_reference_id"]
+            prompts_path.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            generate_dreamina_jobs(run_dir)
+
+            jobs = json.loads((run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8"))
+            duplicate_jobs = [job for job in jobs["jobs"] if job["shot_id"] != "01"]
+            self.assertTrue(any(job["validation"]["status"] == "blocked" for job in duplicate_jobs))
+            self.assertTrue(any("重复使用同一张图片参考素材" in " ".join(job["validation"]["messages"]) for job in duplicate_jobs))
+            with self.assertRaisesRegex(ValueError, "存在 blocked 即梦任务"):
+                confirm_dreamina_generation(run_dir)
+
     def test_prompt_conflicts_and_duration_complexity_block_dreamina_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = _create_narration_confirmed_run(Path(tmp))
+            run_dir = _create_storyboard_confirmed_run(Path(tmp))
             prompts_path = run_dir / "prompts.json"
             prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
             prompts["prompts"][0]["prompt_components"]["motion_and_camera"] = "Fixed camera, static camera, fast pan, orbit, tracking shot."
@@ -938,9 +987,10 @@ class VideoCreationAgentTests(unittest.TestCase):
             shot_preview_manifest = run_dir / "dreamina_generation" / "shot_preview_manifest.json"
             self.assertTrue(shot_preview_manifest.exists())
             shot_preview = json.loads(shot_preview_manifest.read_text(encoding="utf-8"))
-            self.assertFalse(shot_preview["contains_confirmed_narration"])
-            self.assertFalse(shot_preview["contains_temporary_subtitles"])
-            self.assertFalse(shot_preview["contains_final_bgm"])
+            self.assertTrue(shot_preview["policy"]["video_only"])
+            self.assertNotIn("contains_confirmed_narration", shot_preview)
+            self.assertNotIn("contains_temporary_subtitles", shot_preview)
+            self.assertNotIn("contains_final_bgm", shot_preview)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertTrue(state["confirmations"]["shots"])
             self.assertIsNone(state["current_pending_confirmation"])
@@ -1094,13 +1144,16 @@ class VideoCreationAgentTests(unittest.TestCase):
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertFalse(state["confirmations"]["video_plan"])
             self.assertFalse(state["confirmations"]["storyboard"])
-            self.assertFalse(state["confirmations"]["narration"])
+            self.assertNotIn("narration_script", state["confirmations"])
+            self.assertNotIn("voice", state["confirmations"])
+            self.assertNotIn("narration", state["confirmations"])
+            self.assertNotIn("final_video", state["confirmations"])
             self.assertFalse(state["confirmations"]["dreamina_generation"])
             self.assertFalse(state["confirmations"]["shots"])
             self.assertEqual(state["current_pending_confirmation"], "确认策划")
             self.assertNotIn("storyboard_json", state["files"])
             self.assertNotIn("dreamina_results_json", state["files"])
-            self.assertNotIn("final_preview_mp4", state["files"])
+            self.assertNotIn("shot_preview_mp4", state["files"])
             plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
             self.assertEqual(plan["change_requests"][0]["scope"], "video_plan")
             self.assertIn("高温设备密封痛点", (run_dir / "video_plan.md").read_text(encoding="utf-8"))
@@ -1264,37 +1317,52 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
         ],
         "石英纤维隔热带是首期视频创作产品。",
     )
-    _write_card(
-        paths.knowledge_dir / "内容素材" / "quartz_product_photo.md",
-        [
-            "card_template_version: content-asset-card-v1",
-            "type: content_asset",
-            "id: content_asset/quartz_product_photo",
-            "title: 石英纤维隔热带产品图片",
-            "aliases: []",
-            "status: official",
-            "usage_scope: external_allowed",
-            "raw_partitions:",
-            "  - raw/01_产品/02_石英纤维隔热带/02_产品图片/",
-            "tags:",
-            "  - 产品图片",
-            "updated_at: 2026-06-25T00:00:00+08:00",
-            "last_reviewed_at: 2026-06-25T00:00:00+08:00",
-            "evidence_refs: []",
-            "review_refs: []",
-            "asset_category: 产品图片",
-            "media_types:",
-            "  - image",
-            f"human_face_risk: {human_face_risk}",
-            "related_products:",
-            "  - product/quartz_fiber_tape",
-            "files:",
-            "  - raw/01_产品/02_石英纤维隔热带/02_产品图片/product.jpg",
-            "usable_for:",
-            "  - video_creation",
-        ],
-        "可用于视频创作的产品素材；不能单独证明产品性能事实。",
-    )
+    image_assets = [
+        ("quartz_product_photo", "石英纤维隔热带产品图片", "产品图片", "产品图片", "product.jpg"),
+        ("quartz_product_roll_02", "石英纤维隔热带卷装图片 02", "产品图片", "产品图片", "product-02.jpg"),
+        ("quartz_product_roll_03", "石英纤维隔热带卷装图片 03", "产品图片", "产品图片", "product-03.jpg"),
+        ("quartz_texture_detail_01", "石英纤维隔热带织纹细节图片 01", "产品细节图片", "产品细节", "texture-01.jpg"),
+        ("quartz_texture_detail_02", "石英纤维隔热带边缘厚度细节图片 02", "产品细节图片", "产品细节", "texture-02.jpg"),
+        ("quartz_texture_detail_03", "石英纤维隔热带柔性细节图片 03", "产品细节图片", "产品细节", "texture-03.jpg"),
+        ("quartz_application_pipe_01", "石英纤维隔热带排气管包覆图片 01", "应用场景图片", "应用场景", "application-01.jpg"),
+        ("quartz_application_pipe_02", "石英纤维隔热带排烟管包覆图片 02", "应用场景图片", "应用场景", "application-02.jpg"),
+        ("quartz_application_pipe_03", "石英纤维隔热带安装应用图片 03", "应用场景图片", "应用场景", "application-03.jpg"),
+        ("quartz_test_context_01", "石英纤维隔热带测试辅助图片 01", "测试验证图片", "测试验证", "test-01.jpg"),
+        ("quartz_test_context_02", "石英纤维隔热带高温场景辅助图片 02", "测试验证图片", "测试验证", "test-02.jpg"),
+        ("quartz_closing_product_01", "石英纤维隔热带收尾产品图片 01", "产品图片", "产品图片", "closing-01.jpg"),
+    ]
+    for asset_id, title, asset_category, tag, file_name in image_assets:
+        _write_card(
+            paths.knowledge_dir / "内容素材" / f"{asset_id}.md",
+            [
+                "card_template_version: content-asset-card-v1",
+                "type: content_asset",
+                f"id: content_asset/{asset_id}",
+                f"title: {title}",
+                "aliases: []",
+                "status: official",
+                "usage_scope: external_allowed",
+                "raw_partitions:",
+                "  - raw/01_产品/02_石英纤维隔热带/02_产品图片/",
+                "tags:",
+                f"  - {tag}",
+                "updated_at: 2026-06-25T00:00:00+08:00",
+                "last_reviewed_at: 2026-06-25T00:00:00+08:00",
+                "evidence_refs: []",
+                "review_refs: []",
+                f"asset_category: {asset_category}",
+                "media_types:",
+                "  - image",
+                f"human_face_risk: {human_face_risk}",
+                "related_products:",
+                "  - product/quartz_fiber_tape",
+                "files:",
+                f"  - raw/01_产品/02_石英纤维隔热带/02_产品图片/{file_name}",
+                "usable_for:",
+                "  - video_creation",
+            ],
+            "可用于视频创作的图片素材；不能单独证明产品性能事实。",
+        )
     _write_card(
         paths.knowledge_dir / "内容素材" / "quartz_product_video.md",
         [
@@ -1393,14 +1461,9 @@ def _write_card(path: Path, frontmatter_lines: list[str], body: str) -> None:
 
 def _create_ready_run(
     root: Path,
-    tts_provider: str = "mock",
-    tts_command: str = "",
     request_text: str = "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。",
 ) -> Path:
-    config = {}
-    if tts_provider != "mock" or tts_command:
-        config = {"video_creation": {"tts_provider": tts_provider, "tts_command": tts_command}}
-    paths = resolve_paths(root, config)
+    paths = resolve_paths(root, {})
     initialize_project(paths)
     _write_official_cards(paths)
     rebuild_agent_interface(paths)
@@ -1426,26 +1489,22 @@ def _create_video_only_ready_run(root: Path) -> Path:
     )
 
 
-def _create_plan_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
-    run_dir = _create_ready_run(root, tts_provider=tts_provider, tts_command=tts_command)
+def _create_plan_confirmed_run(root: Path) -> Path:
+    run_dir = _create_ready_run(root)
     generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
     confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
     return run_dir
 
 
-def _create_storyboard_confirmed_run(root: Path, tts_provider: str = "mock", tts_command: str = "") -> Path:
-    run_dir = _create_plan_confirmed_run(root, tts_provider=tts_provider, tts_command=tts_command)
+def _create_storyboard_confirmed_run(root: Path) -> Path:
+    run_dir = _create_plan_confirmed_run(root)
     generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
     confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))
     return run_dir
 
 
-def _create_narration_confirmed_run(root: Path) -> Path:
-    return _create_storyboard_confirmed_run(root)
-
-
 def _create_dreamina_jobs_ready_run(root: Path) -> Path:
-    run_dir = _create_narration_confirmed_run(root)
+    run_dir = _create_storyboard_confirmed_run(root)
     generate_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 30, 0))
     return run_dir
 
@@ -1474,7 +1533,7 @@ def _create_shots_confirmed_run(root: Path) -> Path:
     return run_dir
 
 
-def _create_narration_confirmed_run_without_assets(root: Path) -> Path:
+def _create_storyboard_confirmed_run_without_assets(root: Path) -> Path:
     paths = resolve_paths(root, {})
     initialize_project(paths)
     _write_product_card_only(paths)

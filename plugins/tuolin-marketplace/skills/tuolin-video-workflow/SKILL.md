@@ -94,6 +94,7 @@ Before asking the user to confirm a video plan or Dreamina generation, always sh
 - How many are product images, application-scene image assets, and test/validation image assets.
 - How many can be used as real image references for `image2video`.
 - Whether product-visible shots are likely to be blocked because there is no real product reference.
+- Whether the storyboard and Dreamina plan use distinct image references across shots. Do not allow multiple paid Dreamina shots to reuse the same image reference unless the user explicitly asks for a deliberate repeated visual. If repeated references appear by accident, block confirmation and explain that more varied source images or a revised storyboard is needed.
 
 Do not ask the user to “sync content_asset cards” as the primary next step. Say what they need to do in operational terms, such as “请先整理石英纤维隔热带产品图片，让视频 Agent 能读取真实产品图片素材。”
 
