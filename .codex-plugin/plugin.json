@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn campaign workflows, and quartz-fiber-tape video creation workflows.",
   "author": {
     "name": "Tianjin Tuolin"
@@ -33,7 +33,7 @@
       "查看当前还有哪些资料需要继续整理。",
       "有哪些内容需要我确认？",
       "生成 LinkedIn Day 01 发布图",
-      "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。"
+      "做一个15秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。"
     ],
     "brandColor": "#2563EB"
   }

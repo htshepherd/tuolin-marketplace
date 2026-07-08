@@ -34,6 +34,7 @@ Out of scope:
 - Do not hard-code Chinese or English external product names; read them from formal knowledge/config.
 - Do not use “master” or “母版” as a user-facing output concept or filename.
 - Do not submit paid Dreamina jobs until the user says `确认即梦生成`.
+- Do not hand-write a video run directory to work around initialization. Supported durations are 15, 20, 30, 45, 60, 90, and 120 seconds; all of them must use the official initialization script. If the script rejects one of these durations, stop and report an installation or entrypoint mismatch instead of creating compatibility files manually.
 
 ## Workflow
 
@@ -105,13 +106,13 @@ Do not ask the user to “sync content_asset cards” as the primary next step. 
 Use this script for the current implemented run-initialization slice:
 
 ```text
-python3 scripts/create_video_creation_run.py "做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。" \
+python3 scripts/create_video_creation_run.py "做一个15秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。" \
   --language en \
   --platform youtube_shorts \
   --platform tiktok \
-  --duration 60 \
+  --duration 15 \
   --audience 欧美工业采购商 \
-  --objective 突出耐高温、隔热、不刺痒和不冒烟 \
+  --objective 快速展示隔热、易施工和采购判断 \
   --project-dir /path/to/knowledge-project
 ```
 
