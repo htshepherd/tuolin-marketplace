@@ -40,6 +40,7 @@ def rebuild_generated_indexes(paths: ProjectPaths) -> dict[str, Any]:
                 "review_refs": frontmatter.get("review_refs", []),
                 "frontmatter": frontmatter,
                 "body_excerpt": body[:500],
+                "body_markdown": body,
             }
         )
 

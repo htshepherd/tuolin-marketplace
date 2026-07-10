@@ -283,7 +283,11 @@ Use `answer_question.py` or the natural-language route for business questions su
 Rules:
 
 - Read only `generated/agent-interface/`; do not scan `raw/`.
+- Treat every business question as a fresh knowledge read. Conversation history may clarify the user's wording, but video plans, LinkedIn drafts, prior answers, and model memory are never product-fact sources.
+- Do not answer from stale conversation context when the local knowledge read did not run or failed. In that case, report the read failure and stop without generating product facts, selling points, restrictions, or English wording.
+- For product-wide questions about all characteristics, advantages, disadvantages, selling points, purchasing notes, or other precautions, use the structured product-profile result from `answer_question.py`; do not replace it with ad-hoc keyword search or a model-written summary.
 - Use only `official` fact cards with an allowed `usage_scope`.
+- `review_before_external` official cards may support internal summaries, but every affected conclusion must remain marked for review before external use.
 - Treat evidence-only cards as citations, not as standalone product facts.
 - Do not use `draft`, `review_required`, or `archived` cards as facts.
 - If the relevant partition is `needs_update`, tell the user to update that partition first.
