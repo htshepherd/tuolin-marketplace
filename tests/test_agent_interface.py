@@ -13,6 +13,7 @@ from scripts.tuolin_marketplace.agent_interface import (
     open_reviews,
     read_cards_by_type,
     rebuild_agent_interface,
+    refresh_agent_interface_after_write,
     search_cards,
 )
 from scripts.tuolin_marketplace.card_validator import PROFILE
@@ -105,6 +106,36 @@ class AgentInterfaceTests(unittest.TestCase):
             invalidated = json.loads(context_path.read_text(encoding="utf-8"))
             self.assertFalse(invalidated["valid"])
             self.assertEqual(invalidated["invalidated_reason"], "agent interface revision changed")
+
+    def test_product_organization_forces_and_verifies_agent_interface_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            report = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "01_检测报告与认证" / "report.pdf"
+            report.write_text("fake report", encoding="utf-8")
+
+            result = organize_product_partition(paths, "石英纤维隔热带")
+
+            refresh = result.generated_summary["agent_interface_refresh"]
+            self.assertTrue(refresh["verified"])
+            self.assertEqual(refresh["action"], "organize_product")
+            self.assertIn("product/quartz_fiber_tape", refresh["verified_card_ids"])
+            self.assertEqual(
+                refresh["interface_revision"],
+                knowledge_status(paths)["manifest"]["interface_revision"],
+            )
+
+    def test_refresh_fails_loudly_when_written_card_is_missing_from_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+
+            with self.assertRaisesRegex(RuntimeError, "missing expected cards"):
+                refresh_agent_interface_after_write(
+                    paths,
+                    action="test_missing_card",
+                    expected_card_ids=["product/not_written"],
+                )
 
 
 def _create_official_quartz_fixture(paths) -> None:

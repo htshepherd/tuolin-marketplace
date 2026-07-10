@@ -168,8 +168,12 @@ Use the project workflow instead of ad-hoc commands. The normal user-facing flow
 Knowledge base:
 
 1. 整理或更新知识库。
-2. 重建 Agent 读取接口。
+2. 系统必须自动重建并校验 Agent 读取接口，用户不需要另行操作。
 3. 检查知识卡状态和复核项。
+
+Every successful knowledge-base organization, update, or review write-back must force a verified Agent-interface refresh before completion is reported. If refresh or verification fails, the agent must report the operation as incomplete and must not allow downstream agents to consume the stale interface.
+
+每次知识库整理、更新或复核写回成功后，系统必须强制重建并校验 Agent 读取接口，确认本次写入的知识卡已进入新接口后才能报告完成。如果刷新或校验失败，必须明确报告未完成，不得让下游 Agent 继续读取历史接口。
 
 LinkedIn:
 

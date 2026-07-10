@@ -16,7 +16,39 @@ DEFAULT_ALLOWED_SCOPES = {"external_allowed", "internal_only", "evidence_only"}
 
 
 def rebuild_agent_interface(paths: ProjectPaths) -> dict[str, Any]:
-    return rebuild_generated_indexes(paths)
+    return refresh_agent_interface_after_write(paths, action="manual_rebuild")
+
+
+def refresh_agent_interface_after_write(
+    paths: ProjectPaths,
+    action: str,
+    expected_card_ids: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
+    summary = rebuild_generated_indexes(paths)
+    manifest = _read_json(paths.generated_dir / "agent-interface" / "manifest.json")
+    persisted_summary = _read_json(paths.generated_dir / "agent-interface" / "manifest_summary.json")
+    interface_revision = manifest.get("interface_revision")
+    if not interface_revision or persisted_summary.get("interface_revision") != interface_revision:
+        raise RuntimeError(f"Agent interface refresh verification failed after {action}: revision mismatch")
+
+    cards = _read_json(paths.generated_dir / "indexes" / "cards.json")
+    indexed_card_ids = {card.get("id") for card in cards}
+    expected = tuple(dict.fromkeys(expected_card_ids))
+    missing = [card_id for card_id in expected if card_id not in indexed_card_ids]
+    if missing:
+        raise RuntimeError(
+            f"Agent interface refresh verification failed after {action}: missing expected cards: {', '.join(missing)}"
+        )
+
+    verified_summary = dict(summary)
+    verified_summary["agent_interface_refresh"] = {
+        "verified": True,
+        "action": action,
+        "interface_revision": interface_revision,
+        "generated_at": manifest.get("generated_at"),
+        "verified_card_ids": list(expected),
+    }
+    return verified_summary
 
 
 def knowledge_status(paths: ProjectPaths) -> dict[str, Any]:

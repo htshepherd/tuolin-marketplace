@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .generated_index import rebuild_generated_indexes
+from .agent_interface import refresh_agent_interface_after_write
 from .navigation import refresh_navigation
 from .partitions import PARTITIONS
 from ..shared.project_layout import ProjectPaths
@@ -87,7 +87,11 @@ def organize_core_upstream(paths: ProjectPaths) -> CoreUpstreamResult:
 
     _write_last_run(paths, candidates, evidence_ids, candidate_ids, review_ids)
     refresh_navigation(paths, reason="organize_core_upstream")
-    generated_summary = rebuild_generated_indexes(paths)
+    generated_summary = refresh_agent_interface_after_write(
+        paths,
+        action="organize_core_upstream",
+        expected_card_ids=[*evidence_ids, *candidate_ids, *review_ids],
+    )
     return CoreUpstreamResult(
         preview_path=str(preview_path),
         candidate_count=len(candidates),

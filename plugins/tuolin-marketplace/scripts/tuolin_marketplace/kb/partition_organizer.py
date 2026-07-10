@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .generated_index import rebuild_generated_indexes
+from .agent_interface import refresh_agent_interface_after_write
 from .navigation import refresh_navigation
 from .partitions import PartitionDefinition, find_partition, mark_partition_organized
 from .product_organizer import OrganizeResult as ProductOrganizeResult
@@ -80,7 +80,11 @@ def _organize_domain_partition(paths: ProjectPaths, definition: PartitionDefinit
 
     mark_partition_organized(paths, definition)
     refresh_navigation(paths, reason="organize_partition")
-    generated_summary = rebuild_generated_indexes(paths)
+    generated_summary = refresh_agent_interface_after_write(
+        paths,
+        action="organize_partition",
+        expected_card_ids=[*cards, *evidence_cards, *review_cards],
+    )
     return PartitionOrganizeResult(
         partition_name=definition.name,
         partition_type=definition.partition_type,
@@ -101,7 +105,11 @@ def _organize_migration_buffer(paths: ProjectPaths, definition: PartitionDefinit
     report_path = _write_migration_report(paths, raw_files)
     mark_partition_organized(paths, definition)
     refresh_navigation(paths, reason="organize_manual_review_buffer")
-    generated_summary = rebuild_generated_indexes(paths)
+    generated_summary = refresh_agent_interface_after_write(
+        paths,
+        action="organize_manual_review_buffer",
+        expected_card_ids=review_cards,
+    )
     return PartitionOrganizeResult(
         partition_name=definition.name,
         partition_type=definition.partition_type,

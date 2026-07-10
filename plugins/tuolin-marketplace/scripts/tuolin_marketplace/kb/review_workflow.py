@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .card_validator import parse_frontmatter, validate_card_file
-from .generated_index import rebuild_generated_indexes
+from .agent_interface import refresh_agent_interface_after_write
 from .navigation import append_changelog_entry, refresh_navigation
 from .partitions import find_partition
 from ..shared.project_layout import ProjectPaths
@@ -146,7 +146,11 @@ def apply_review_decision(
     archived_review_path = _archive_review_item(review_path, review_frontmatter, decision, reviewer, confirmed_statement)
     changelog_path = _append_changelog(paths, review_id, decision, updated_cards, reviewer, confirmed_statement)
     refresh_navigation(paths, reason="apply_review")
-    generated_summary = rebuild_generated_indexes(paths)
+    generated_summary = refresh_agent_interface_after_write(
+        paths,
+        action="apply_review",
+        expected_card_ids=[*updated_cards, review_id],
+    )
     _write_review_report(paths, review_id, decision, updated_cards, archived_review_path, confirmed_statement)
     return ApplyReviewResult(
         review_id=review_id,

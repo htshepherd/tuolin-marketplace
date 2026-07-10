@@ -15,6 +15,7 @@ This skill is part of `tuolin-marketplace`. The marketplace may contain multiple
 - Treat “核心资料” as exactly `raw/00_知识库核心资料/`. No other folder is allowed to mean core materials.
 - Treat `knowledge/okf/` as the official knowledge layer. Human-confirmed card edits live here.
 - Treat `generated/` as rebuildable output. Do not ask humans to maintain it manually.
+- Every knowledge-layer organization, update, or review write-back must force a verified Agent-interface refresh before reporting completion. Verify the new interface revision and confirm every card written by the action is present in the rebuilt interface. If refresh or verification fails, report the action as incomplete and do not let downstream agents consume the stale interface.
 - Treat `config/tuolin-okf-profile/` as the card template profile. Initialize it automatically; ordinary users do not configure templates by hand.
 - Use Chinese business titles for card filenames, the `title` field, and user-visible summaries. English names belong in `id` or `aliases`, not as the main title.
 - Treat `knowledge/okf/首页.md` and `knowledge/okf/变更记录.md` as rebuildable navigation files, not fact sources.
@@ -180,6 +181,7 @@ Rules:
 - Do not fabricate official cards when materials are missing or incomplete.
 - Do not create free-form Markdown directly under `knowledge/okf/` as a completed knowledge result. Formal knowledge must be written as one of the ten card types.
 - Do not ask the user to request technical card checks. Validate and rebuild the generated interface before reporting that materials are organized.
+- Never tell the user to rebuild the Agent interface as a separate routine step. Successful write workflows perform and verify that refresh automatically.
 - Keep the main card title in Chinese. Put English product names, test names, platform names, and customer wording into `aliases`, evidence text, or source paths.
 - Do not broaden a product organization request by keyword search. Related sales, market, customer-service, core, or cached PDF materials must be handled by their own explicit flow.
 - If `首页.md` or `变更记录.md` cannot be patched because of old encoding, stale text, or merge mismatch, do not ask the user what to do. Back up the old navigation file under `generated/cache/navigation-backups/`, rebuild the navigation file, continue writing formal cards, then validate and refresh `generated/`.

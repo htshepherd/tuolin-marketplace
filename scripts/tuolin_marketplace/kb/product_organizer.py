@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .generated_index import rebuild_generated_indexes
+from .agent_interface import refresh_agent_interface_after_write
 from .navigation import refresh_navigation
 from .partitions import PartitionDefinition, find_partition, mark_partition_organized
 from ..shared.project_layout import ProjectPaths
@@ -78,7 +78,11 @@ def organize_product_partition(paths: ProjectPaths, partition_query: str) -> Org
 
     mark_partition_organized(paths, definition)
     refresh_navigation(paths, reason="organize_product")
-    generated_summary = rebuild_generated_indexes(paths)
+    generated_summary = refresh_agent_interface_after_write(
+        paths,
+        action="organize_product",
+        expected_card_ids=card_inventory["all_cards"],
+    )
     return OrganizeResult(
         partition_name=definition.name,
         product_card=product_id,
