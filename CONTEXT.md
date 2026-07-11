@@ -41,32 +41,48 @@ A formal review of uncertain knowledge-base facts before they can become approve
 _Avoid_: marketing plan review
 
 **Video Language Version**:
-A user-selected Chinese or English video-creation run whose product naming, planning language, prompts, and review copy use the selected language. Voiceover and subtitles are added outside the current video Agent.
+A user-selected Chinese or English video-creation run whose product naming and Dreamina prompts use the selected output language, while the Chinese operator may review the interview, plan summary, storyboard explanation, risks, and modification guidance in Chinese. Voiceover, subtitles, and background music are added outside the current video Agent.
 _Avoid_: base master, visual master, final master
 
-**Video Creative Direction**:
-A user-confirmed item from the complete fixed video-direction taxonomy that guides one video plan.
-_Avoid_: publishing image style, image style category
+**Video Creation Interview**:
+A one-question-at-a-time conversation that helps a non-professional user express the video's business goal, audience, desired viewer response, material preferences, and creative constraints before planning begins.
+_Avoid_: fixed creative-direction menu, director terminology, asking the user to design the storyboard
 
-**Recommended Video Creative Directions**:
-A ranked subset of the fixed video-direction taxonomy selected dynamically from the request, audience, platform, product knowledge, and available materials.
-_Avoid_: hiding the complete taxonomy, generating an unregistered direction
+**Confirmed Video Brief**:
+The complete set of user answers and accepted Agent recommendations produced by the **Video Creation Interview** and used as the direct input to the video plan.
+_Avoid_: fixed direction ID, hidden taxonomy, unconfirmed Agent assumptions
+
+**Interview Recommendation**:
+One concise, evidence-based recommended answer presented with each unresolved interview question so the user may accept it by replying “按推荐” or provide a different answer.
+_Avoid_: option overload, unexplained recommendation, unsupported creative assumption
+
+**Remaining Interview Delegation**:
+An explicit user instruction such as “剩下都按推荐” or “你来决定并直接出策划” that accepts all unresolved **Interview Recommendations** and authorizes immediate plan generation.
+_Avoid_: treating a short answer or one “按推荐” reply as blanket authorization
+
+**Core Video Brief Information**:
+The minimum business information that must be resolved before the **Video Creation Interview** can end: audience, intended takeaway, desired viewer action, priority product messages, preferred balance between product and application visuals, and excluded content.
+_Avoid_: fixed questionnaire order, director terminology, information already supplied by the user
+
+**Professional Video Decisions**:
+Shot count, timing, image assignment, camera movement, pacing, sequence, visual-generation mode, repetition control, and Dreamina prompt design owned by the Agent and reviewed later through the plan and storyboard.
+_Avoid_: asking a non-professional user to direct or edit the video during the interview
 
 **External Video Generation Skill Internalization**:
 The conversion of external Seedance/Dreamina skill methods into Tuolin-owned prompt, shot-validation, execution, and quality-gate rules.
 _Avoid_: copying external code, importing entertainment categories, bypassing knowledge-card facts
 
-**Creative Quality Matrix by Video Direction**:
-Direction-specific checks for hook, visual focus, message focus, and CTA behavior that change according to the selected fixed video creative direction.
-_Avoid_: one generic visual quality score, cinematic style overriding the selected direction
-
-**Industrial Product Video Style Matrix**:
-The internal mapping from Tuolin's fixed video creative directions to industrial B2B styles such as professional industrial, minimal product, technical explainer, application scene, and procurement decision.
-_Avoid_: Apple/Vercel consumer-product style labels as user-facing categories
+**Video Planning Quality Criteria**:
+Checks for hook, visual focus, message focus, material suitability, shot diversity, claim safety, and viewer action derived from the **Confirmed Video Brief** and formal product knowledge.
+_Avoid_: fixed creative-direction taxonomy, one generic cinematic score, unsupported creative assumptions
 
 **Industrial Visual Quality Gate**:
 The automated planning and Dreamina-job gate that checks industrial-product planning quality, real-image references, structured prompts, job validation, repeated image references, and shot-review readiness.
 _Avoid_: automatic creative approval, platform-restricted-word module detached from knowledge facts
+
+**Frame Continuity Upgrade**:
+A video-quality upgrade that improves shot-to-shot flow by planning stable reference frames, transition intent, and continuity checks before Dreamina generation.
+_Avoid_: audio automation, Jianying automation, treating "Hyperframes" as a confirmed installed provider
 
 **Quartz Fiber Tape Video Scope**:
 The initial video workflow scope covering product videos for the internally identified product 石英纤维隔热带.
@@ -92,9 +108,25 @@ _Avoid_: video_script, treating video creation as only narration writing
 One language-specific quartz-fiber-tape video production record stored under `generated/reports/video-creation/`.
 _Avoid_: formal knowledge, raw evidence archive
 
+**New Video Task**:
+A request to create another video deliverable, which always creates a new isolated **Video Creation Run** directory even when product, language, platform, or duration match a previous task.
+_Avoid_: reusing the latest run directory, mixing artifacts from separate videos
+
 **Visual Storyboard**:
 The user-confirmed shot list that shows each shot's visual intent, selected image reference, local image path, inline thumbnail, material role, and risk notes before any paid Dreamina generation.
 _Avoid_: text-only shot list, hidden image selection, confirming only after generation
+
+**Plan Representative Images**:
+Three to six available material images shown with the video-plan summary to communicate the proposed overall visual treatment before exact shot-to-image binding.
+_Avoid_: full material dump, pretending a representative image is already locked to a shot
+
+**Visually Inspected Candidate Image**:
+A formal content-asset image whose actual pixels have been reviewed for subject, scene, clarity, composition, aspect-ratio suitability, and visual duplication before it may appear in a plan or storyboard.
+_Avoid_: selecting by filename, title, tag, or path alone; treating visible appearance as performance evidence
+
+**Material-Supported Duration**:
+The longest coherent video duration that the inspected image set can support without unapproved repetition, fabricated product appearance, or filler shots.
+_Avoid_: forcing the requested duration when the available visuals cannot sustain it
 
 **Shot Image Override**:
 A user-provided local image path used to replace the selected image reference for a specific storyboard shot.
@@ -105,8 +137,12 @@ The final pre-submission plan that maps each confirmed storyboard shot to a Drea
 _Avoid_: paid submission, final edited video, audio/subtitle package
 
 **Shot Review**:
-The user review of generated Dreamina clips, including acceptance, deletion, or single-shot retry decisions before the run is marked complete.
-_Avoid_: final video editing review, music/subtitle review
+The user review of generated Dreamina clips for acceptance into the current video result or handoff to a separate improvement workflow.
+_Avoid_: returning to unconfirmed planning, editing the locked storyboard, treating improvement as part of initial creation
+
+**Video Result Improvement Workflow**:
+A future, out-of-scope post-generation workflow for improving an unsatisfactory generated clip or assembled video while preserving the completed initial creation run.
+_Avoid_: rewinding the initial planning state, silently replacing accepted generation records
 
 ## Relationships
 
@@ -132,31 +168,52 @@ _Avoid_: final video editing review, music/subtitle review
 - Every video production run must select exactly one **Video Language Version** before creative planning proceeds.
 - Chinese and English videos are first-class deliverables; neither is modeled as a derivative of a master.
 - A Chinese **Video Language Version** uses Chinese product naming, Chinese planning copy, and Chinese review text where applicable.
-- An English **Video Language Version** uses English product naming, English planning copy, and English review text where applicable.
+- An English **Video Language Version** uses the formal English product name and English Dreamina prompts, while the Codex interview and user-review summaries remain in Chinese for a Chinese operator.
+- Chinese interview terminology, creative notes, and review labels must not leak into English Dreamina prompts or target-language content.
 - One video production run produces only the **Video Language Version** confirmed by the user.
-- Every video production run must confirm one **Video Creative Direction** before the formal video plan is generated.
-- The 20 publishing image style categories do not define or constrain **Video Creative Directions**.
-- Creative-direction selection must show the complete fixed taxonomy and the **Recommended Video Creative Directions** together.
-- Recommendations help the user choose but never replace or hide the complete taxonomy.
-- The fixed video-direction taxonomy must be defined explicitly before implementation.
-- The initial fixed video-direction taxonomy applies only to **Quartz Fiber Tape Video Scope**.
-- Workshop-video directions and directions for other Tuolin products are outside the initial scope.
-- The initial quartz-fiber-tape taxonomy contains 16 fixed **Video Creative Directions**: product overview, single core benefit, multiple-benefit overview, product detail, application demonstration, customer pain-point solution, installation demonstration, usage precautions, technical education, performance test, FAQ, material comparison and selection, specification and customization, procurement guide, real case study, and inquiry conversion.
-- New directions may be added later when the fixed taxonomy is insufficient; existing direction identities must remain stable for prior video runs.
-- One video run must select exactly one primary **Video Creative Direction** and may select at most one supporting direction.
-- Dynamic recommendations should propose primary-and-supporting direction combinations while still showing the complete 16-direction taxonomy.
-- Creative-direction selection must show exactly three ranked recommendation combinations.
-- Each recommendation must state its primary direction, optional supporting direction, recommendation rationale, material coverage, missing materials, and AI-generation risk.
-- **External Video Generation Skill Internalization** is a bottom-layer enhancement of prompt writing, shot validation, execution reliability, references organization, continuity, and quality gates; it does not create new user-facing video direction categories.
+- Every video production run must complete a **Video Creation Interview** before the formal video plan is generated.
+- The **Video Creation Interview** replaces fixed creative-direction selection; the video workflow has no fixed direction taxonomy, primary direction, supporting direction, or ranked direction combinations.
+- Interview questions use ordinary business language and must not require the user to understand directing, shot design, or creative-category terminology.
+- The interview is adaptive rather than a fixed questionnaire: it extracts answers already present in the user's request and asks only for unresolved **Core Video Brief Information**.
+- Production cost versus visual richness is not required **Core Video Brief Information**. Record it only when the user raises it; otherwise the Agent uses available real images efficiently without adding a budget question.
+- Language, platform, duration, audience, or other information already supplied by the user must not be asked again.
+- The Agent inspects formal knowledge and available image materials itself; it does not ask the user to judge professional material sufficiency or shot feasibility.
+- The interview asks only for business intent that the user can reasonably judge; all **Professional Video Decisions** are made by the Agent after the brief is complete.
+- **Professional Video Decisions** must be visible in the plan or storyboard and remain revisable through natural-language feedback before paid generation.
+- The interview ends only when all **Core Video Brief Information** is resolved or the user explicitly accepts an Agent recommendation for an unresolved item.
+- Every unresolved question includes exactly one **Interview Recommendation** with a short reason based on the current request, formal knowledge, available images, platform, audience, and duration.
+- Users may answer freely or reply “按推荐”; accepting a recommendation records that recommendation as an explicit user-approved brief decision.
+- “按推荐” accepts only the current question; the Agent continues with the next unresolved item.
+- Only an explicit **Remaining Interview Delegation** may accept all unresolved recommendations and end the interview immediately.
+- Every delegated recommendation is still recorded in the **Confirmed Video Brief** and summarized in the generated plan.
+- Interview questions must not present a long menu of creative options or shift professional planning work back to the user.
+- Each user answer and accepted Agent recommendation becomes part of the **Confirmed Video Brief**.
+- Completing the interview does not create a separate brief-confirmation gate. The workflow automatically generates the video plan, and `确认策划` confirms both the interpreted brief and the proposed plan.
+- The complete interview decisions remain recorded in the run artifacts even though the user is not asked to confirm a separate interview-summary document.
+- There is one **Video Creation Interview** per run. After `确认策划`, the workflow generates the **Visual Storyboard** without starting a second storyboard interview.
+- Storyboard generation may ask a new question only when a required visual has no usable material or safe generation path, a requested claim conflicts with formal knowledge, or two materially different choices cannot be resolved from the **Confirmed Video Brief**.
+- The **Confirmed Video Brief**, formal product knowledge, and available image materials are the direct inputs to planning and storyboard generation.
+- Material metadata may narrow the candidate set, but every **Plan Representative Image** and storyboard reference must be a **Visually Inspected Candidate Image**.
+- Visual inspection classifies presentation use such as product roll, woven detail, wrapped pipe, installation, or test scene and checks clarity, composition, 9:16 suitability, and near-duplicate content.
+- If the pixels and card metadata disagree, the pixels control visual-use classification, but neither source may create a new product-performance fact.
+- Before generating the plan, the Agent compares the requested duration with the **Material-Supported Duration**.
+- When inspected images cannot support the requested duration, the Agent recommends a shorter duration in ordinary language instead of silently repeating similar images or fabricating the product.
+- A confirmed application may use an explicitly recorded AI-simulated environment or transition, but generated visuals must not masquerade as a real case or replace the required real-product reference.
+- Reusing the same or near-duplicate image as a deliberate treatment requires explicit user approval and remains visibly marked in the storyboard.
+- The Codex response for a generated plan must show a concise business-readable plan and three to six **Plan Representative Images**; the full plan is still written to the run Markdown and JSON artifacts.
+- **Plan Representative Images** communicate the overall visual approach but do not become confirmed shot assignments.
+- Returning only a plan or storyboard file path is not a sufficient user-facing result; the workflow step result must carry the concise review content and renderable run-local image references directly into the Codex conversation.
+- **External Video Generation Skill Internalization** is a bottom-layer enhancement of prompt writing, shot validation, execution reliability, references organization, continuity, and quality gates; it does not create a hidden creative taxonomy.
 - `dexhunter/seedance2-skill` is internalized as Seedance/Dreamina prompt grammar and structure, not as a business taxonomy source.
-- The **Creative Quality Matrix by Video Direction** must be selected from the confirmed primary **Video Creative Direction** and carried through plan, storyboard, prompt generation, Dreamina job planning, and quality gate.
-- The **Industrial Product Video Style Matrix** is selected internally from the confirmed directions; users still choose the fixed video creative directions rather than style labels.
-- The initial workflow order is: identify a quartz-fiber-tape video request; confirm the **Video Language Version**; collect platform, duration, audience, and core objective; show recommendations and all 16 directions; confirm the direction selection; generate the formal video plan; generate the **Visual Storyboard**; generate the **Dreamina Shot Plan**; hand off paid Dreamina submission; query results; then complete **Shot Review**.
-- A formal video plan must not be generated before both the language version and creative direction are confirmed.
-- After the user confirms a creative direction, the workflow may generate the formal video plan automatically; the user should not have to issue a separate "生成策划" command unless they explicitly want manual control.
+- The **Video Planning Quality Criteria** must be applied to the **Confirmed Video Brief** and carried through plan, storyboard, prompt generation, Dreamina job planning, and quality checks.
+- The current upgrade focuses on **Frame Continuity Upgrade** and intentionally does not add TTS, BGM, subtitle, or Jianying automation.
+- The term "Hyperframes" is treated as a possible implementation inspiration for frame continuity, not as a confirmed dependency, until a specific open-source/free project is selected.
+- The workflow order is: identify a quartz-fiber-tape video request; confirm the **Video Language Version** and known request facts; complete the **Video Creation Interview**; generate and confirm the formal video plan; generate and confirm the **Visual Storyboard**; generate the **Dreamina Shot Plan**; hand off paid Dreamina submission; query results; then complete **Shot Review**.
+- A formal video plan must not be generated before the **Video Creation Interview** produces a complete **Confirmed Video Brief**.
+- After the interview is complete, the workflow generates the formal video plan automatically; the user should not have to issue a separate "生成策划" command unless they explicitly want manual control.
 - After the user confirms the formal video plan, the workflow may generate the **Visual Storyboard** automatically; the user should not have to issue a separate "生成分镜" command unless they explicitly want manual control.
 - After the user confirms the **Visual Storyboard**, the workflow may generate the **Dreamina Shot Plan** automatically; the user should not have to issue a separate "规划即梦任务" command unless they explicitly wants manual control.
-- The user-facing video workflow keeps confirmation gates for creative direction, plan, visual storyboard, Dreamina paid generation, and shot review, but hides routine generation commands behind those confirmations.
+- The user-facing video workflow keeps confirmation gates for the plan, visual storyboard, Dreamina paid generation, and shot review, but has no separate creative-direction confirmation gate.
 - The initial workflow supports only 60-, 90-, and 120-second videos; 60 seconds is the default.
 - The initial workflow targets YouTube Shorts and TikTok only; standard horizontal YouTube videos and other platforms are outside the initial scope.
 - All initial YouTube Shorts and TikTok deliverables use a 9:16 vertical aspect ratio; the workflow does not maintain platform-specific framing variants.
@@ -169,8 +226,9 @@ _Avoid_: final video editing review, music/subtitle review
 - The LinkedIn consumer and **Video Creation Consumer** are separate application scenarios with separate workflows and outputs.
 - The **Video Creation Consumer** must read Chinese and English external product names from published knowledge cards instead of defining them itself.
 - The **Video Creation Consumer** uses **Video Creation Context** as its only task-specific knowledge entrypoint.
-- **Video Creation Context** supports the full workflow from creative direction through Dreamina shot generation and shot review.
+- **Video Creation Context** supports the full workflow from the **Video Creation Interview** through Dreamina shot generation and shot review.
 - **Video Workflow Entrypoint** is the only user-facing video skill.
+- The one-question-at-a-time interview method is owned by **Video Workflow Entrypoint** itself; users do not install or invoke a separate `grill-me` skill, and no second Agent owns the video run.
 - Dreamina submission is represented as a safe manual handoff when the Agent environment cannot perform paid external submission directly.
 - The user should not need to copy internal script parameters; when manual execution is required, the workflow provides a single PowerShell command.
 - The working Dreamina CLI submission, manual-submission JSON, resumable PowerShell handoff, result query, and download path are stable execution infrastructure; upstream workflow improvements must not casually modify this execution path.
@@ -178,9 +236,11 @@ _Avoid_: final video editing review, music/subtitle review
 - The initial **Video Creation Context** contains the quartz-fiber-tape product card and only the content-asset cards explicitly related to that product.
 - The initial video consumer does not expand retrieval through keyword search and does not read knowledge for other products.
 - Each **Video Creation Run** is stored at `generated/reports/video-creation/{timestamp}_quartz_fiber_tape_{zh|en}/`.
+- Every **New Video Task** creates its own timestamped **Video Creation Run** directory; plan, storyboard, prompts, Dreamina records, generated clips, and assembly files from separate tasks must never be mixed.
+- Test-stage runs created before the **Video Creation Interview** change do not require migration; validation starts with a new conversation and a new run.
 - A **Video Creation Run** is an application-layer deliverable and must not be written into the formal knowledge layer or raw archive.
 - A **Video Creation Run** retains requirements and direction decisions, plan, visual storyboard, prompts, Dreamina shot plan, manual submission records, generated shot files, shot-review state, workflow state, and change log.
-- Video creation run directories support audit and partial regeneration and must not be treated as disposable indexes merely because they live under `generated/reports/`.
+- Video creation run directories support audit and exact task continuation and must not be treated as disposable indexes merely because they live under `generated/reports/`.
 - Video creation requires the knowledge base to be organized and its Agent interface to be available before a run starts.
 - The initial workflow does not monitor or switch knowledge revisions during an active run.
 - If the quartz-fiber-tape knowledge or Agent interface is unavailable, the video consumer stops and routes the user to organize the product through the knowledge producer first.
@@ -195,31 +255,33 @@ _Avoid_: final video editing review, music/subtitle review
 - A lower-priority material mode is used only when higher-priority modes cannot satisfy the shot.
 - Any generated shot that visibly contains the product must use real product or real application imagery as an image-to-video visual reference.
 - A **Visual Storyboard** must show each selected image as an inline thumbnail or preview, not only as a local path or content-asset ID.
+- The Codex response for a generated **Visual Storyboard** must show every shot's number, time range, purpose, visual action, exact reference image, and original source path in concise user-facing language.
+- Repeated image references must be marked directly in the Codex storyboard response before the user confirms the storyboard.
 - A **Visual Storyboard** should copy each selected reference image into the run directory, render that run-local copy as a Markdown image preview, and still display the original absolute source path for traceability.
 - Run-local storyboard image previews improve review reliability for Windows paths, Chinese filenames, spaces, and Markdown renderers without changing the stable Dreamina CLI submission path.
 - A **Visual Storyboard** must make repeated image references visible before paid Dreamina submission.
 - Accidental repeated image references across multiple paid Dreamina shots should block confirmation unless the user explicitly approves the repetition as a deliberate visual choice.
 - Users may revise the **Visual Storyboard** with natural language, including deleting shots, shortening the shot list, changing shot order, or replacing a specific shot's image.
 - A **Shot Image Override** may use a local image path supplied directly in the Codex conversation, but it only changes the visual reference for that shot; it does not create or approve new product facts.
-- When a user supplies a **Shot Image Override**, the workflow should validate that the file exists, is an image type supported by Dreamina, and does not introduce clear-face or unsupported-claim risk before regenerating prompts or the **Dreamina Shot Plan**.
-- Before storyboard confirmation, users may freely replace shot images, delete shots, reorder shots, or revise shot intent; the workflow regenerates storyboard-dependent prompts and Dreamina jobs without credit risk.
-- After Dreamina generation confirmation, storyboard image replacement is not a direct edit. If no real submission happened, the workflow must explicitly roll back to storyboard review; if real submission happened, changes must use the single-shot retry flow so accepted submit IDs and downloaded results remain stable.
+- When a user supplies a **Shot Image Override** before storyboard confirmation, the workflow should validate that the file exists, is an image type supported by Dreamina, and does not introduce clear-face or unsupported-claim risk before updating the storyboard and prompts.
+- Before storyboard confirmation, users may freely replace shot images, delete shots, reorder shots, or revise shot intent; no **Dreamina Shot Plan** exists yet.
+- Confirming the **Visual Storyboard** locks its shot structure and image assignments, then creates the **Dreamina Shot Plan** for separate confirmation and submission.
+- After real generation, dissatisfaction does not reopen the initial planning or storyboard flow; it enters a **Video Result Improvement Workflow**.
 - Text-only video generation is allowed only for environmental or transitional shots that do not depict the specific product.
 - Dreamina generation defaults to `seedance2.0_vip` at 1080P because the operating account has premium access.
 - Dreamina clips use 9:16 1080 by 1920 pixels unless the user explicitly chooses another supported configuration.
 - **Dreamina Shot Plan** review displays estimated credit use before paid submission.
 - Generated shots default to five seconds, may range from four to fifteen seconds, and should normally remain within four to eight seconds for short-form pacing.
 - A 60-second run should plan roughly twelve five-second shots unless the user deletes or merges shots.
-- If the user deletes shots, the workflow should show the new estimated total duration before regenerating the **Dreamina Shot Plan**.
+- If the user deletes shots before storyboard confirmation, the workflow should show the new estimated total duration before the storyboard can be confirmed.
 - Users may intentionally shorten a video below the original duration target by deleting shots. If the new duration materially deviates from the original target, the workflow must surface the new estimated duration and ask whether to accept the shorter target or add replacement shots before paid generation.
-- Inquiry-conversion videos require a call to action; other creative directions may use a light call to action when appropriate.
+- When the **Confirmed Video Brief** requires a viewer action, the plan must include a matching call to action; otherwise the Agent may propose a light call to action for the user to confirm.
 - Call-to-action details must come from formal knowledge or project configuration and must not be hard-coded in the video skills.
 - Before submission, the user reviews job type, selected image, image thumbnail, duration, and estimated credit use.
 - Paid visual-generation jobs are submitted only after the user says `确认即梦生成`.
-- Failed or unsatisfactory Dreamina shots may be regenerated individually without resubmitting accepted shots.
-- Before a shot-level retry, the workflow shows that shot's estimated credit use and waits for explicit authorization such as `重做镜头 03`.
 - After all visual jobs finish, the workflow records the generated shot results for **Shot Review**.
-- The user may request shot-level deletion, replacement, or regeneration from **Shot Review**.
+- The user may accept the generated result or request a separate **Video Result Improvement Workflow** from **Shot Review**.
+- **Video Result Improvement Workflow** is not implemented in the current release. If the user rejects generated quality, the current workflow records the result as not accepted and stops without changing the original run.
 - The command `确认镜头` locks the accepted Dreamina clips and marks the video-creation run complete.
 - Audio, subtitles, BGM, logos, final editing, publishing titles, post copy, descriptions, and hashtags are outside the current video Agent and belong to manual editing or later publishing workflows.
 - A **Video Creation Run** persists its current workflow phase and confirmations in `workflow_state.json`.
@@ -270,23 +332,29 @@ _Avoid_: final video editing review, music/subtitle review
 > **Dev:** "Should the video workflow create a master before choosing a language?"
 > **Domain expert:** "No. Ask the user to choose the Chinese or English **Video Language Version** first. The current Agent generates Dreamina video shots for that version; voiceover and subtitles are outside this Agent."
 >
-> **Dev:** "Should we offer the 20 LinkedIn image styles as video categories?"
-> **Domain expert:** "No. Those belong to publishing images. Recommend and confirm a separate **Video Creative Direction** before video planning."
+> **Dev:** "Should we ask the user to choose from fixed video categories before planning?"
+> **Domain expert:** "No. Complete a **Video Creation Interview** in ordinary business language and use the resulting **Confirmed Video Brief** directly."
 >
-> **Dev:** "Can the workflow show only the three directions it recommends?"
-> **Domain expert:** "No. Show the complete fixed taxonomy and clearly mark the dynamically recommended options within it."
+> **Dev:** "Can the Agent keep the old 16 directions as a hidden internal taxonomy?"
+> **Domain expert:** "No. Remove the fixed taxonomy completely; it is neither necessary nor accurate for real users."
 >
-> **Dev:** "How many fixed creative directions does the first quartz-fiber-tape workflow expose?"
-> **Domain expert:** "Expose all 16 confirmed directions. Add new ones later only when the existing taxonomy cannot express a required video."
+> **Dev:** "Should every video user answer the same questionnaire?"
+> **Domain expert:** "No. Extract what the user already said, then ask one question at a time until all **Core Video Brief Information** is resolved."
 >
-> **Dev:** "Can one video combine several equal creative directions?"
-> **Domain expert:** "No. Confirm one primary direction and optionally one supporting direction so the narrative remains focused."
+> **Dev:** "What if the user does not know how to answer a creative question?"
+> **Domain expert:** "Give one justified **Interview Recommendation** and let the user reply ‘按推荐’."
 >
-> **Dev:** "How many dynamic direction recommendations should the user see?"
-> **Domain expert:** "Show three ranked combinations with rationale, material coverage, missing materials, and AI-generation risk, alongside all 16 fixed directions."
+> **Dev:** "Should the user confirm the interview summary before planning?"
+> **Domain expert:** "No. Generate the plan when the brief is complete, then let `确认策划` confirm the interpreted brief and plan together."
 >
-> **Dev:** "Should creative direction be chosen before the video language?"
-> **Domain expert:** "No. Confirm language first because it affects product naming, audience expression, prompts, and direction recommendations."
+> **Dev:** "Do we run another interview before generating the storyboard?"
+> **Domain expert:** "No. Generate it after plan confirmation and ask only when a real material, knowledge, or unresolved-choice blocker appears."
+>
+> **Dev:** "Does one ‘按推荐’ authorize every remaining decision?"
+> **Domain expert:** "No. It accepts the current recommendation only; blanket delegation requires explicit wording such as ‘剩下都按推荐’."
+>
+> **Dev:** "Should the interview ask the user how many shots to use or which camera move to choose?"
+> **Domain expert:** "No. Those are **Professional Video Decisions** owned by the Agent and reviewed later in the plan and storyboard."
 >
 > **Dev:** "Can the initial workflow accept an arbitrary video duration?"
 > **Domain expert:** "No. Offer a controlled set of short-video durations: 15, 20, 30, 45, 60, 90, or 120 seconds, defaulting to 60 seconds."
@@ -331,7 +399,7 @@ _Avoid_: final video editing review, music/subtitle review
 > **Domain expert:** "No. Store them with application-layer reports under `generated/reports/video-creation/`."
 >
 > **Dev:** "Can a completed video run discard intermediate files?"
-> **Domain expert:** "No. Retain the decision records and generated assets needed for audit and shot-level regeneration."
+> **Domain expert:** "No. Retain the interview decisions, plan, storyboard, generation records, and generated assets needed for audit."
 >
 > **Dev:** "Should an active video run handle knowledge changes automatically?"
 > **Domain expert:** "No. Organize the knowledge base before starting video creation; mid-run knowledge revision handling is outside the initial scope."
@@ -361,10 +429,10 @@ _Avoid_: final video editing review, music/subtitle review
 > **Domain expert:** "No. Five seconds is the default; use four to fifteen seconds as needed, normally staying within four to eight seconds."
 >
 > **Dev:** "Can a 60-second run become shorter if the user deletes shots?"
-> **Domain expert:** "Yes, but show the new estimated total duration before regenerating the **Dreamina Shot Plan**."
+> **Domain expert:** "Yes, but show the new estimated total duration before the storyboard is confirmed and before any **Dreamina Shot Plan** exists."
 >
 > **Dev:** "Must every video end with an inquiry request?"
-> **Domain expert:** "No. Require it for inquiry-conversion videos and use it selectively elsewhere, with details sourced from knowledge or configuration."
+> **Domain expert:** "No. Follow the desired viewer action in the **Confirmed Video Brief** and source any call-to-action details from knowledge or configuration."
 >
 > **Dev:** "Can the user confirm a storyboard if it only lists local paths?"
 > **Domain expert:** "No. The **Visual Storyboard** must show inline image previews for each selected shot image."
@@ -376,13 +444,13 @@ _Avoid_: final video editing review, music/subtitle review
 > **Domain expert:** "No. Repeated image references must be visible and should block confirmation unless the user explicitly approves the repetition."
 >
 > **Dev:** "Can the user replace a shot image from the Codex conversation?"
-> **Domain expert:** "Yes. They can provide a local image path as a **Shot Image Override** for a specific shot; validate the file before regenerating prompts or the **Dreamina Shot Plan**."
+> **Domain expert:** "Yes. Before storyboard confirmation, they can provide a local image path as a **Shot Image Override**; validate it before updating the storyboard and prompts."
 >
 > **Dev:** "Can the user freely replace shot images after confirming Dreamina generation?"
-> **Domain expert:** "No. Before storyboard confirmation, replacement is a normal storyboard revision. After Dreamina generation confirmation, either roll back explicitly if nothing was submitted, or use the single-shot retry flow if real submit IDs already exist."
+> **Domain expert:** "No. Replacement belongs before storyboard confirmation. After real generation, the initial run remains locked; post-generation improvement is outside the current release."
 >
 > **Dev:** "Can the user delete storyboard shots with natural language?"
-> **Domain expert:** "Yes. Deleting or shortening shots is allowed before paid submission; show the revised duration and regenerate downstream prompts and Dreamina jobs."
+> **Domain expert:** "Yes. Before storyboard confirmation, update the storyboard and prompts and show the revised duration; the Dreamina task plan is created only after confirmation."
 >
 > **Dev:** "Can a 60-second request become a 30-second video after shot deletion?"
 > **Domain expert:** "Yes, if the user confirms the new shorter target. Do not silently treat a materially shorter video as still satisfying the original 60-second request."
@@ -393,11 +461,11 @@ _Avoid_: final video editing review, music/subtitle review
 > **Dev:** "Should users have to say `生成策划`, `生成分镜`, or `规划即梦任务` during normal operation?"
 > **Domain expert:** "No. After each confirmation, the workflow should generate the next artifact automatically and stop only at the next meaningful confirmation gate."
 >
-> **Dev:** "Does one bad generated shot require regenerating the whole video?"
-> **Domain expert:** "No. Authorize and regenerate only that shot while preserving accepted shots."
+> **Dev:** "What happens when the user dislikes a generated result?"
+> **Domain expert:** "Record it as not accepted and stop. A separate **Video Result Improvement Workflow** is outside the current release."
 >
 > **Dev:** "Should audio, subtitles, BGM, logos, and final editing happen inside this Agent?"
-> **Domain expert:** "No. The current Agent stops after Dreamina shot generation and **Shot Review**; final editing is manual or owned by a later workflow."
+> **Domain expert:** "No. The current Agent assembles the confirmed visual clips and produces editing handoff files; audio, subtitles, BGM, logos, and final editing remain manual or owned by a later workflow."
 >
 > **Dev:** "Can technically valid Dreamina clips automatically complete the workflow?"
 > **Domain expert:** "No. The user must review the generated shots and say `确认镜头`."
@@ -405,10 +473,22 @@ _Avoid_: final video editing review, music/subtitle review
 > **Dev:** "Should an interrupted video run restart from requirement collection?"
 > **Domain expert:** "No. Restore `workflow_state.json` and continue from the current pending confirmation."
 
+> **Dev:** "Can image filenames and tags alone determine which materials appear in the plan?"
+> **Domain expert:** "No. Codex must actually open every shortlisted image and record subject, clarity, composition, vertical-crop suitability, and near-duplicates before showing the plan. This is an internal Agent checkpoint, not a user task."
+
+> **Dev:** "What if the inspected distinct images cannot support the requested duration?"
+> **Domain expert:** "Block plan confirmation until the user either shortens the target duration or explicitly approves deliberate image repetition. Only visually accepted images may enter the storyboard."
+
+> **Dev:** "Is recording a natural-language plan or storyboard modification request enough?"
+> **Domain expert:** "No. Codex must apply an actual controlled change to allowed artifact fields and show the revised result. Product identity, knowledge boundaries, format, source assets, and confirmation gates remain protected."
+
+> **Dev:** "What state should a rejected generated result leave behind?"
+> **Domain expert:** "Write a result-acceptance record, mark the run stopped, and direct the user to create a new task. Do not silently rewind or resubmit the confirmed storyboard."
+
 ## Flagged Ambiguities
 
 - "审阅" was used for both marketing campaign quality review and knowledge-base fact review. Resolved: use **Marketing Plan Review** for LinkedIn campaign planning and **Knowledge Review** for formal knowledge-base review items.
 - “母版” previously referred inconsistently to silent and narrated outputs. Resolved: remove the term and use **Video Language Version**.
-- “创意类型” was initially illustrated with the 20 publishing image styles. Resolved: video uses the separate term **Video Creative Direction**.
+- “创意方向” was previously modeled as 16 fixed categories with primary and supporting selections. Resolved: remove that taxonomy and use a **Video Creation Interview** to produce a **Confirmed Video Brief**.
 - Product external names were considered as video-workflow constants. Resolved: they are knowledge owned by the **Knowledge Producer**, not by the video consumer.
 - `video_script` was initially retained as the video task-context name. Resolved: rename it to `video_creation` to match the complete production responsibility.

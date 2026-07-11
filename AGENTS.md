@@ -39,7 +39,7 @@ Tuolinagent 是一个项目多个 agent。不同任务应使用对应 agent：
 - `$tuolin-kb`：整理、检查、更新本地知识库。
 - `$tuolin-linkedin`：生成和管理 LinkedIn 发帖计划。
 - `$tuolin-linkedin-image-style`：生成单日 LinkedIn 配图。
-- `$tuolin-video-workflow`：视频创作策划、创意方向、可视化分镜、即梦任务计划和交接文件。
+- `$tuolin-video-workflow`：视频创作访谈、策划、可视化分镜、即梦任务计划和交接文件。
 - `$tuolin-video-publisher`：发布本地已确认的视频和相关文案。
 
 不要让一个 agent 承担不属于它的任务。例如：不要让视频 agent 直接整理原始知识库；应先用知识库 agent 整理知识，再让视频 agent 消费已整理结果。
@@ -52,15 +52,13 @@ For multi-step workflows, confirm each key stage before the agent continues. The
 
 Typical video confirmations:
 
-1. 确认语言版本：中文版或英文版。
-2. 确认平台：YouTube Shorts、TikTok 等。
-3. 确认视频创意方向。
-4. 确认策划。
-5. 确认分镜。
-6. 确认即梦任务计划。
-7. 确认是否真实提交即梦。
-8. 确认镜头结果。
-9. 合并镜头视频并生成剪辑字幕稿。
+1. 通过逐题访谈补齐受众、核心认知、观看后动作、优先信息、画面比例和排除内容。
+2. 确认策划及其 3–6 张代表图片。
+3. 确认逐镜头分镜和每个镜头的参考图片。
+4. 确认即梦任务计划。
+5. 确认是否真实提交即梦。
+6. 确认镜头结果。
+7. 合并镜头视频并生成剪辑参考稿。
 
 ## 5. Use AI For Creative And Judgment Work
 
@@ -140,7 +138,9 @@ For video creation, the agent must not skip:
 - 目标受众；
 - 平台；
 - 语言版本；
-- 视频创意方向；
+- 希望观众记住的信息；
+- 希望观众采取的行动；
+- 优先产品信息、画面比例和排除内容；
 - 产品知识来源；
 - 素材使用边界；
 - 是否需要人工复核。
@@ -185,15 +185,30 @@ LinkedIn:
 Video creation:
 
 1. 创建视频需求。
-2. 选择语言版本。
-3. 选择平台。
-4. 选择视频创意方向。
-5. 生成并确认策划。
-6. 生成并确认分镜。
-7. 生成即梦任务计划。
-8. 人工确认真实提交。
-9. 查询结果并确认镜头。
-10. 合并镜头视频并生成剪辑字幕稿。
+2. 系统创建独立运行目录，并只追问尚未明确的核心业务问题。
+3. 核心信息完整后自动生成策划，在 Codex 对话中显示简要方案和 3–6 张代表图片。
+4. 确认策划后自动生成分镜，在 Codex 对话中逐镜头显示时间、用途、动作、原图路径和图片。
+5. 确认分镜前可自然语言删减、重排、修改镜头或替换图片。
+6. 确认分镜后首次生成即梦任务计划。
+7. 人工确认真实提交。
+8. 查询结果并确认镜头。
+9. 合并镜头视频并生成剪辑参考稿。
+
+Before a plan is shown, Codex must internally open and inspect every candidate image for subject, clarity, composition, vertical crop, and near-duplicates. The user must not be asked to edit inspection JSON or run inspection scripts. If distinct usable images do not support the requested duration, plan confirmation is blocked until the user shortens the video or explicitly approves deliberate repetition.
+
+策划展示前，Codex 必须在内部逐张打开候选图片，检查主体、清晰度、构图、竖屏裁切和近重复。不得要求用户编辑检查 JSON 或运行检查脚本。如果不重复可用图片不足以支撑目标时长，必须阻止确认策划，直到用户缩短视频或明确批准有意重复图片。
+
+Natural-language semantic revisions must change the actual allowed plan or storyboard fields before the revised result is shown. Logging a request without changing the artifact is not completion. Product identity, knowledge boundaries, source assets, format, and confirmation gates remain protected.
+
+自然语言语义修改必须真正写入允许修改的策划或分镜字段，再展示修改结果。只记录修改要求而不改变成果文件，不算完成。产品身份、知识边界、来源素材、格式和确认门禁不得被语义修改绕过。
+
+Do not ask users to choose from fixed creative-direction categories. Ask one business question at a time, provide exactly one recommended answer with a reason, and accept `按推荐` only for the current question. Accept all remaining recommendations only after an explicit reply such as `剩下都按推荐` or `你来决定并直接出策划`.
+
+不要要求用户从固定创意方向分类中选择。每次只问一个业务问题，并给出一个带理由的推荐答案。`按推荐` 只接受当前问题；只有用户明确回复 `剩下都按推荐` 或 `你来决定并直接出策划` 时，才能采用全部剩余建议。
+
+The video-result improvement workflow is not implemented in the current release. If generated shots are not accepted, record that outcome and start a new video task instead of silently rewinding or resubmitting the confirmed storyboard.
+
+本期不实现视频生成结果改进流程。若生成镜头不满意，应记录未接受并新建视频任务，不得静默回退或重新提交已经确认的分镜。
 
 ## 12. Fail Loudly And Keep Human Control
 

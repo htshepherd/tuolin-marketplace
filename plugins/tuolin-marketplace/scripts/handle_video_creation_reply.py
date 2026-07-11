@@ -14,9 +14,9 @@ def main() -> int:
     parser.add_argument(
         "reply",
         help=(
-            "Natural-language reply, such as 生成分镜, 确认策划, 声音选 2, "
-            "确认即梦生成, 重做镜头 03, 提交重做镜头 03, 查询重做镜头 03, "
-            "修改策划, 修改分镜, 修改镜头03, 人工音视频检查通过, or 更换背景音乐."
+            "Natural-language reply, such as 按推荐, 剩下都按推荐, 确认策划, "
+            "修改策划, 确认分镜, 删除镜头 03, 镜头 04 图片换成 E:/path/image.jpg, "
+            "确认即梦生成, 提交即梦任务, 查询即梦结果, 确认镜头, or 合并视频."
         ),
     )
     parser.add_argument("--timestamp", help="Optional YYYYMMDD_HHMMSS timestamp for deterministic tests.")

@@ -13,12 +13,13 @@ from pathlib import Path
 from scripts.tuolin_marketplace.agent_interface import rebuild_agent_interface
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
 from scripts.tuolin_marketplace.video_creation_agent import (
-    VIDEO_CREATIVE_DIRECTIONS,
     assemble_final_preview,
+    apply_storyboard_semantic_revision,
+    apply_video_plan_semantic_revision,
+    approve_plan_material_repetition,
     confirm_narration,
     confirm_dreamina_generation,
     confirm_final_video,
-    confirm_creative_direction,
     confirm_narration_script,
     confirm_shot_retry,
     confirm_shots,
@@ -26,11 +27,12 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     confirm_storyboard,
     confirm_video_plan,
     create_video_creation_run,
+    continue_video_creation_interview,
     generate_full_narration,
     generate_dreamina_jobs,
     generate_narration_script,
     generate_storyboard,
-    generate_video_plan,
+    generate_video_plan as _generate_video_plan,
     generate_voice_samples,
     handle_video_creation_reply,
     inspect_video_creation_adapters,
@@ -38,6 +40,8 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     plan_shot_retry,
     query_dreamina_results,
     query_shot_retry_results,
+    record_material_visual_inspection,
+    record_video_results_not_accepted,
     record_manual_quality_check,
     resume_video_creation_run,
     revise_storyboard,
@@ -48,8 +52,51 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     select_voice,
     submit_dreamina_jobs,
     submit_shot_retry,
+    shorten_video_plan_duration,
     validate_video_creation_project,
 )
+
+
+def _material_assessments(run_dir: Path, *, usable_limit: int | None = None) -> list[dict[str, object]]:
+    inspection = json.loads((run_dir / "material_visual_inspection.json").read_text(encoding="utf-8"))
+    assessments = []
+    for index, candidate in enumerate(inspection.get("candidates", []), start=1):
+        assessments.append(
+            {
+                "material_id": candidate["material_id"],
+                "subject": "产品或应用主体清晰",
+                "clarity": "清晰可用",
+                "composition": "主体构图可用于镜头",
+                "vertical_crop": "可安全裁切为 9:16",
+                "near_duplicate_of": "",
+                "usable": usable_limit is None or index <= usable_limit,
+                "notes": "测试视觉检查记录",
+                "rank": index,
+            }
+        )
+    return assessments
+
+
+def _complete_material_visual_inspection(
+    run_dir: Path,
+    *,
+    usable_limit: int | None = None,
+    approve_shortage: bool = True,
+):
+    result = record_material_visual_inspection(
+        run_dir,
+        _material_assessments(run_dir, usable_limit=usable_limit),
+        now=datetime(2026, 6, 25, 15, 1, 0),
+    )
+    plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
+    if approve_shortage and plan.get("material_supported_duration", {}).get("status") != "supported":
+        approve_plan_material_repetition(run_dir, "测试夹具明确批准素材重复")
+    return result
+
+
+def generate_video_plan(run_dir: Path, *args, **kwargs):
+    _generate_video_plan(run_dir, *args, **kwargs)
+    return _complete_material_visual_inspection(run_dir)
 
 
 class VideoCreationAgentTests(unittest.TestCase):
@@ -85,8 +132,6 @@ class VideoCreationAgentTests(unittest.TestCase):
                 duration_seconds=60,
                 target_audience="欧美工业采购商",
                 core_objective="突出耐高温、隔热、不刺痒和不冒烟",
-                primary_direction="3",
-                supporting_direction="产品细节型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
 
@@ -101,17 +146,14 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertFalse((run_dir / "subtitles").exists())
 
             requirements = (run_dir / "requirements.md").read_text(encoding="utf-8")
-            self.assertIn("## 动态推荐", requirements)
-            self.assertIn("## 固定视频创意方向全集", requirements)
-            self.assertEqual(requirements.count("### 推荐 "), 3)
-            self.assertEqual(requirements.count("**"), len(VIDEO_CREATIVE_DIRECTIONS) * 2)
-            self.assertIn("多卖点概览型", requirements)
-            self.assertIn("产品细节型", requirements)
+            self.assertIn("## 视频创作访谈", requirements)
+            self.assertNotIn("固定视频创意方向", requirements)
+            self.assertNotIn("主创意方向", requirements)
             self.assertIn("不得包含 `master`", requirements)
 
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(result.status, "requirements_confirmed")
-            self.assertEqual(state["phase"], "ready_for_video_plan")
+            self.assertEqual(result.status, "video_interview_in_progress")
+            self.assertEqual(state["phase"], "awaiting_video_creation_interview")
             self.assertEqual(state["language_version"], "en")
             self.assertEqual(state["platforms"], ["youtube_shorts", "tiktok"])
             self.assertEqual(state["duration_seconds"], 60)
@@ -120,8 +162,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertNotIn("voice", state["confirmations"])
             self.assertNotIn("narration", state["confirmations"])
             self.assertNotIn("final_video", state["confirmations"])
-            self.assertEqual(state["creative_direction"]["primary"]["id"], "multiple_benefit_overview")
-            self.assertEqual(state["creative_direction"]["supporting"]["id"], "product_detail")
+            self.assertEqual(state["video_brief"]["audience"], "欧美工业采购商")
+            self.assertEqual(state["video_brief"]["intended_takeaway"], "突出耐高温、隔热、不刺痒和不冒烟")
+            self.assertFalse(state["confirmations"]["video_brief"])
             self.assertEqual(state["context"]["task_type"], "video_creation")
             self.assertFalse(state["context"]["raw_access"])
             self.assertTrue(state["context"]["policy"]["no_keyword_expansion"])
@@ -156,11 +199,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                         duration_seconds=duration,
                         target_audience="欧美工业采购商",
                         core_objective="短视频快速展示产品价值",
-                        primary_direction="采购指南型",
-                        supporting_direction="产品细节型",
                         now=datetime(2026, 6, 25, 14, 30, 5),
                     )
                     run_dir = Path(result.run_dir)
+                    _complete_video_interview(run_dir)
                     state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
                     self.assertEqual(state["duration_seconds"], duration)
 
@@ -191,11 +233,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 duration_seconds=60,
                 target_audience="欧美工业采购商",
                 core_objective="突出隔热、易施工和采购判断",
-                primary_direction="3",
-                supporting_direction="产品细节型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["context"]["product_id"], "product/quartz_fiber_exhaust_wrap")
             self.assertEqual(state["context"]["canonical_product_id"], "product/quartz_fiber_tape")
@@ -227,11 +268,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 duration_seconds=15,
                 target_audience="欧美工业采购商",
                 core_objective="突出隔热防护价值并引导询盘",
-                primary_direction="性能测试型",
-                supporting_direction="应用演示型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["context"]["product_id"], "product/quartz_fiber_tape")
 
@@ -260,11 +300,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 duration_seconds=15,
                 target_audience="欧美工业采购商",
                 core_objective="快速展示隔热、易施工和采购判断",
-                primary_direction="客户痛点解决型",
-                supporting_direction="应用演示型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
 
             generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
 
@@ -278,7 +317,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("证据知识卡：石英纤维隔热带关键参数", plan_text)
             self.assertNotIn("关键参数需要从检测报告", plan_text)
 
-    def test_video_creation_run_requires_user_creative_direction_confirmation_before_plan(self) -> None:
+    def test_video_creation_run_requires_core_interview_before_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             initialize_project(paths)
@@ -296,30 +335,24 @@ class VideoCreationAgentTests(unittest.TestCase):
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
-            self.assertEqual(result.status, "creative_direction_selection_ready")
+            self.assertEqual(result.status, "video_interview_in_progress")
             requirements = (run_dir / "requirements.md").read_text(encoding="utf-8")
-            self.assertIn("主创意方向：待用户确认", requirements)
-            self.assertIn("## 固定视频创意方向全集", requirements)
-            self.assertIn("## 动态推荐", requirements)
-            with self.assertRaisesRegex(ValueError, "创意方向尚未确认|当前阶段"):
+            self.assertIn("## 视频创作访谈", requirements)
+            self.assertNotIn("固定视频创意方向", requirements)
+            with self.assertRaisesRegex(ValueError, "核心信息尚未完整|当前阶段"):
                 generate_video_plan(run_dir)
 
-            confirmed = confirm_creative_direction(
-                run_dir,
-                primary_direction="采购指南型",
-                supporting_direction="产品细节型",
-                now=datetime(2026, 6, 25, 14, 35, 0),
-            )
-            self.assertEqual(confirmed.status, "requirements_confirmed")
+            confirmed = continue_video_creation_interview(run_dir, "剩下都按推荐", now=datetime(2026, 6, 25, 14, 35, 0))
+            self.assertEqual(confirmed.status, "video_brief_confirmed")
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state["confirmations"]["creative_direction"])
-            self.assertEqual(state["creative_direction"]["primary"]["id"], "procurement_guide")
-            self.assertEqual(state["creative_direction"]["supporting"]["id"], "product_detail")
+            self.assertTrue(state["confirmations"]["video_brief"])
+            self.assertEqual(state["video_brief"]["audience"], "欧美工业采购商")
+            self.assertIn("应用场景", state["video_brief"]["visual_balance"])
 
             plan_result = generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
             self.assertEqual(plan_result.status, "video_plan_ready")
 
-    def test_video_creation_reply_can_confirm_creative_direction(self) -> None:
+    def test_video_creation_reply_can_delegate_remaining_interview_and_auto_generate_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             initialize_project(paths)
@@ -337,16 +370,105 @@ class VideoCreationAgentTests(unittest.TestCase):
             run_dir = Path(result.run_dir)
             reply_result = handle_video_creation_reply(
                 run_dir,
-                "主方向：采购指南型，辅助方向：产品细节型",
+                "你来决定并直接出策划",
                 now=datetime(2026, 6, 25, 14, 35, 0),
             )
 
+            self.assertEqual(reply_result.status, "material_visual_inspection_required")
+            self.assertEqual(reply_result.phase, "awaiting_material_visual_inspection")
+            reply_result = _complete_material_visual_inspection(run_dir)
             self.assertEqual(reply_result.status, "video_plan_ready")
-            self.assertEqual(reply_result.phase, "awaiting_video_plan_confirmation")
             self.assertTrue((run_dir / "video_plan.md").exists())
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["creative_direction"]["primary"]["id"], "procurement_guide")
+            self.assertTrue(state["confirmations"]["video_brief"])
             self.assertEqual(state["current_pending_confirmation"], "确认策划")
+
+    def test_video_interview_accepts_only_current_recommendation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+            result = create_video_creation_run(
+                paths,
+                "做一个15秒英文版石英纤维隔热带视频，用于 TikTok。",
+                language_version="en",
+                platforms=["tiktok"],
+                duration_seconds=15,
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+            run_dir = Path(result.run_dir)
+
+            first = handle_video_creation_reply(run_dir, "按推荐", now=datetime(2026, 6, 25, 14, 31, 0))
+
+            self.assertEqual(first.phase, "awaiting_video_creation_interview")
+            self.assertFalse((run_dir / "video_plan.json").exists())
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(state["interview"]["answers"]), 1)
+            self.assertFalse(state["confirmations"]["video_brief"])
+
+            completed = handle_video_creation_reply(run_dir, "剩下都按推荐", now=datetime(2026, 6, 25, 14, 32, 0))
+
+            self.assertEqual(completed.phase, "awaiting_material_visual_inspection")
+            self.assertTrue((run_dir / "video_plan.json").exists())
+            state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(state["video_brief"]), {
+                "audience",
+                "intended_takeaway",
+                "desired_action",
+                "priority_messages",
+                "visual_balance",
+                "excluded_content",
+            })
+
+    def test_each_new_video_task_gets_an_isolated_run_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            rebuild_agent_interface(paths)
+            kwargs = {
+                "request_text": "做一个15秒英文版石英纤维隔热带视频，用于 TikTok。",
+                "language_version": "en",
+                "platforms": ["tiktok"],
+                "duration_seconds": 15,
+                "now": datetime(2026, 6, 25, 14, 30, 5),
+            }
+
+            first = create_video_creation_run(paths, **kwargs)
+            second = create_video_creation_run(paths, **kwargs)
+
+            self.assertNotEqual(first.run_dir, second.run_dir)
+            self.assertTrue(Path(first.run_dir).exists())
+            self.assertTrue(Path(second.run_dir).exists())
+            self.assertTrue(Path(second.run_dir).name.endswith("_02"))
+
+    def test_complete_initial_request_auto_generates_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = resolve_paths(root, {})
+            initialize_project(paths)
+            _write_official_cards(paths)
+            _write_raw_image_files(root)
+            rebuild_agent_interface(paths)
+
+            result = create_video_creation_run(
+                paths,
+                "做一个15秒英文视频，应用场景和产品细节均衡，引导询盘，不要未经确认的认证。",
+                language_version="en",
+                platforms=["tiktok"],
+                duration_seconds=15,
+                target_audience="欧美工业采购商",
+                core_objective="让采购商记住产品用途、真实外观和包覆方式",
+                now=datetime(2026, 6, 25, 14, 30, 5),
+            )
+
+            self.assertEqual(result.status, "material_visual_inspection_required")
+            self.assertTrue((Path(result.run_dir) / "video_plan.json").exists())
+            self.assertIn("候选图片", result.message)
+            reviewed = _complete_material_visual_inspection(Path(result.run_dir))
+            self.assertEqual(reviewed.status, "video_plan_ready")
+            self.assertIn("## 视频策划摘要", reviewed.message)
 
     def test_video_creation_run_captures_adapter_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -368,7 +490,6 @@ class VideoCreationAgentTests(unittest.TestCase):
                 language_version="en",
                 platforms=["tiktok"],
                 duration_seconds=60,
-                primary_direction="产品总览型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
 
@@ -414,6 +535,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             )
             initialize_project(paths)
             _write_official_cards(paths)
+            _write_raw_image_files(root)
             rebuild_agent_interface(paths)
             result = create_video_creation_run(
                 paths,
@@ -421,10 +543,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 language_version="en",
                 platforms=["tiktok"],
                 duration_seconds=60,
-                primary_direction="产品总览型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
@@ -456,6 +578,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             )
             initialize_project(paths)
             _write_official_cards(paths)
+            _write_raw_image_files(root)
             rebuild_agent_interface(paths)
             result = create_video_creation_run(
                 paths,
@@ -463,10 +586,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 language_version="en",
                 platforms=["tiktok"],
                 duration_seconds=60,
-                primary_direction="产品总览型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
@@ -493,6 +616,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             )
             initialize_project(paths)
             _write_official_cards(paths)
+            _write_raw_image_files(root)
             rebuild_agent_interface(paths)
             result = create_video_creation_run(
                 paths,
@@ -500,10 +624,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 language_version="en",
                 platforms=["tiktok"],
                 duration_seconds=60,
-                primary_direction="产品总览型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
@@ -523,6 +647,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             paths = resolve_paths(root, {})
             initialize_project(paths)
             _write_official_cards(paths, human_face_risk="clear_face")
+            _write_raw_image_files(root)
             rebuild_agent_interface(paths)
             result = create_video_creation_run(
                 paths,
@@ -530,10 +655,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 language_version="en",
                 platforms=["tiktok"],
                 duration_seconds=60,
-                primary_direction="产品总览型",
                 now=datetime(2026, 6, 25, 14, 30, 5),
             )
             run_dir = Path(result.run_dir)
+            _complete_video_interview(run_dir)
             generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
             confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
             generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
@@ -553,14 +678,16 @@ class VideoCreationAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_ready_run(Path(tmp))
 
-            result = generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+            result = _generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
 
-            self.assertEqual(result.status, "video_plan_ready")
-            self.assertEqual(result.phase, "awaiting_video_plan_confirmation")
+            self.assertEqual(result.status, "material_visual_inspection_required")
+            self.assertEqual(result.phase, "awaiting_material_visual_inspection")
             plan_md = run_dir / "video_plan.md"
             plan_json = run_dir / "video_plan.json"
+            inspection_json = run_dir / "material_visual_inspection.json"
             self.assertTrue(plan_md.exists())
             self.assertTrue(plan_json.exists())
+            self.assertTrue(inspection_json.exists())
             plan_text = plan_md.read_text(encoding="utf-8")
             self.assertIn("# 视频策划", plan_text)
             self.assertIn("对外中文名：特种玻璃纤维带", plan_text)
@@ -577,6 +704,17 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("不得使用 video_script", plan_text)
             self.assertIn("不得使用母版/master", plan_text)
             self.assertIn("请确认策划后继续生成分镜", plan_text)
+            self.assertIn("## 策划代表图片", plan_text)
+            self.assertIn("等待 Codex 实际打开并完成视觉检查", plan_text)
+            self.assertIn("候选图片", result.message)
+            inspection = json.loads(inspection_json.read_text(encoding="utf-8"))
+            self.assertEqual(inspection["status"], "requires_codex_visual_review")
+            self.assertGreaterEqual(len(inspection["candidates"]), 6)
+
+            reviewed = _complete_material_visual_inspection(run_dir)
+            self.assertEqual(reviewed.status, "video_plan_ready")
+            self.assertIn("## 视频策划摘要", reviewed.message)
+            self.assertIn("![代表图 01]", reviewed.message)
 
             plan = json.loads(plan_json.read_text(encoding="utf-8"))
             self.assertEqual(plan["status"], "draft_pending_confirmation")
@@ -606,7 +744,16 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertFalse(state["confirmations"]["video_plan"])
             self.assertEqual(state["current_pending_confirmation"], "确认策划")
             self.assertEqual(state["files"]["video_plan_md"], str(plan_md))
-            self.assertEqual([item["status"] for item in state["status_history"]], ["requirements_confirmed", "video_plan_ready"])
+            self.assertEqual(
+                [item["status"] for item in state["status_history"]],
+                [
+                    "video_interview_in_progress",
+                    "video_brief_confirmed",
+                    "material_visual_inspection_required",
+                    "material_visual_inspection_completed",
+                    "video_plan_ready",
+                ],
+            )
 
     def test_video_plan_does_not_silently_overwrite_existing_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -614,7 +761,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             generate_video_plan(run_dir)
 
             with self.assertRaises(FileExistsError):
-                generate_video_plan(run_dir)
+                _generate_video_plan(run_dir)
 
     def test_confirms_video_plan_and_moves_to_storyboard_phase(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -631,10 +778,60 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["current_pending_confirmation"], "生成分镜")
             self.assertEqual(
                 [item["status"] for item in state["status_history"]],
-                ["requirements_confirmed", "video_plan_ready", "video_plan_confirmed"],
+                [
+                    "video_interview_in_progress",
+                    "video_brief_confirmed",
+                    "material_visual_inspection_required",
+                    "material_visual_inspection_completed",
+                    "video_plan_ready",
+                    "video_plan_confirmed",
+                ],
             )
             change_log = (run_dir / "change_log.md").read_text(encoding="utf-8")
             self.assertIn("确认视频策划，进入分镜生成阶段。", change_log)
+
+    def test_video_plan_requires_complete_material_visual_inspection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_ready_run(Path(tmp))
+            _generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+
+            with self.assertRaisesRegex(ValueError, "不能确认策划"):
+                confirm_video_plan(run_dir)
+            incomplete = _material_assessments(run_dir)[:-1]
+            with self.assertRaisesRegex(ValueError, "必须覆盖全部候选图片"):
+                record_material_visual_inspection(run_dir, incomplete)
+
+    def test_material_shortage_blocks_plan_until_duration_is_shortened(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_ready_run(Path(tmp))
+            _generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+            _complete_material_visual_inspection(run_dir, usable_limit=3, approve_shortage=False)
+
+            with self.assertRaisesRegex(ValueError, "只支持约 15 秒"):
+                confirm_video_plan(run_dir)
+            shortened = shorten_video_plan_duration(run_dir, 15)
+            self.assertEqual(shortened.status, "video_plan_ready")
+            confirmed = confirm_video_plan(run_dir)
+            self.assertEqual(confirmed.phase, "ready_for_storyboard")
+
+    def test_explicit_repetition_approval_allows_longer_storyboard_from_inspected_images(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_ready_run(Path(tmp))
+            _generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+            _complete_material_visual_inspection(run_dir, usable_limit=3, approve_shortage=False)
+
+            approve_plan_material_repetition(run_dir, "我确认有意重复这三张图片")
+            confirm_video_plan(run_dir)
+            generate_storyboard(run_dir)
+
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            selected_ids = {
+                shot["selected_material"]["id"]
+                for shot in storyboard["shots"]
+                if shot.get("selected_material")
+            }
+            self.assertLessEqual(len(selected_ids), 3)
+            self.assertTrue(storyboard["deliberate_repetition_approved"])
 
     def test_resumes_current_video_creation_phase_without_restarting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -709,6 +906,8 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("Prompt 是给即梦使用，不是字幕", storyboard_text)
             self.assertIn("content_asset/quartz_product_photo", storyboard_text)
             self.assertIn("需要真实产品参考：是", storyboard_text)
+            self.assertIn("## 分镜确认", result.message)
+            self.assertIn("![镜头 01 参考图]", result.message)
 
             storyboard = json.loads(storyboard_json.read_text(encoding="utf-8"))
             self.assertEqual(storyboard["status"], "draft_pending_confirmation")
@@ -745,7 +944,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(prompts["material_reference_map"]["references"][0]["label"], "@图片1")
             reference_material_ids = [item["material_id"] for item in prompts["material_reference_map"]["references"]]
             self.assertEqual(len(reference_material_ids), len(set(reference_material_ids)))
-            self.assertTrue(any("真实产品" in usage for item in prompts["material_reference_map"]["references"] for usage in item["usages"]))
+            self.assertTrue(any("real-product" in usage for item in prompts["material_reference_map"]["references"] for usage in item["usages"]))
             self.assertTrue(any(item["reference_required"] for item in prompts["prompts"]))
             self.assertTrue(all(item["prompt_standard"] == "tuolin-industrial-seedance-v2" for item in prompts["prompts"]))
             self.assertTrue(all(item["prompt_quality_checks"]["status"] == "ok" for item in prompts["prompts"]))
@@ -756,6 +955,9 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertTrue(any("织纹微距" in item["prompt_components"]["motion_and_camera"] or "woven texture" in item["prompt_components"]["product_display_template"] for item in prompts["prompts"]))
             self.assertTrue(any("first-frame reference" in item["prompt"] for item in prompts["prompts"]))
             self.assertTrue(any("last-frame reference" in item["prompt"] for item in prompts["prompts"]))
+            for item in prompts["prompts"]:
+                prompt_without_reference_labels = re.sub(r"@图片\d+", "", item["prompt"])
+                self.assertIsNone(re.search(r"[\u3400-\u9fff]", prompt_without_reference_labels))
             self.assertFalse(any("short drama" in item["prompt"].lower() or "dance" in item["prompt"].lower() or "xianxia" in item["prompt"].lower() for item in prompts["prompts"]))
             referenced = [item for item in prompts["prompts"] if item["reference_required"]]
             self.assertEqual(
@@ -831,6 +1033,44 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(shot_03["image_preview"]["status"], "copied")
             self.assertIn("manual-shot-03.jpg", (run_dir / "storyboard.md").read_text(encoding="utf-8"))
 
+    def test_storyboard_reorder_updates_order_and_prompts_before_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_plan_confirmed_run(Path(tmp))
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+
+            result = handle_video_creation_reply(run_dir, "把镜头 04 移到镜头 02 前面", now=datetime(2026, 6, 25, 15, 12, 0))
+
+            self.assertEqual(result.status, "storyboard_revised")
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            self.assertEqual([shot["shot_id"] for shot in storyboard["shots"][:3]], ["01", "04", "02"])
+            prompts = json.loads((run_dir / "prompts.json").read_text(encoding="utf-8"))
+            self.assertEqual([item["shot_id"] for item in prompts["prompts"][:3]], ["01", "04", "02"])
+            self.assertIn("镜头 04", result.message)
+
+    def test_duplicate_storyboard_image_requires_explicit_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_plan_confirmed_run(Path(tmp))
+            generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
+            storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
+            first_source = storyboard["shots"][0]["image_preview"]["source_path"]
+            handle_video_creation_reply(
+                run_dir,
+                f"镜头 02 图片换成 {first_source}",
+                now=datetime(2026, 6, 25, 15, 11, 0),
+            )
+
+            with self.assertRaisesRegex(ValueError, "重复图片参考"):
+                confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 12, 0))
+
+            approved = handle_video_creation_reply(
+                run_dir,
+                "允许有意重复图片",
+                now=datetime(2026, 6, 25, 15, 13, 0),
+            )
+            self.assertIn("重复图片警告", approved.message)
+            confirmed = confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 14, 0))
+            self.assertEqual(confirmed.status, "storyboard_confirmed")
+
     def test_storyboard_does_not_silently_overwrite_existing_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_plan_confirmed_run(Path(tmp))
@@ -856,7 +1096,16 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["current_pending_confirmation"], "规划即梦任务")
             self.assertEqual(
                 [item["status"] for item in state["status_history"]],
-                ["requirements_confirmed", "video_plan_ready", "video_plan_confirmed", "storyboard_ready", "storyboard_confirmed"],
+                [
+                    "video_interview_in_progress",
+                    "video_brief_confirmed",
+                    "material_visual_inspection_required",
+                    "material_visual_inspection_completed",
+                    "video_plan_ready",
+                    "video_plan_confirmed",
+                    "storyboard_ready",
+                    "storyboard_confirmed",
+                ],
             )
 
     def test_video_only_run_skips_narration_and_goes_straight_to_dreamina_jobs(self) -> None:
@@ -1294,17 +1543,21 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["pending_shot_retry"]["shot_id"], "03")
             self.assertEqual(state["current_pending_confirmation"], "提交重做镜头 03")
 
-    def test_handles_shot_retry_request_reply(self) -> None:
+    def test_natural_language_shot_improvement_is_out_of_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
-            result = handle_video_creation_reply(run_dir, "重做镜头 03，产品边缘不够清楚", now=datetime(2026, 6, 25, 15, 55, 0))
+            result = handle_video_creation_reply(
+                run_dir,
+                "重做镜头 03，产品边缘不够清楚",
+                now=datetime(2026, 6, 25, 15, 55, 0),
+            )
 
-            self.assertEqual(result.status, "shot_retry_planned")
-            self.assertEqual(result.phase, "awaiting_shot_retry_confirmation")
+            self.assertEqual(result.status, "video_results_not_accepted")
+            self.assertEqual(result.phase, "stopped")
+            self.assertTrue((run_dir / "dreamina_generation" / "result_acceptance.json").exists())
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["pending_shot_retry"]["shot_id"], "03")
-            self.assertEqual(state["current_pending_confirmation"], "确认重做镜头 03")
+            self.assertEqual(state["current_pending_confirmation"], "新建视频任务")
 
     def test_submits_and_queries_single_shot_retry_without_resubmitting_other_shots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1341,18 +1594,12 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["shot_retry_history"][0]["shot_id"], "03")
             self.assertEqual(state["current_pending_confirmation"], "确认镜头或重做镜头 XX")
 
-    def test_handles_submit_and_query_shot_retry_replies(self) -> None:
+    def test_natural_language_shot_retry_submission_is_not_exposed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
-            handle_video_creation_reply(run_dir, "重做镜头 03，产品边缘不够清楚", now=datetime(2026, 6, 25, 15, 55, 0))
-            handle_video_creation_reply(run_dir, "确认重做镜头 03", now=datetime(2026, 6, 25, 15, 56, 0))
-
-            submitted = handle_video_creation_reply(run_dir, "提交重做镜头 03", now=datetime(2026, 6, 25, 15, 57, 0))
-            queried = handle_video_creation_reply(run_dir, "查询重做镜头 03", now=datetime(2026, 6, 25, 15, 58, 0))
-
-            self.assertEqual(submitted.status, "shot_retry_submitted")
-            self.assertEqual(queried.status, "shot_retry_results_ready")
-            self.assertEqual(queried.phase, "awaiting_shot_confirmation")
+            result = handle_video_creation_reply(run_dir, "提交重做镜头 03", now=datetime(2026, 6, 25, 15, 57, 0))
+            self.assertEqual(result.status, "video_results_not_accepted")
+            self.assertEqual(result.phase, "stopped")
 
     def test_rejects_mismatched_shot_retry_submission_reply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1360,17 +1607,24 @@ class VideoCreationAgentTests(unittest.TestCase):
             plan_shot_retry(run_dir, "03", reason="产品边缘不够清楚", now=datetime(2026, 6, 25, 15, 55, 0))
             confirm_shot_retry(run_dir, "03", now=datetime(2026, 6, 25, 15, 56, 0))
 
-            with self.assertRaisesRegex(ValueError, "当前等待提交的是镜头 03，不是 04"):
+            with self.assertRaisesRegex(ValueError, "改进流程本期暂未实现"):
                 handle_video_creation_reply(run_dir, "提交重做镜头 04", now=datetime(2026, 6, 25, 15, 57, 0))
 
     def test_revising_video_plan_clears_downstream_confirmations_and_file_references(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
-            result = revise_video_plan(
+            requested = revise_video_plan(
                 run_dir,
                 "修改策划，开场更突出高温设备密封痛点。",
                 now=datetime(2026, 6, 25, 16, 20, 0),
+            )
+            self.assertEqual(requested.status, "semantic_plan_revision_required")
+            result = apply_video_plan_semantic_revision(
+                run_dir,
+                {"story_outline": {"opening": "开场先呈现高温设备密封痛点，再引出产品。"}},
+                "修改策划，开场更突出高温设备密封痛点。",
+                now=datetime(2026, 6, 25, 16, 20, 30),
             )
 
             self.assertEqual(result.status, "video_plan_revised")
@@ -1391,16 +1645,23 @@ class VideoCreationAgentTests(unittest.TestCase):
             plan = json.loads((run_dir / "video_plan.json").read_text(encoding="utf-8"))
             self.assertEqual(plan["change_requests"][0]["scope"], "video_plan")
             self.assertIn("高温设备密封痛点", (run_dir / "video_plan.md").read_text(encoding="utf-8"))
-            self.assertIn("清除分镜及后续确认", (run_dir / "change_log.md").read_text(encoding="utf-8"))
+            self.assertIn("Codex 已应用策划语义修改", (run_dir / "change_log.md").read_text(encoding="utf-8"))
 
     def test_revising_storyboard_clears_generation_confirmations_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
-            result = revise_storyboard(
+            requested = revise_storyboard(
                 run_dir,
                 "修改分镜，减少泛泛介绍，增加采购判断信息。",
                 now=datetime(2026, 6, 25, 16, 21, 0),
+            )
+            self.assertEqual(requested.status, "semantic_storyboard_revision_required")
+            result = apply_storyboard_semantic_revision(
+                run_dir,
+                [{"shot_id": "01", "changes": {"message": "增加采购判断信息，减少泛泛介绍。"}}],
+                "修改分镜，减少泛泛介绍，增加采购判断信息。",
+                now=datetime(2026, 6, 25, 16, 21, 30),
             )
 
             self.assertEqual(result.status, "storyboard_revised")
@@ -1414,18 +1675,26 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("storyboard_json", state["files"])
             self.assertNotIn("dreamina_jobs_json", state["files"])
             storyboard = json.loads((run_dir / "storyboard.json").read_text(encoding="utf-8"))
-            self.assertEqual(storyboard["change_requests"][0]["scope"], "storyboard")
+            shot_01 = next(item for item in storyboard["shots"] if item["shot_id"] == "01")
+            self.assertEqual(shot_01["change_requests"][0]["scope"], "shot_01")
             self.assertIn("采购判断信息", (run_dir / "storyboard.md").read_text(encoding="utf-8"))
 
     def test_revising_single_shot_marks_only_that_shot_and_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
-            result = revise_storyboard_shot(
+            requested = revise_storyboard_shot(
                 run_dir,
                 "03",
                 "修改镜头03，突出编织纹理和边缘厚度。",
                 now=datetime(2026, 6, 25, 16, 22, 0),
+            )
+            self.assertEqual(requested.status, "semantic_storyboard_revision_required")
+            result = apply_storyboard_semantic_revision(
+                run_dir,
+                [{"shot_id": "03", "changes": {"visual_description": "Macro view emphasizing woven texture and edge thickness."}}],
+                "修改镜头03，突出编织纹理和边缘厚度。",
+                now=datetime(2026, 6, 25, 16, 22, 30),
             )
 
             self.assertEqual(result.status, "storyboard_revised")
@@ -1436,7 +1705,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             prompt_03 = next(item for item in prompts["prompts"] if item["shot_id"] == "03")
             prompt_04 = next(item for item in prompts["prompts"] if item["shot_id"] == "04")
             self.assertEqual(shot_03["change_requests"][0]["scope"], "shot_03")
-            self.assertEqual(prompt_03["change_requests"][0]["scope"], "shot_03")
+            self.assertIn("woven texture", prompt_03["prompt"])
             self.assertNotIn("change_requests", shot_04)
             self.assertNotIn("change_requests", prompt_04)
             state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
@@ -1447,7 +1716,14 @@ class VideoCreationAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_results_ready_run(Path(tmp))
 
-            result = handle_video_creation_reply(run_dir, "修改镜头03，突出编织纹理", now=datetime(2026, 6, 25, 16, 23, 0))
+            requested = handle_video_creation_reply(run_dir, "修改镜头03，突出编织纹理", now=datetime(2026, 6, 25, 16, 23, 0))
+            self.assertEqual(requested.status, "semantic_storyboard_revision_required")
+            result = apply_storyboard_semantic_revision(
+                run_dir,
+                [{"shot_id": "03", "changes": {"visual_description": "Macro view of the woven texture."}}],
+                "修改镜头03，突出编织纹理",
+                now=datetime(2026, 6, 25, 16, 23, 30),
+            )
 
             self.assertEqual(result.status, "storyboard_revised")
             self.assertEqual(result.phase, "awaiting_storyboard_confirmation")
@@ -1460,6 +1736,7 @@ class VideoCreationAgentTests(unittest.TestCase):
             run_dir = _create_ready_run(Path(tmp))
 
             handle_video_creation_reply(run_dir, "生成策划", now=datetime(2026, 6, 25, 15, 0, 0))
+            _complete_material_visual_inspection(run_dir)
             handle_video_creation_reply(run_dir, "确认策划", now=datetime(2026, 6, 25, 15, 1, 0))
             handle_video_creation_reply(run_dir, "确认分镜", now=datetime(2026, 6, 25, 15, 3, 0))
             handle_video_creation_reply(run_dir, "确认即梦生成", now=datetime(2026, 6, 25, 15, 11, 0))
@@ -1483,7 +1760,7 @@ class VideoCreationAgentTests(unittest.TestCase):
 
             result = inspect_video_creation_adapters(run_dir, now=datetime(2026, 6, 25, 16, 20, 0))
 
-            self.assertEqual(result.status, "requirements_confirmed")
+            self.assertEqual(result.status, "video_brief_confirmed")
             report_json = run_dir / "adapter_inspection.json"
             report_md = run_dir / "adapter_inspection.md"
             self.assertTrue(report_json.exists())
@@ -1507,7 +1784,6 @@ class VideoCreationAgentTests(unittest.TestCase):
                 "language_version": "en",
                 "platforms": ["tiktok"],
                 "duration_seconds": 60,
-                "primary_direction": "产品总览型",
             }
             with self.assertRaisesRegex(ValueError, "视频语言版本只支持"):
                 create_video_creation_run(**{**base, "language_version": "fr"})
@@ -1515,13 +1791,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 create_video_creation_run(**{**base, "platforms": ["linkedin"]})
             with self.assertRaisesRegex(ValueError, "视频时长只支持"):
                 create_video_creation_run(**{**base, "duration_seconds": 10})
-            with self.assertRaisesRegex(ValueError, "创意方向必须从固定 16 个视频创意方向中选择"):
-                create_video_creation_run(**{**base, "primary_direction": "车间介绍型"})
-
-    def test_fixed_creative_direction_taxonomy_has_sixteen_items(self) -> None:
-        self.assertEqual(len(VIDEO_CREATIVE_DIRECTIONS), 16)
-        self.assertEqual(VIDEO_CREATIVE_DIRECTIONS[0]["id"], "product_overview")
-        self.assertEqual(VIDEO_CREATIVE_DIRECTIONS[-1]["id"], "inquiry_conversion")
+            result = create_video_creation_run(**base)
+            requirements = Path(result.requirements_path).read_text(encoding="utf-8")
+            self.assertNotIn("固定视频创意方向", requirements)
+            self.assertNotIn("主创意方向", requirements)
 
 
 def _write_official_cards(paths, human_face_risk: str = "none") -> None:
@@ -1779,6 +2052,7 @@ def _create_ready_run(
     paths = resolve_paths(root, {})
     initialize_project(paths)
     _write_official_cards(paths)
+    _write_raw_image_files(root)
     rebuild_agent_interface(paths)
     result = create_video_creation_run(
         paths,
@@ -1788,11 +2062,17 @@ def _create_ready_run(
         duration_seconds=60,
         target_audience="欧美工业采购商",
         core_objective="突出耐高温、隔热、不刺痒和不冒烟",
-        primary_direction="3",
-        supporting_direction="产品细节型",
         now=datetime(2026, 6, 25, 14, 30, 5),
     )
-    return Path(result.run_dir)
+    run_dir = Path(result.run_dir)
+    _complete_video_interview(run_dir)
+    return run_dir
+
+
+def _complete_video_interview(run_dir: Path) -> None:
+    state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+    if state.get("phase") == "awaiting_video_creation_interview":
+        continue_video_creation_interview(run_dir, "剩下都按推荐", now=datetime(2026, 6, 25, 14, 35, 0))
 
 
 def _create_video_only_ready_run(root: Path) -> Path:
@@ -1859,12 +2139,12 @@ def _create_storyboard_confirmed_run_without_assets(root: Path) -> Path:
         duration_seconds=60,
         target_audience="欧美工业采购商",
         core_objective="突出耐高温、隔热、不刺痒和不冒烟",
-        primary_direction="3",
-        supporting_direction="产品细节型",
         now=datetime(2026, 6, 25, 14, 30, 5),
     )
     run_dir = Path(result.run_dir)
+    _complete_video_interview(run_dir)
     generate_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 0, 0))
+    approve_plan_material_repetition(run_dir, "测试明确批准素材不足时重复", now=datetime(2026, 6, 25, 15, 3, 0))
     confirm_video_plan(run_dir, now=datetime(2026, 6, 25, 15, 5, 0))
     generate_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 10, 0))
     confirm_storyboard(run_dir, now=datetime(2026, 6, 25, 15, 15, 0))

@@ -12,6 +12,15 @@ from typing import Any, Callable
 
 from ..shared.downstream_context import build_downstream_context
 from ..shared.project_layout import ProjectPaths
+from .interview import (
+    CORE_VIDEO_BRIEF_FIELDS,
+    INTERVIEW_QUESTIONS,
+    answer_video_interview,
+    build_initial_video_brief,
+    build_video_interview,
+    confirmed_video_brief,
+    current_video_interview_prompt,
+)
 
 
 INTERNAL_PRODUCT_ID = "product/quartz_fiber_tape"
@@ -46,25 +55,6 @@ DEFAULT_DREAMINA_CAPABILITY_PROFILE = {
 IMAGE_FILE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"}
 VIDEO_FILE_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
-
-VIDEO_CREATIVE_DIRECTIONS = [
-    {"id": "product_overview", "name": "产品总览型", "description": "用短时间介绍产品是什么、核心特点和适合的工业客户"},
-    {"id": "single_core_benefit", "name": "单一核心卖点型", "description": "聚焦一个核心优势，例如耐高温、隔热、不刺痒或不冒烟"},
-    {"id": "multiple_benefit_overview", "name": "多卖点概览型", "description": "同时呈现多个已确认卖点，适合首次触达和平台日常内容"},
-    {"id": "product_detail", "name": "产品细节型", "description": "强调织纹、厚度、卷装、边缘、柔软度等真实产品细节"},
-    {"id": "application_demonstration", "name": "应用演示型", "description": "展示产品在已确认应用场景中的使用方式"},
-    {"id": "customer_pain_point_solution", "name": "客户痛点解决型", "description": "围绕客户痛点组织叙事，例如烟雾、刺痒、施工麻烦、隔热不足"},
-    {"id": "installation_demonstration", "name": "安装演示型", "description": "说明裁切、缠绕、固定、收尾等施工过程"},
-    {"id": "usage_precautions", "name": "使用注意事项型", "description": "说明适用边界、施工注意和选型提示，避免过度承诺"},
-    {"id": "technical_education", "name": "技术科普型", "description": "用通俗方式解释材料、耐温、隔热或选择逻辑"},
-    {"id": "performance_test", "name": "性能测试型", "description": "展示火焰、高温或热源等测试视觉，但必须避免夸大测试结论"},
-    {"id": "faq", "name": "FAQ 问答型", "description": "用常见问题引出产品特点和采购关注点"},
-    {"id": "material_comparison_selection", "name": "材料对比与选型型", "description": "与其他材料或方案做中性选择说明，不攻击竞品，不制造无证据结论"},
-    {"id": "specification_customization", "name": "规格与定制型", "description": "展示宽度、厚度、卷长、包装和定制能力等已确认规格"},
-    {"id": "procurement_guide", "name": "采购指南型", "description": "面向采购/OEM/分销商，说明询价前需要确认的关键事项"},
-    {"id": "real_case_study", "name": "真实案例型", "description": "基于已有正式案例或可公开素材展示应用，不得把 AI 模拟场景表述为真实案例"},
-    {"id": "inquiry_conversion", "name": "询盘转化型", "description": "以联系、索样、获取规格或报价为核心目标，必须包含 CTA"},
-]
 
 EXTERNAL_VIDEO_SKILL_ABSORPTION = [
     {
@@ -109,41 +99,13 @@ EXTERNAL_VIDEO_SKILL_ABSORPTION = [
     },
 ]
 
-INDUSTRIAL_VIDEO_STYLE_MATRIX = {
-    "industrial_professional": {
-        "name": "工业专业型",
-        "visual_language": "clean factory-adjacent industrial visuals, neutral lighting, credible B2B product framing",
-        "best_for": {"product_overview", "multiple_benefit_overview", "customer_pain_point_solution", "usage_precautions"},
-    },
-    "minimal_product": {
-        "name": "极简产品型",
-        "visual_language": "simple background, strong product silhouette, controlled negative space, clear material texture",
-        "best_for": {"single_core_benefit", "product_detail", "inquiry_conversion"},
-    },
-    "technical_explainer": {
-        "name": "技术说明型",
-        "visual_language": "subtle engineering annotations, measured pacing, parameter cards only when facts are official",
-        "best_for": {"technical_education", "performance_test", "material_comparison_selection", "usage_precautions"},
-    },
-    "application_scene": {
-        "name": "应用场景型",
-        "visual_language": "confirmed industrial use context, installation movement, no fake customer-site claim",
-        "best_for": {"application_demonstration", "installation_demonstration", "real_case_study"},
-    },
-    "procurement_decision": {
-        "name": "采购决策型",
-        "visual_language": "buyer checklist rhythm, specification-oriented cuts, restrained CTA and contact logic",
-        "best_for": {"procurement_guide", "specification_customization", "faq", "inquiry_conversion"},
-    },
-}
-
 INDUSTRIAL_CAMERA_LANGUAGE = {
-    "opening_environment": "稳定慢推，前两秒建立工业隔热语境，不使用快速摇镜。",
-    "product_hero": "产品卷装 hero 慢推，轻微环绕，保持产品形态稳定。",
-    "product_detail": "织纹微距和局部特写，轻微横移展示边缘、厚度和柔性。",
-    "benefit_visual": "克制说明型镜头，轻微滑动或后拉，不做夸张测试结果。",
-    "application_context": "包覆动作跟随镜头，展示已确认应用逻辑，不伪装真实客户现场。",
-    "closing_cta": "干净收束镜头，产品定格，CTA 安全留白，避开平台 UI 区域。",
+    "opening_environment": "Stable slow push-in; establish the industrial insulation context within the first two seconds; no whip pan.",
+    "product_hero": "Slow product-roll hero push-in with a subtle orbit; keep the product shape stable.",
+    "product_detail": "Macro woven-texture close-up with a slight lateral move across the edge, thickness, and flexible form.",
+    "benefit_visual": "Restrained explanatory camera slide or pull-back; no exaggerated test outcome.",
+    "application_context": "Follow the wrapping action and show only confirmed application logic; do not imitate a real customer site.",
+    "closing_cta": "Clean closing move with a stable product frame and CTA-safe negative space away from platform UI.",
 }
 
 PRODUCT_DISPLAY_TEMPLATES = {
@@ -212,106 +174,6 @@ PROMPT_DURATION_COMPLEXITY_POLICY = {
     ],
 }
 
-CREATIVE_DIRECTION_QUALITY_MATRIX = {
-    "product_overview": {
-        "hook": "前 2 秒必须讲清这是工业隔热带产品，不做抽象品牌开场。",
-        "visual_focus": "产品卷装、织带表面和典型工业背景必须快速出现。",
-        "message_focus": "说明产品是什么、适合什么客户、解决什么基本问题。",
-        "cta_rule": "结尾使用轻量 CTA，不压过产品理解。",
-    },
-    "single_core_benefit": {
-        "hook": "前 2 秒直接点出单一核心卖点。",
-        "visual_focus": "所有镜头围绕同一卖点强化，不堆叠过多标签。",
-        "message_focus": "只解释一个已确认优势，避免扩展成多卖点介绍。",
-        "cta_rule": "CTA 与该卖点相关，例如索取规格或样品。",
-    },
-    "multiple_benefit_overview": {
-        "hook": "前 2 秒建立高温隔热/施工痛点，再快速进入产品。",
-        "visual_focus": "用短镜头轮换展示产品、细节、应用和已确认卖点。",
-        "message_focus": "耐高温、隔热、不刺痒、不冒烟等信息只能来自正式知识。",
-        "cta_rule": "允许轻量 CTA，重点仍是首次触达教育。",
-    },
-    "product_detail": {
-        "hook": "前 2 秒展示织纹、边缘或厚度细节。",
-        "visual_focus": "微距、手持、卷装边缘、柔性形态和材料质感。",
-        "message_focus": "强调可见材料细节，不用细节画面证明未经确认的性能。",
-        "cta_rule": "CTA 可提示索取规格或样品。",
-    },
-    "application_demonstration": {
-        "hook": "前 2 秒出现明确应用场景或安装动作。",
-        "visual_focus": "管道、炉门、设备保温等已确认场景；AI 场景必须标记为模拟。",
-        "message_focus": "说明可用在哪里，不承诺具体工况结果。",
-        "cta_rule": "CTA 引导客户提供应用环境。",
-    },
-    "customer_pain_point_solution": {
-        "hook": "前 2 秒提出客户痛点，例如烟雾、刺痒、施工麻烦或隔热不足。",
-        "visual_focus": "痛点与解决方案形成清晰前后关系，但不攻击竞品。",
-        "message_focus": "围绕问题解决组织叙事。",
-        "cta_rule": "CTA 引导客户描述现有痛点。",
-    },
-    "installation_demonstration": {
-        "hook": "前 2 秒进入裁切、缠绕或固定动作。",
-        "visual_focus": "手部动作、施工路径、收尾细节和材料柔性。",
-        "message_focus": "说明施工流程和注意点，不替代正式安装说明书。",
-        "cta_rule": "CTA 可引导索取安装建议。",
-    },
-    "usage_precautions": {
-        "hook": "前 2 秒提出选型或使用边界问题。",
-        "visual_focus": "用清晰卡片和示意镜头降低误用风险。",
-        "message_focus": "强调适用边界、确认工况、避免过度承诺。",
-        "cta_rule": "CTA 引导客户先确认温度、尺寸和应用环境。",
-    },
-    "technical_education": {
-        "hook": "前 2 秒提出一个材料或选型问题。",
-        "visual_focus": "工程说明、结构示意和产品实拍结合。",
-        "message_focus": "用通俗语言解释材料逻辑。",
-        "cta_rule": "CTA 可提示获取 datasheet。",
-    },
-    "performance_test": {
-        "hook": "前 2 秒出现受控热源或测试视觉。",
-        "visual_focus": "测试画面必须克制，不伪造检测结果。",
-        "message_focus": "只表达已确认测试事实，不把演示当认证。",
-        "cta_rule": "CTA 引导索取正式测试资料。",
-    },
-    "faq": {
-        "hook": "前 2 秒显示或提出一个真实采购问题。",
-        "visual_focus": "问题卡片与产品/应用镜头交替。",
-        "message_focus": "每个回答短、具体、可追溯。",
-        "cta_rule": "CTA 引导继续提问或索取规格。",
-    },
-    "material_comparison_selection": {
-        "hook": "前 2 秒提出材料选型困惑。",
-        "visual_focus": "中性对比，不做攻击性竞品画面。",
-        "message_focus": "说明选择逻辑和边界，不制造无证据优劣结论。",
-        "cta_rule": "CTA 引导客户给出工况后推荐选型。",
-    },
-    "specification_customization": {
-        "hook": "前 2 秒展示宽度、厚度、卷长或包装信息。",
-        "visual_focus": "规格卡、卷装、不同尺寸组合；没有真实多规格素材时不得伪造。",
-        "message_focus": "围绕已确认规格和定制能力。",
-        "cta_rule": "CTA 引导发送尺寸需求。",
-    },
-    "procurement_guide": {
-        "hook": "前 2 秒出现 buyer checklist 或询价前确认项。",
-        "visual_focus": "清晰列表、产品图、规格信息和采购判断路径。",
-        "message_focus": "帮助采购/OEM/分销商减少沟通成本。",
-        "cta_rule": "CTA 引导发送应用、温度、尺寸和数量。",
-    },
-    "real_case_study": {
-        "hook": "前 2 秒出现真实案例或明确说明是示意场景。",
-        "visual_focus": "必须基于正式可公开案例素材；无案例时不伪装真实客户现场。",
-        "message_focus": "讲清应用背景和可公开事实。",
-        "cta_rule": "CTA 引导索取类似应用建议。",
-    },
-    "inquiry_conversion": {
-        "hook": "前 2 秒直接说明客户可以获得什么信息或样品。",
-        "visual_focus": "产品可信展示、规格/应用提示和联系方式节奏清晰。",
-        "message_focus": "围绕联系、索样、报价或规格确认收口。",
-        "cta_rule": "必须有明确 CTA，且联系方式来自正式知识或配置。",
-    },
-}
-
-
 @dataclass(frozen=True)
 class ProjectValidation:
     valid: bool
@@ -325,6 +187,7 @@ class VideoCreationRunResult:
     workflow_state_path: str
     context_id: str
     status: str
+    message: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -374,8 +237,6 @@ def create_video_creation_run(
     duration_seconds: int = DEFAULT_VIDEO_DURATION_SECONDS,
     target_audience: str = "",
     core_objective: str = "",
-    primary_direction: str = "",
-    supporting_direction: str | None = None,
     now: datetime | None = None,
 ) -> VideoCreationRunResult:
     validation = validate_video_creation_project(paths)
@@ -385,10 +246,6 @@ def create_video_creation_run(
     language = normalize_language_version(language_version)
     platform_values = normalize_platforms(platforms)
     duration = normalize_duration(duration_seconds)
-    primary = normalize_creative_direction(primary_direction) if primary_direction else None
-    supporting = normalize_creative_direction(supporting_direction) if supporting_direction else None
-    if primary and supporting and supporting["id"] == primary["id"]:
-        raise ValueError("辅助创意方向不能与主创意方向相同")
     workflow_mode = _infer_video_workflow_mode(request_text)
 
     context = build_downstream_context(
@@ -399,10 +256,12 @@ def create_video_creation_run(
         include_review_items=True,
     )
     timestamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
-    run_dir = paths.generated_dir / "reports" / "video-creation" / f"{timestamp}_{RUN_DIR_PRODUCT_SLUG}_{language}"
+    run_root = paths.generated_dir / "reports" / "video-creation"
+    run_dir = _unique_video_run_dir(run_root, f"{timestamp}_{RUN_DIR_PRODUCT_SLUG}_{language}")
     _ensure_run_dirs(run_dir)
 
-    recommendations = recommend_creative_directions(request_text, platform_values, target_audience, core_objective, context)
+    initial_brief = build_initial_video_brief(request_text, target_audience, core_objective)
+    interview = build_video_interview(initial_brief)
     requirements_path = run_dir / "requirements.md"
     workflow_state_path = run_dir / "workflow_state.json"
     change_log_path = run_dir / "change_log.md"
@@ -415,10 +274,8 @@ def create_video_creation_run(
         "target_audience": target_audience,
         "core_objective": core_objective,
         "workflow_mode": workflow_mode,
-        "primary_direction": primary,
-        "supporting_direction": supporting,
-        "recommendations": recommendations,
-        "fixed_directions": VIDEO_CREATIVE_DIRECTIONS,
+        "video_brief": dict(interview.get("answers", {})),
+        "interview": interview,
         "context": {
             "context_id": context["context_id"],
             "product_id": context["product_id"],
@@ -440,65 +297,68 @@ def create_video_creation_run(
         timestamp,
     )
     workflow_state_path.write_text(json.dumps(workflow_state, ensure_ascii=False, indent=2), encoding="utf-8")
-    status_note = "等待确认创意方向" if workflow_state["phase"] == "awaiting_creative_direction_confirmation" else "等待生成视频策划"
+    status_note = "进入视频创作访谈"
     change_log_path.write_text(
         f"# 视频创作变更记录\n\n- {timestamp}: 创建视频创作运行，{status_note}。\n",
         encoding="utf-8",
     )
+    result_status = workflow_state["status"]
+    result_message = current_video_interview_prompt(interview)
+    if interview.get("completed"):
+        plan_result = generate_video_plan(run_dir, now=now)
+        result_status = plan_result.status
+        result_message = plan_result.message
     return VideoCreationRunResult(
         run_dir=str(run_dir),
         requirements_path=str(requirements_path),
         workflow_state_path=str(workflow_state_path),
         context_id=context["context_id"],
-        status=workflow_state["status"],
+        status=result_status,
+        message=result_message,
     )
 
 
-def confirm_creative_direction(
+def continue_video_creation_interview(
     run_dir: Path,
-    primary_direction: str,
-    supporting_direction: str | None = None,
+    reply: str,
     now: datetime | None = None,
 ) -> VideoCreationStepResult:
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
     state = _load_state(state_path)
-    if state.get("phase") != "awaiting_creative_direction_confirmation":
-        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认创意方向。")
-    primary = normalize_creative_direction(primary_direction)
-    supporting = normalize_creative_direction(supporting_direction) if supporting_direction else None
-    if supporting and supporting["id"] == primary["id"]:
-        raise ValueError("辅助创意方向不能与主创意方向相同")
+    if state.get("phase") != "awaiting_video_creation_interview":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能继续视频创作访谈。")
 
     requirements_path = Path(state["files"]["requirements"])
     requirements = dict(state.get("requirements_payload") or {})
     if not requirements:
-        raise ValueError("workflow_state 缺少 requirements_payload，不能安全确认创意方向。")
-    requirements["primary_direction"] = primary
-    requirements["supporting_direction"] = supporting
+        raise ValueError("workflow_state 缺少 requirements_payload，不能安全继续访谈。")
+    interview = answer_video_interview(dict(state.get("interview") or {}), reply)
+    requirements["interview"] = interview
+    requirements["video_brief"] = dict(interview.get("answers", {}))
     requirements_path.write_text(_render_requirements(requirements), encoding="utf-8")
 
     timestamp = _timestamp(now)
-    state["status"] = "requirements_confirmed"
-    state["phase"] = "ready_for_video_plan"
-    state["current_pending_confirmation"] = "生成视频策划"
+    completed = bool(interview.get("completed"))
+    state["status"] = "video_brief_confirmed" if completed else "video_interview_in_progress"
+    state["phase"] = "ready_for_video_plan" if completed else "awaiting_video_creation_interview"
+    state["current_pending_confirmation"] = "生成视频策划" if completed else "回答视频创作问题"
     state["updated_at"] = timestamp
-    state["creative_direction"] = {"primary": primary, "supporting": supporting, "confirmed": True}
+    state["interview"] = interview
+    state["video_brief"] = confirmed_video_brief(interview) if completed else dict(interview.get("answers", {}))
     state["requirements_payload"] = requirements
-    state["confirmations"]["creative_direction"] = True
-    _append_status_history(state, "requirements_confirmed", timestamp)
+    state["confirmations"]["video_brief"] = completed
+    _append_status_history(state, state["status"], timestamp)
     _write_state(state_path, state)
-    _append_change(
-        run_dir,
-        timestamp,
-        f"确认创意方向：主方向={primary['name']}，辅助方向={supporting['name'] if supporting else '无'}。",
-    )
+    answered_field = interview.get("history", [{}])[-1].get("field", "unknown") if interview.get("history") else "unknown"
+    _append_change(run_dir, timestamp, f"记录视频创作访谈答案：{answered_field}；完成={completed}。")
     return VideoCreationStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(requirements_path),),
+        message="视频创作核心信息已经完整，正在生成策划。" if completed else current_video_interview_prompt(interview),
     )
 
 
@@ -508,8 +368,8 @@ def generate_video_plan(run_dir: Path, overwrite: bool = False, now: datetime | 
     state = _load_state(state_path)
     if state.get("phase") not in {"ready_for_video_plan", "awaiting_video_plan_confirmation"}:
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能生成视频策划。")
-    if not state.get("confirmations", {}).get("creative_direction"):
-        raise ValueError("创意方向尚未确认，不能生成视频策划。请先确认主方向和辅助方向。")
+    if not state.get("confirmations", {}).get("video_brief"):
+        raise ValueError("视频创作核心信息尚未完整，不能生成策划。请先完成当前访谈问题。")
 
     plan_md_path = run_dir / "video_plan.md"
     plan_json_path = run_dir / "video_plan.json"
@@ -518,28 +378,141 @@ def generate_video_plan(run_dir: Path, overwrite: bool = False, now: datetime | 
 
     context = _load_context_for_state(run_dir, state)
     plan = _build_video_plan_payload(state, context, now or datetime.now())
+    _attach_plan_representative_images(run_dir, plan)
+    inspection_path = run_dir / "material_visual_inspection.json"
+    inspection_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "video-material-visual-inspection-v1",
+                "status": "requires_codex_visual_review",
+                "required_checks": ["subject", "clarity", "composition", "vertical_crop", "near_duplicate"],
+                "candidates": plan.get("visual_candidates", []),
+                "policy": plan.get("visual_inspection_policy", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     plan_md_path.write_text(_render_video_plan(plan), encoding="utf-8")
     plan_json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 
     timestamp = _timestamp(now)
-    state["status"] = "video_plan_ready"
-    state["phase"] = "awaiting_video_plan_confirmation"
-    state["current_pending_confirmation"] = "确认策划"
+    state["status"] = "material_visual_inspection_required"
+    state["phase"] = "awaiting_material_visual_inspection"
+    state["current_pending_confirmation"] = "完成素材视觉检查"
     state["updated_at"] = timestamp
     state["confirmations"]["video_plan"] = False
     _clear_downstream_confirmations(state, after="video_plan")
     state.setdefault("files", {})["video_plan_md"] = str(plan_md_path)
     state.setdefault("files", {})["video_plan_json"] = str(plan_json_path)
-    _append_status_history(state, "video_plan_ready", timestamp)
+    state.setdefault("files", {})["material_visual_inspection_json"] = str(inspection_path)
+    _append_status_history(state, "material_visual_inspection_required", timestamp)
     _write_state(state_path, state)
-    _append_change(run_dir, timestamp, "生成视频策划，等待确认策划。")
+    _append_change(run_dir, timestamp, "生成视频策划草稿和候选图片，等待 Codex 完成素材视觉检查。")
 
     return VideoCreationStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
-        output_paths=(str(plan_md_path), str(plan_json_path)),
+        output_paths=(str(plan_md_path), str(plan_json_path), str(inspection_path)),
+        message=_material_visual_inspection_action_message(run_dir, inspection_path),
+    )
+
+
+def record_material_visual_inspection(
+    run_dir: Path,
+    assessments: list[dict[str, Any]],
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_material_visual_inspection":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能记录素材视觉检查。")
+    files = state.get("files", {})
+    inspection_path = Path(files.get("material_visual_inspection_json", run_dir / "material_visual_inspection.json"))
+    plan_json_path = Path(files.get("video_plan_json", run_dir / "video_plan.json"))
+    plan_md_path = Path(files.get("video_plan_md", run_dir / "video_plan.md"))
+    inspection = _load_json_file(inspection_path, "material_visual_inspection.json")
+    plan = _load_json_file(plan_json_path, "video_plan.json")
+    candidates = list(inspection.get("candidates") or [])
+    by_id = {str(item.get("material_id") or ""): item for item in candidates}
+    assessment_by_id = {str(item.get("material_id") or ""): item for item in assessments}
+    if set(assessment_by_id) != set(by_id):
+        missing = sorted(set(by_id) - set(assessment_by_id))
+        extra = sorted(set(assessment_by_id) - set(by_id))
+        raise ValueError(f"视觉检查必须覆盖全部候选图片；缺少={missing}，多余={extra}。")
+
+    inspected_candidates = []
+    for material_id, candidate in by_id.items():
+        assessment = assessment_by_id[material_id]
+        _validate_visual_assessment(assessment)
+        inspected = dict(candidate)
+        inspected["assessment"] = {
+            "subject": str(assessment["subject"]).strip(),
+            "clarity": str(assessment["clarity"]).strip(),
+            "composition": str(assessment["composition"]).strip(),
+            "vertical_crop": str(assessment["vertical_crop"]).strip(),
+            "near_duplicate_of": str(assessment.get("near_duplicate_of") or "").strip(),
+            "usable": bool(assessment["usable"]),
+            "notes": str(assessment.get("notes") or "").strip(),
+            "rank": _positive_int(assessment.get("rank"), 999),
+        }
+        inspected_candidates.append(inspected)
+
+    usable = [
+        item
+        for item in inspected_candidates
+        if item["assessment"]["usable"] and not item["assessment"]["near_duplicate_of"]
+    ]
+    usable.sort(key=lambda item: (item["assessment"]["rank"], item["index"]))
+    representatives = []
+    for index, item in enumerate(usable[:6], start=1):
+        representative = {key: value for key, value in item.items() if key != "assessment"}
+        representative["index"] = f"{index:02d}"
+        representative["visual_assessment"] = item["assessment"]
+        representative["inspection_requirement"] = "已由 Codex 实际打开并完成主体、清晰度、构图、竖屏裁切和近重复检查；图片不证明产品事实。"
+        representatives.append(representative)
+    plan["representative_images"] = representatives
+    plan["visual_candidates"] = inspected_candidates
+    plan["inspected_usable_material_ids"] = [item["material_id"] for item in usable]
+    requested = int(plan.get("format", {}).get("duration_seconds", 0))
+    supported = min(requested, len(usable) * 5)
+    plan["material_supported_duration"] = _material_supported_duration_payload(requested, supported, len(usable))
+    plan["visual_inspection"] = {
+        "status": "completed",
+        "completed_at": _timestamp(now),
+        "inspected_count": len(inspected_candidates),
+        "usable_distinct_count": len(usable),
+        "representative_count": len(representatives),
+    }
+    inspection["status"] = "completed"
+    inspection["completed_at"] = _timestamp(now)
+    inspection["candidates"] = inspected_candidates
+    inspection["usable_distinct_material_ids"] = [item["material_id"] for item in usable]
+    inspection_path.write_text(json.dumps(inspection, ensure_ascii=False, indent=2), encoding="utf-8")
+    plan_json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    plan_md_path.write_text(_render_video_plan(plan), encoding="utf-8")
+
+    timestamp = _timestamp(now)
+    state["status"] = "video_plan_ready"
+    state["phase"] = "awaiting_video_plan_confirmation"
+    state["current_pending_confirmation"] = "确认策划"
+    state["updated_at"] = timestamp
+    state["confirmations"]["material_visual_inspection"] = True
+    _append_status_history(state, "material_visual_inspection_completed", timestamp)
+    _append_status_history(state, "video_plan_ready", timestamp)
+    _write_state(state_path, state)
+    _append_change(run_dir, timestamp, f"完成 {len(inspected_candidates)} 张候选图片视觉检查，生成 {len(representatives)} 张策划代表图。")
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(plan_md_path), str(plan_json_path), str(inspection_path)),
+        message=_video_plan_review_message(run_dir, plan),
     )
 
 
@@ -553,6 +526,15 @@ def confirm_video_plan(run_dir: Path, now: datetime | None = None) -> VideoCreat
         raise ValueError("找不到可确认的视频策划，请先生成 video_plan.md 和 video_plan.json。")
     if state.get("phase") != "awaiting_video_plan_confirmation":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认策划。")
+    if not state.get("confirmations", {}).get("material_visual_inspection"):
+        raise ValueError("素材视觉检查尚未完成，不能确认策划。")
+    plan = _load_json_file(plan_json_path, "video_plan.json")
+    support = plan.get("material_supported_duration") or {}
+    if support.get("status") != "supported" and not plan.get("material_repetition_approved"):
+        raise ValueError(
+            f"现有不重复图片只支持约 {support.get('supported_seconds', 0)} 秒，不能直接确认 {support.get('requested_seconds', 0)} 秒策划。"
+            "请缩短视频，补充图片，或明确批准有意重复图片。"
+        )
 
     timestamp = _timestamp(now)
     state["status"] = "video_plan_confirmed"
@@ -570,6 +552,89 @@ def confirm_video_plan(run_dir: Path, now: datetime | None = None) -> VideoCreat
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(plan_md_path), str(plan_json_path)),
+    )
+
+
+def shorten_video_plan_duration(
+    run_dir: Path,
+    duration_seconds: int,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    duration = normalize_duration(duration_seconds)
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_video_plan_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能调整策划时长。")
+    plan_json_path = Path(state["files"]["video_plan_json"])
+    plan_md_path = Path(state["files"]["video_plan_md"])
+    plan = _load_json_file(plan_json_path, "video_plan.json")
+    support = plan.get("material_supported_duration") or {}
+    max_supported = int(support.get("unique_usable_image_count", 0)) * 5
+    if duration > max_supported:
+        raise ValueError(f"当前已检查的不重复图片最多支持约 {max_supported} 秒，不能缩短到 {duration} 秒。")
+    old_duration = int(plan["format"]["duration_seconds"])
+    tolerance_min, tolerance_max = _duration_tolerance(duration)
+    plan["format"]["duration_seconds"] = duration
+    plan["format"]["duration_tolerance_seconds"] = {"min": tolerance_min, "max": tolerance_max}
+    plan["material_supported_duration"] = _material_supported_duration_payload(duration, duration, int(support.get("unique_usable_image_count", 0)))
+    plan.pop("material_repetition_approved", None)
+    plan.setdefault("change_requests", []).append(
+        _build_revision_record("video_plan", f"视频时长从 {old_duration} 秒缩短为 {duration} 秒", _timestamp(now))
+    )
+    plan_json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    plan_md_path.write_text(_render_video_plan(plan), encoding="utf-8")
+    state["duration_seconds"] = duration
+    requirements = dict(state.get("requirements_payload") or {})
+    requirements["duration_seconds"] = duration
+    state["requirements_payload"] = requirements
+    requirements_path = Path(state["files"]["requirements"])
+    requirements_path.write_text(_render_requirements(requirements), encoding="utf-8")
+    state["updated_at"] = _timestamp(now)
+    _write_state(state_path, state)
+    _append_change(run_dir, _timestamp(now), f"按素材可支撑时长把视频从 {old_duration} 秒缩短为 {duration} 秒。")
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(plan_md_path), str(plan_json_path), str(requirements_path)),
+        message=_video_plan_review_message(run_dir, plan),
+    )
+
+
+def approve_plan_material_repetition(
+    run_dir: Path,
+    approval_text: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_video_plan_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能批准策划重复图片。")
+    plan_json_path = Path(state["files"]["video_plan_json"])
+    plan_md_path = Path(state["files"]["video_plan_md"])
+    plan = _load_json_file(plan_json_path, "video_plan.json")
+    support = plan.get("material_supported_duration") or {}
+    if support.get("status") == "supported":
+        raise ValueError("当前素材已经可以无重复支撑目标时长，不需要批准重复图片。")
+    timestamp = _timestamp(now)
+    plan["material_repetition_approved"] = {
+        "approved": True,
+        "approval_text": approval_text.strip(),
+        "approved_at": timestamp,
+    }
+    plan_json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    plan_md_path.write_text(_render_video_plan(plan), encoding="utf-8")
+    _append_change(run_dir, timestamp, f"用户明确批准策划在素材不足时有意重复图片：{approval_text.strip()}")
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(plan_md_path), str(plan_json_path)),
+        message=_video_plan_review_message(run_dir, plan),
     )
 
 
@@ -625,6 +690,7 @@ def generate_storyboard(run_dir: Path, overwrite: bool = False, now: datetime | 
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
     )
 
 
@@ -644,6 +710,10 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
         raise ValueError(f"找不到可确认的分镜或 Prompt：{missing[0]}")
     if state.get("phase") != "awaiting_storyboard_confirmation":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认分镜。")
+    storyboard = _load_json_file(required[1], "storyboard.json")
+    image_summary = storyboard.get("image_reference_summary") or {}
+    if image_summary.get("status") == "warning" and not storyboard.get("deliberate_repetition_approved"):
+        raise ValueError("分镜存在重复图片参考，不能确认。请先替换图片、删除镜头，或明确回复允许有意重复图片。")
 
     timestamp = _timestamp(now)
     state["status"] = "storyboard_confirmed"
@@ -665,6 +735,40 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
         status=state["status"],
         phase=state["phase"],
         output_paths=tuple(str(path) for path in required),
+    )
+
+
+def approve_storyboard_image_repetition(
+    run_dir: Path,
+    approval_text: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_storyboard_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能批准重复图片。")
+    storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path = _storyboard_file_paths(run_dir, state)
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    image_summary = storyboard.get("image_reference_summary") or {}
+    if image_summary.get("status") != "warning":
+        raise ValueError("当前分镜没有检测到重复图片，不需要批准重复。")
+    timestamp = _timestamp(now)
+    storyboard["deliberate_repetition_approved"] = {
+        "approved": True,
+        "approval_text": approval_text.strip(),
+        "approved_at": timestamp,
+    }
+    storyboard_json_path.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
+    storyboard_md_path.write_text(_render_storyboard(storyboard), encoding="utf-8")
+    _append_change(run_dir, timestamp, f"用户明确批准分镜中的有意重复图片：{approval_text.strip()}")
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
     )
 
 
@@ -868,7 +972,7 @@ def query_dreamina_results(
     all_succeeded = all(item["status"] == "succeeded" for item in results["results"])
     state["status"] = "dreamina_results_ready" if all_succeeded else "dreamina_results_pending"
     state["phase"] = "awaiting_shot_confirmation" if all_succeeded else "awaiting_dreamina_results"
-    state["current_pending_confirmation"] = "确认镜头或重做镜头 XX" if all_succeeded else "继续查询即梦结果"
+    state["current_pending_confirmation"] = "确认镜头" if all_succeeded else "继续查询即梦结果"
     state["updated_at"] = timestamp
     state["confirmations"]["shots"] = False
     files = state.setdefault("files", {})
@@ -920,7 +1024,6 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
         timestamp,
         "确认全部镜头，等待合并视频并生成剪辑字幕稿。",
     )
-
     return VideoCreationStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
@@ -929,6 +1032,69 @@ def confirm_shots(run_dir: Path, now: datetime | None = None) -> VideoCreationSt
         output_paths=(str(results_json_path), str(shot_preview_md_path), str(shot_preview_json_path)),
     )
 
+
+def record_video_results_not_accepted(
+    run_dir: Path,
+    reason: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    if not reason.strip():
+        raise ValueError("记录视频结果不接受时必须提供原因。")
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_shot_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能记录视频结果不接受。")
+    timestamp = _timestamp(now)
+    payload = {
+        "schema_version": "video-result-acceptance-v1",
+        "status": "not_accepted",
+        "recorded_at": timestamp,
+        "reason": reason.strip(),
+        "dreamina_results_json": state.get("files", {}).get("dreamina_results_json", ""),
+        "policy": {
+            "result_improvement_available": False,
+            "confirmed_storyboard_is_not_rewound": True,
+            "next_action": "create_new_video_task",
+        },
+    }
+    json_path = run_dir / "dreamina_generation" / "result_acceptance.json"
+    md_path = run_dir / "dreamina_generation" / "result_acceptance.md"
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    md_path.write_text(
+        "\n".join(
+            [
+                "# 视频结果验收",
+                "",
+                "- 状态：未接受",
+                f"- 记录时间：{timestamp}",
+                f"- 原因：{reason.strip()}",
+                "- 当前版本不提供生成结果改进或单镜头重做。",
+                "- 下一步：保留本运行记录，并创建一个新的视频任务。",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    state["status"] = "video_results_not_accepted"
+    state["phase"] = "stopped"
+    state["current_pending_confirmation"] = "新建视频任务"
+    state["updated_at"] = timestamp
+    state["confirmations"]["shots"] = False
+    state.setdefault("files", {})["result_acceptance_json"] = str(json_path)
+    state.setdefault("files", {})["result_acceptance_md"] = str(md_path)
+    state["result_acceptance"] = payload
+    _append_status_history(state, "video_results_not_accepted", timestamp)
+    _write_state(state_path, state)
+    _append_change(run_dir, timestamp, f"记录视频结果未接受并停止当前运行：{reason.strip()}")
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(md_path), str(json_path)),
+        message="已记录本次视频结果未接受。当前运行已停止，不会回退或重新提交已确认分镜；请新建一个视频任务。",
+    )
 
 def assemble_confirmed_video(
     run_dir: Path,
@@ -1392,11 +1558,15 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
     if not normalized:
         raise ValueError("没有识别到有效回复。")
 
-    direction_selection = _parse_creative_direction_selection(reply)
-    if direction_selection:
-        primary_direction, supporting_direction = direction_selection
-        confirm_creative_direction(run_dir, primary_direction, supporting_direction, now=now)
-        return generate_video_plan(run_dir, now=now)
+    state = _load_state(run_dir / "workflow_state.json")
+    if state.get("phase") == "awaiting_video_creation_interview":
+        interview_result = continue_video_creation_interview(run_dir, reply, now=now)
+        if interview_result.phase == "ready_for_video_plan":
+            return generate_video_plan(run_dir, now=now)
+        return interview_result
+    duration_revision = _parse_video_duration_revision(reply)
+    if duration_revision is not None:
+        return shorten_video_plan_duration(run_dir, duration_revision, now=now)
     image_replacement = _parse_shot_image_replacement_request(reply)
     if image_replacement:
         shot_id, image_path = image_replacement
@@ -1404,6 +1574,14 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
     deleted_shots = _parse_shot_deletion_request(reply)
     if deleted_shots:
         return delete_storyboard_shots(run_dir, deleted_shots, now=now)
+    reorder_request = _parse_shot_reorder_request(reply)
+    if reorder_request:
+        shot_id, position, target_id = reorder_request
+        return reorder_storyboard_shot(run_dir, shot_id, position, target_id, now=now)
+    if _is_storyboard_repetition_approval(reply):
+        if state.get("phase") == "awaiting_video_plan_confirmation":
+            return approve_plan_material_repetition(run_dir, reply, now=now)
+        return approve_storyboard_image_repetition(run_dir, reply, now=now)
     plan_revision = _parse_plan_revision_request(normalized, reply)
     if plan_revision:
         return revise_video_plan(run_dir, plan_revision, now=now)
@@ -1432,18 +1610,10 @@ def handle_video_creation_reply(run_dir: Path, reply: str, now: datetime | None 
         return submit_dreamina_jobs(run_dir, now=now)
     if normalized in {"查询即梦结果", "继续查询即梦结果"}:
         return query_dreamina_results(run_dir, now=now)
-    shot_retry_id = _parse_shot_retry_confirmation(normalized)
-    if shot_retry_id:
-        return confirm_shot_retry(run_dir, shot_retry_id, now=now)
-    shot_retry_submission_id = _parse_shot_retry_submission(normalized)
-    if shot_retry_submission_id:
-        return submit_shot_retry(run_dir, now=now, expected_shot_id=shot_retry_submission_id)
-    shot_retry_query_id = _parse_shot_retry_query(normalized)
-    if shot_retry_query_id:
-        return query_shot_retry_results(run_dir, now=now, expected_shot_id=shot_retry_query_id)
-    shot_retry_request_id = _parse_shot_retry_request(normalized)
-    if shot_retry_request_id:
-        return plan_shot_retry(run_dir, shot_retry_request_id, reason=reply, now=now)
+    if re.search(r"(重做|重新生成)镜头", normalized) or re.search(r"(不满意|不接受|不能接受|效果不好|效果不行)", normalized):
+        if state.get("phase") != "awaiting_shot_confirmation":
+            raise ValueError("视频生成结果改进流程本期暂未实现；请保留当前运行记录并新建视频任务。")
+        return record_video_results_not_accepted(run_dir, reply, now=now)
     if normalized == "确认镜头":
         return confirm_shots(run_dir, now=now)
     if normalized in {"合并视频", "拼接视频", "生成合并视频", "合成视频"}:
@@ -1471,31 +1641,80 @@ def revise_video_plan(run_dir: Path, change_request: str, now: datetime | None =
         raise ValueError("找不到可修改的视频策划，请先生成 video_plan.md 和 video_plan.json。")
 
     timestamp = _timestamp(now)
-    revision = _build_revision_record("video_plan", change_request, timestamp)
-    plan = _load_json_file(plan_json_path, "video_plan.json")
-    plan["status"] = "revised_pending_confirmation"
-    plan.setdefault("change_requests", []).append(revision)
-    plan_json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    _append_revision_to_markdown(plan_md_path, "策划修改要求", revision)
+    state["status"] = "semantic_plan_revision_required"
+    state["current_pending_confirmation"] = "Codex 应用策划语义修改"
+    state["updated_at"] = timestamp
+    state["pending_semantic_revision"] = {
+        "scope": "video_plan",
+        "change_request": change_request.strip(),
+        "requested_at": timestamp,
+    }
+    _append_status_history(state, "semantic_plan_revision_required", timestamp)
+    _write_state(state_path, state)
+    _append_change(run_dir, timestamp, f"收到策划语义修改要求，等待 Codex 生成受控修改：{change_request.strip()}")
 
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status="semantic_plan_revision_required",
+        phase=state["phase"],
+        output_paths=(str(plan_md_path), str(plan_json_path)),
+        message="Codex 必须根据用户要求重写策划的允许字段，并调用受控策划修改入口；不能只记录修改要求，也不能要求用户编辑 JSON。",
+    )
+
+
+def apply_video_plan_semantic_revision(
+    run_dir: Path,
+    changes: dict[str, Any],
+    change_request: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    pending = state.get("pending_semantic_revision") or {}
+    if pending.get("scope") != "video_plan":
+        raise ValueError("当前没有待应用的策划语义修改。")
+    allowed = {"video_brief", "visual_strategy", "creative_quality", "story_outline"}
+    unknown = sorted(set(changes) - allowed)
+    if unknown:
+        raise ValueError("策划语义修改包含不允许字段：" + "、".join(unknown))
+    if not changes:
+        raise ValueError("策划语义修改不能为空。")
+    plan_json_path = Path(state["files"]["video_plan_json"])
+    plan_md_path = Path(state["files"]["video_plan_md"])
+    plan = _load_json_file(plan_json_path, "video_plan.json")
+    revised = deepcopy(plan)
+    for key, value in changes.items():
+        if not isinstance(value, dict):
+            raise ValueError(f"策划字段 {key} 必须是对象。")
+        revised[key] = {**dict(revised.get(key) or {}), **value}
+    _validate_semantic_plan_revision(plan, revised)
+    timestamp = _timestamp(now)
+    revised["status"] = "revised_pending_confirmation"
+    revised.setdefault("change_requests", []).append(_build_revision_record("video_plan", change_request, timestamp))
+    plan_json_path.write_text(json.dumps(revised, ensure_ascii=False, indent=2), encoding="utf-8")
+    plan_md_path.write_text(_render_video_plan(revised), encoding="utf-8")
+    state["video_brief"] = dict(revised["video_brief"])
     state["status"] = "video_plan_revised"
     state["phase"] = "awaiting_video_plan_confirmation"
     state["current_pending_confirmation"] = "确认策划"
     state["updated_at"] = timestamp
     state["confirmations"]["video_plan"] = False
+    state.pop("pending_semantic_revision", None)
     _clear_downstream_confirmations(state, after="video_plan")
     _clear_downstream_file_references(state, after="video_plan")
     _clear_transient_review_state(state)
     _append_status_history(state, "video_plan_revised", timestamp)
     _write_state(state_path, state)
-    _append_change(run_dir, timestamp, f"用户修改视频策划，清除分镜及后续确认：{change_request.strip()}")
-
+    _append_change(run_dir, timestamp, f"Codex 已应用策划语义修改：{change_request.strip()}")
     return VideoCreationStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(plan_md_path), str(plan_json_path)),
+        message=_video_plan_review_message(run_dir, revised),
     )
 
 
@@ -1565,6 +1784,72 @@ def delete_storyboard_shots(run_dir: Path, shot_ids: list[str], now: datetime | 
         status="storyboard_revised",
         phase="awaiting_storyboard_confirmation",
         output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
+    )
+
+
+def reorder_storyboard_shot(
+    run_dir: Path,
+    shot_id: str,
+    position: str,
+    target_shot_id: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    normalized_shot_id = _normalize_shot_id(shot_id)
+    normalized_target_id = _normalize_shot_id(target_shot_id)
+    if normalized_shot_id == normalized_target_id:
+        raise ValueError("不能把镜头移动到它自己前后。")
+    if position not in {"before", "after"}:
+        raise ValueError("镜头重排位置只能是 before 或 after。")
+    _assert_no_real_dreamina_submission_for_storyboard_change(run_dir)
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path = _storyboard_file_paths(run_dir, state)
+    _ensure_storyboard_files_exist([storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path])
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
+    shots = list(storyboard.get("shots", []))
+    moving = next((shot for shot in shots if str(shot.get("shot_id")) == normalized_shot_id), None)
+    target = next((shot for shot in shots if str(shot.get("shot_id")) == normalized_target_id), None)
+    if not moving or not target:
+        raise ValueError(f"找不到需要重排的镜头：{normalized_shot_id} 或 {normalized_target_id}。")
+    shots.remove(moving)
+    target_index = shots.index(target)
+    insert_index = target_index if position == "before" else target_index + 1
+    shots.insert(insert_index, moving)
+    timestamp = _timestamp(now)
+    storyboard["shots"] = shots
+    storyboard["status"] = "revised_pending_confirmation"
+    storyboard.setdefault("change_requests", []).append(
+        _build_revision_record(
+            "storyboard",
+            f"把镜头 {normalized_shot_id} 移到镜头 {normalized_target_id} {'前面' if position == 'before' else '后面'}",
+            timestamp,
+        )
+    )
+    storyboard.pop("deliberate_repetition_approved", None)
+    prompts = _build_prompts_payload(storyboard, plan, now or datetime.now())
+    prompts["status"] = "revised_pending_storyboard_confirmation"
+    _save_storyboard_and_prompts_after_edit(
+        run_dir,
+        state,
+        storyboard,
+        prompts,
+        storyboard_json_path,
+        storyboard_md_path,
+        prompts_json_path,
+        prompts_md_path,
+        timestamp,
+        f"用户重排镜头 {normalized_shot_id}，清除即梦及后续确认。",
+    )
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status="storyboard_revised",
+        phase="awaiting_storyboard_confirmation",
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
     )
 
 
@@ -1644,6 +1929,7 @@ def replace_storyboard_shot_image(
         status="storyboard_revised",
         phase="awaiting_storyboard_confirmation",
         output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
     )
 
 
@@ -1671,51 +1957,102 @@ def _revise_storyboard_scope(
         raise ValueError(f"找不到可修改的分镜或 Prompt：{missing[0]}")
 
     timestamp = _timestamp(now)
-    scope = f"shot_{shot_id}" if shot_id else "storyboard"
-    revision = _build_revision_record(scope, change_request, timestamp)
     storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
-    prompts = _load_json_file(prompts_json_path, "prompts.json")
-    storyboard["status"] = "revised_pending_confirmation"
-    prompts["status"] = "revised_pending_storyboard_confirmation"
     if shot_id:
         shot = next((item for item in storyboard.get("shots", []) if item.get("shot_id") == shot_id), None)
         if not shot:
             raise ValueError(f"找不到镜头 {shot_id}，不能修改。")
-        prompt_item = next((item for item in prompts.get("prompts", []) if item.get("shot_id") == shot_id), None)
-        if not prompt_item:
-            raise ValueError(f"找不到镜头 {shot_id} 的 Prompt，不能修改。")
-        shot.setdefault("change_requests", []).append(revision)
-        prompt_item.setdefault("change_requests", []).append(revision)
-    else:
-        storyboard.setdefault("change_requests", []).append(revision)
-        prompts.setdefault("change_requests", []).append(revision)
-    storyboard_json_path.write_text(json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
-    prompts_json_path.write_text(json.dumps(prompts, ensure_ascii=False, indent=2), encoding="utf-8")
-    title = f"镜头 {shot_id} 修改要求" if shot_id else "分镜修改要求"
-    _append_revision_to_markdown(storyboard_md_path, title, revision)
-    _append_revision_to_markdown(prompts_md_path, title, revision)
-
-    state["status"] = "storyboard_revised"
-    state["phase"] = "awaiting_storyboard_confirmation"
-    state["current_pending_confirmation"] = "确认分镜"
+    state["status"] = "semantic_storyboard_revision_required"
+    state["current_pending_confirmation"] = "Codex 应用分镜语义修改"
     state["updated_at"] = timestamp
-    state["confirmations"]["storyboard"] = False
-    _clear_downstream_confirmations(state, after="storyboard")
-    _clear_downstream_file_references(state, after="storyboard")
-    _clear_transient_review_state(state)
-    _append_status_history(state, "storyboard_revised", timestamp)
+    state["pending_semantic_revision"] = {
+        "scope": f"shot_{shot_id}" if shot_id else "storyboard",
+        "shot_id": shot_id or "",
+        "change_request": change_request.strip(),
+        "requested_at": timestamp,
+    }
+    _append_status_history(state, "semantic_storyboard_revision_required", timestamp)
     _write_state(state_path, state)
-    if shot_id:
-        _append_change(run_dir, timestamp, f"用户修改镜头 {shot_id}，清除旁白及后续确认：{change_request.strip()}")
-    else:
-        _append_change(run_dir, timestamp, f"用户修改视频分镜，清除旁白及后续确认：{change_request.strip()}")
+    _append_change(run_dir, timestamp, f"收到分镜语义修改要求，等待 Codex 生成受控修改：{change_request.strip()}")
 
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status="semantic_storyboard_revision_required",
+        phase=state["phase"],
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message="Codex 必须根据用户要求重写指定镜头或分镜的允许字段，并调用受控分镜修改入口；不能只记录修改要求。",
+    )
+
+
+def apply_storyboard_semantic_revision(
+    run_dir: Path,
+    shot_changes: list[dict[str, Any]],
+    change_request: str,
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    _assert_no_real_dreamina_submission_for_storyboard_change(run_dir)
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    pending = state.get("pending_semantic_revision") or {}
+    if not str(pending.get("scope") or "").startswith(("storyboard", "shot_")):
+        raise ValueError("当前没有待应用的分镜语义修改。")
+    if not shot_changes:
+        raise ValueError("分镜语义修改不能为空。")
+    storyboard_json_path, storyboard_md_path, prompts_json_path, prompts_md_path = _storyboard_file_paths(run_dir, state)
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
+    shots_by_id = {str(item.get("shot_id") or ""): item for item in storyboard.get("shots", [])}
+    allowed = {"visual_description", "message"}
+    changed_ids = []
+    for change in shot_changes:
+        shot_id = _normalize_shot_id(str(change.get("shot_id") or ""))
+        updates = change.get("changes")
+        if shot_id not in shots_by_id:
+            raise ValueError(f"找不到镜头 {shot_id}，不能应用语义修改。")
+        if not isinstance(updates, dict) or not updates:
+            raise ValueError(f"镜头 {shot_id} 的 changes 必须是非空对象。")
+        unknown = sorted(set(updates) - allowed)
+        if unknown:
+            raise ValueError(f"镜头 {shot_id} 包含不允许修改字段：{'、'.join(unknown)}")
+        if state.get("language_version") == "en" and "visual_description" in updates and _contains_cjk(str(updates["visual_description"])):
+            raise ValueError(f"英文视频镜头 {shot_id} 的 visual_description 不能包含中文。")
+        for key, value in updates.items():
+            if not str(value).strip():
+                raise ValueError(f"镜头 {shot_id} 的 {key} 不能为空。")
+            shots_by_id[shot_id][key] = str(value).strip()
+        shots_by_id[shot_id].setdefault("change_requests", []).append(
+            _build_revision_record(f"shot_{shot_id}", change_request, _timestamp(now))
+        )
+        changed_ids.append(shot_id)
+    storyboard["status"] = "revised_pending_confirmation"
+    storyboard.pop("deliberate_repetition_approved", None)
+    prompts = _build_prompts_payload(storyboard, plan, now or datetime.now())
+    prompts["status"] = "revised_pending_storyboard_confirmation"
+    timestamp = _timestamp(now)
+    _save_storyboard_and_prompts_after_edit(
+        run_dir,
+        state,
+        storyboard,
+        prompts,
+        storyboard_json_path,
+        storyboard_md_path,
+        prompts_json_path,
+        prompts_md_path,
+        timestamp,
+        f"Codex 已应用分镜语义修改，镜头：{', '.join(changed_ids)}。",
+    )
+    state = _load_state(state_path)
+    state.pop("pending_semantic_revision", None)
+    _write_state(state_path, state)
     return VideoCreationStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(prompts_md_path), str(prompts_json_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
     )
 
 
@@ -1776,7 +2113,7 @@ def _assert_no_real_dreamina_submission_for_storyboard_change(run_dir: Path) -> 
         raise ValueError("manual_submission.json 格式异常，不能直接修改分镜；请先修复即梦提交状态。")
     submissions = manual_submission.get("submissions", [])
     if any(str(item.get("provider_task_id") or item.get("submit_id") or "").strip() for item in submissions):
-        raise ValueError("已存在真实即梦提交记录，不能直接修改分镜图片或删镜头；请使用“重做镜头 XX”走单镜头重做流程。")
+        raise ValueError("已存在真实即梦提交记录，当前分镜已锁定，不能直接修改。请新建一个视频任务；生成结果改进流程本期暂未实现。")
 
 
 def normalize_language_version(value: str) -> str:
@@ -1848,73 +2185,24 @@ def _non_negative_int(value: Any, default: int) -> int:
     return parsed if parsed >= 0 else default
 
 
-def normalize_creative_direction(value: str | None) -> dict[str, str]:
-    if not value:
-        raise ValueError("必须选择 1 个视频主创意方向")
-    cleaned = value.strip().lower()
-    by_id = {item["id"]: item for item in VIDEO_CREATIVE_DIRECTIONS}
-    by_name = {item["name"].lower(): item for item in VIDEO_CREATIVE_DIRECTIONS}
-    if cleaned.isdigit():
-        index = int(cleaned)
-        if 1 <= index <= len(VIDEO_CREATIVE_DIRECTIONS):
-            return VIDEO_CREATIVE_DIRECTIONS[index - 1]
-    if cleaned in by_id:
-        return by_id[cleaned]
-    if cleaned in by_name:
-        return by_name[cleaned]
-    raise ValueError("创意方向必须从固定 16 个视频创意方向中选择")
-
-
-def recommend_creative_directions(
-    request_text: str,
-    platforms: list[str],
-    target_audience: str,
-    core_objective: str,
-    context: dict[str, Any],
-) -> list[dict[str, Any]]:
-    text = " ".join([request_text, " ".join(platforms), target_audience, core_objective]).lower()
-    product_assets = context.get("cards_by_type", {}).get("content_asset", [])
-    material_coverage = "已有石英纤维隔热带关联内容素材" if product_assets else "暂无已关联内容素材"
-    base = [
-        ("multiple_benefit_overview", "product_detail", "适合在短视频首触达中同时讲清产品、卖点和真实细节。"),
-        ("customer_pain_point_solution", "application_demonstration", "适合围绕采购和使用痛点解释产品价值。"),
-        ("procurement_guide", "specification_customization", "适合面向工业采购/OEM/分销商，降低询盘沟通成本。"),
-    ]
-    if any(token in text for token in ["询盘", "inquiry", "contact", "报价", "样品"]):
-        base[0] = ("inquiry_conversion", "procurement_guide", "当前目标包含询盘或转化，优先收口到 CTA。")
-    elif any(token in text for token in ["安装", "施工", "wrap", "缠绕"]):
-        base[0] = ("installation_demonstration", "product_detail", "当前目标包含安装施工，优先展示裁切、缠绕和细节。")
-    elif any(token in text for token in ["测试", "火焰", "高温", "1000"]):
-        base[0] = ("performance_test", "technical_education", "当前目标包含高温或测试表达，需同时控制证据和夸大风险。")
-
-    direction_by_id = {item["id"]: item for item in VIDEO_CREATIVE_DIRECTIONS}
-    recommendations = []
-    seen = set()
-    for primary_id, supporting_id, reason in base:
-        if primary_id in seen:
-            continue
-        seen.add(primary_id)
-        primary = direction_by_id[primary_id]
-        supporting = direction_by_id.get(supporting_id)
-        recommendations.append(
-            {
-                "primary_direction": primary,
-                "supporting_direction": supporting,
-                "rationale": reason,
-                "material_coverage": material_coverage,
-                "missing_materials": "真实应用图片和产品图片需按内容素材卡确认；缺失时只能标记为 AI 模拟或改用环境镜头。",
-                "ai_generation_risk": "不得把 AI 模拟场景表述为真实案例、真实测试或客户现场。",
-            }
-        )
-    return recommendations[:3]
-
-
 def _ensure_run_dirs(run_dir: Path) -> None:
     for relative in [
         ".",
         "dreamina_generation/generated_shots",
     ]:
         (run_dir / relative).mkdir(parents=True, exist_ok=True)
+
+
+def _unique_video_run_dir(run_root: Path, base_name: str) -> Path:
+    candidate = run_root / base_name
+    if not candidate.exists():
+        return candidate
+    suffix = 2
+    while True:
+        candidate = run_root / f"{base_name}_{suffix:02d}"
+        if not candidate.exists():
+            return candidate
+        suffix += 1
 
 
 def _initial_workflow_state(
@@ -1928,10 +2216,11 @@ def _initial_workflow_state(
     timestamp: str,
 ) -> dict[str, Any]:
     capability_profile = _dreamina_capability_profile(config)
-    creative_confirmed = bool(requirements.get("primary_direction"))
-    initial_status = "requirements_confirmed" if creative_confirmed else "creative_direction_selection_ready"
-    initial_phase = "ready_for_video_plan" if creative_confirmed else "awaiting_creative_direction_confirmation"
-    initial_pending = "生成视频策划" if creative_confirmed else "确认创意方向"
+    interview = dict(requirements.get("interview") or {})
+    brief_confirmed = bool(interview.get("completed"))
+    initial_status = "video_brief_confirmed" if brief_confirmed else "video_interview_in_progress"
+    initial_phase = "ready_for_video_plan" if brief_confirmed else "awaiting_video_creation_interview"
+    initial_pending = "生成视频策划" if brief_confirmed else "回答视频创作问题"
     return {
         "schema_version": "video-creation-workflow-v1",
         "status": initial_status,
@@ -1953,15 +2242,13 @@ def _initial_workflow_state(
         "core_objective": requirements["core_objective"],
         "workflow_mode": requirements.get("workflow_mode", "full_pipeline"),
         "requirements_payload": requirements,
-        "creative_direction": {
-            "primary": requirements["primary_direction"],
-            "supporting": requirements["supporting_direction"],
-            "confirmed": creative_confirmed,
-        },
+        "interview": interview,
+        "video_brief": confirmed_video_brief(interview) if brief_confirmed else dict(interview.get("answers", {})),
         "confirmations": {
             "language_version": True,
             "platform_duration_audience_objective": True,
-            "creative_direction": creative_confirmed,
+            "video_brief": brief_confirmed,
+            "material_visual_inspection": False,
             "video_plan": False,
             "storyboard": False,
             "dreamina_generation": False,
@@ -1997,10 +2284,8 @@ def _initial_workflow_state(
 
 def _render_requirements(requirements: dict[str, Any]) -> str:
     platforms = ", ".join(requirements["platforms"])
-    primary = requirements["primary_direction"]
-    supporting = requirements["supporting_direction"]
-    primary_text = f"{primary['name']}（{primary['id']}）" if primary else "待用户确认"
-    supporting_text = f"{supporting['name']}（{supporting['id']}）" if supporting else "待用户确认或选择无"
+    interview = requirements.get("interview") or {}
+    answers = interview.get("answers") or {}
     lines = [
         "# 视频创作需求确认",
         "",
@@ -2011,34 +2296,24 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
         f"- 受众：{requirements['target_audience'] or '未填写'}",
         f"- 核心目标：{requirements['core_objective'] or '未填写'}",
         f"- 工作流模式：{'仅视频生成（不含配音/字幕）' if requirements.get('workflow_mode') == 'video_only' else '完整流程（含旁白/后续字幕）'}",
-        f"- 主创意方向：{primary_text}",
-        f"- 辅助创意方向：{supporting_text}",
         "",
         "## 原始需求",
         "",
         requirements["request_text"],
         "",
-        "## 动态推荐",
+        "## 视频创作访谈",
         "",
     ]
-    for index, item in enumerate(requirements["recommendations"], start=1):
-        supporting_item = item["supporting_direction"]
-        lines.extend(
-            [
-                f"### 推荐 {index}",
-                "",
-                f"- 主方向：{item['primary_direction']['name']}",
-                f"- 辅助方向：{supporting_item['name'] if supporting_item else '无'}",
-                f"- 推荐理由：{item['rationale']}",
-                f"- 素材覆盖：{item['material_coverage']}",
-                f"- 缺失素材：{item['missing_materials']}",
-                f"- AI 生成风险：{item['ai_generation_risk']}",
-                "",
-            ]
-        )
-    lines.extend(["## 固定视频创意方向全集", ""])
-    for index, item in enumerate(VIDEO_CREATIVE_DIRECTIONS, start=1):
-        lines.append(f"{index}. **{item['name']}**（{item['id']}）：{item['description']}")
+    for field in CORE_VIDEO_BRIEF_FIELDS:
+        label = INTERVIEW_QUESTIONS[field]["question"]
+        lines.append(f"- {label}：{answers.get(field) or '待回答'}")
+    lines.extend(
+        [
+            "",
+            f"- 访谈状态：{'已完成' if interview.get('completed') else '进行中'}",
+            f"- 当前问题：{INTERVIEW_QUESTIONS.get(str(interview.get('current_field') or ''), {}).get('question', '无')}",
+        ]
+    )
     lines.extend(
         [
             "",
@@ -2129,8 +2404,10 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     duration_min, duration_max = _duration_tolerance(duration)
     capability_profile = _state_dreamina_capability_profile(state)
     external_names = _external_names_from_product(product)
-    primary = state["creative_direction"]["primary"]
-    supporting = state["creative_direction"].get("supporting")
+    brief = dict(state.get("video_brief") or {})
+    missing_brief = [field for field in CORE_VIDEO_BRIEF_FIELDS if not str(brief.get(field) or "").strip()]
+    if missing_brief:
+        raise ValueError("视频创作简报缺少核心信息：" + "、".join(missing_brief))
     content_asset_summaries = [
         summary
         for card in content_assets
@@ -2159,11 +2436,13 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
             "duration_tolerance_seconds": {"min": duration_min, "max": duration_max},
             "single_deliverable_for_multiple_platforms": len(state["platforms"]) > 1,
         },
-        "audience": state.get("target_audience", ""),
-        "core_objective": state.get("core_objective", ""),
-        "creative_direction": {
-            "primary": primary,
-            "supporting": supporting,
+        "audience": brief["audience"],
+        "core_objective": brief["intended_takeaway"],
+        "video_brief": brief,
+        "story_outline": {
+            "opening": f"用真实产品或应用画面迅速建立与“{brief['intended_takeaway']}”相关的观看理由。",
+            "development": f"按“{brief['visual_balance']}”展示并讲清“{brief['priority_messages']}”。",
+            "closing": f"收束到下一步行动：{brief['desired_action']}",
         },
         "knowledge_boundary": {
             "context_id": context["context_id"],
@@ -2183,9 +2462,9 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         "usable_product_knowledge": _usable_product_knowledge(product, evidence_cards),
         "content_assets": content_asset_summaries,
         "material_availability": _material_availability_summary(content_asset_summaries),
-        "visual_strategy": _visual_strategy(primary, supporting, content_assets),
-        "production_style": _production_style_profile(primary, supporting),
-        "creative_quality": _direction_quality_profile(primary),
+        "visual_strategy": _visual_strategy_from_brief(brief, content_assets),
+        "production_style": _production_style_from_brief(brief),
+        "creative_quality": _creative_quality_from_brief(brief),
         "external_skill_absorption": EXTERNAL_VIDEO_SKILL_ABSORPTION,
         "dreamina_capability_profile": capability_profile,
         "prompt_policy": {
@@ -2217,7 +2496,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         "overlay_policy": {
             "allowed": ["标题", "正式确认参数", "短卖点标签", "CTA"],
             "source": "正式知识或项目配置",
-            "inquiry_conversion_requires_cta": primary["id"] == "inquiry_conversion",
+            "desired_viewer_action": brief["desired_action"],
         },
         "generation_policy": {
             "dreamina_model": DEFAULT_DREAMINA_MODEL,
@@ -2244,8 +2523,7 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
     product = plan["product"]
     duration = plan["format"]["duration_seconds"]
     tolerance = plan["format"]["duration_tolerance_seconds"]
-    primary = plan["creative_direction"]["primary"]
-    supporting = plan["creative_direction"].get("supporting")
+    brief = plan["video_brief"]
     lines = [
         "# 视频策划",
         "",
@@ -2258,13 +2536,21 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
         f"- 平台：{', '.join(plan['platforms'])}",
         f"- 画幅/分辨率：{plan['format']['aspect_ratio']}，{plan['format']['resolution']}",
         f"- 时长：{duration} 秒（允许 {tolerance['min']}-{tolerance['max']} 秒）",
-        f"- 受众：{plan['audience'] or '未填写'}",
-        f"- 核心目标：{plan['core_objective'] or '未填写'}",
+        f"- 受众：{brief['audience']}",
+        f"- 希望观众记住：{brief['intended_takeaway']}",
+        f"- 希望观众行动：{brief['desired_action']}",
         "",
-        "## 创意方向",
+        "## 已确认视频简报",
         "",
-        f"- 主方向：{primary['name']}（{primary['id']}）",
-        f"- 辅助方向：{supporting['name'] + '（' + supporting['id'] + '）' if supporting else '无'}",
+        f"- 优先信息：{brief['priority_messages']}",
+        f"- 画面比例：{brief['visual_balance']}",
+        f"- 排除内容：{brief['excluded_content']}",
+        "",
+        "## 故事路径",
+        "",
+        f"- 开场：{plan['story_outline']['opening']}",
+        f"- 展开：{plan['story_outline']['development']}",
+        f"- 收尾：{plan['story_outline']['closing']}",
         "",
         "## 可使用产品知识",
         "",
@@ -2305,6 +2591,39 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
         lines.append("- 可优先使用素材：无。产品可见镜头会在分镜/即梦任务中被阻断。")
     for warning in material.get("warnings", []):
         lines.append(f"- 警告：{warning}")
+    representatives = plan.get("representative_images") or []
+    lines.extend(["", "## 策划代表图片", ""])
+    if representatives:
+        for item in representatives:
+            lines.extend(
+                [
+                    f"### 代表图 {item['index']}｜{item['title']}",
+                    "",
+                    f"- 素材 ID：{item['material_id']}",
+                    f"- 原始图片路径：{item['source_path']}",
+                    f"- 视觉检查：{item['inspection_requirement']}",
+                    "",
+                    f"![代表图 {item['index']}]({item['preview_path']})",
+                    "",
+                ]
+            )
+    elif plan.get("visual_inspection", {}).get("status") == "required":
+        lines.append("- 候选图片已经准备好，等待 Codex 实际打开并完成视觉检查后再生成代表图。")
+    else:
+        lines.append("- 没有可复制的正式图片素材，不能生成可靠的图片型策划。")
+    support = plan.get("material_supported_duration") or {}
+    if support:
+        lines.extend(
+            [
+                "## 素材可支撑时长",
+                "",
+                f"- 请求时长：{support.get('requested_seconds')} 秒",
+                f"- 不重复图片可支撑：{support.get('supported_seconds')} 秒",
+                f"- 状态：{support.get('status')}",
+                f"- 建议：{support.get('recommendation')}",
+                "",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -2315,7 +2634,7 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
             f"- AI 风险控制：{plan['visual_strategy']['ai_risk_control']}",
             f"- 画面风格：{plan['production_style']['name']}｜{plan['production_style']['visual_language']}",
             "",
-            "## 创意质量矩阵",
+            "## 策划质量要求",
             "",
             f"- 前 2 秒吸引点：{plan['creative_quality']['hook']}",
             f"- 视觉重点：{plan['creative_quality']['visual_focus']}",
@@ -2354,19 +2673,195 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _attach_plan_representative_images(run_dir: Path, plan: dict[str, Any]) -> None:
+    preview_dir = run_dir / "plan_assets"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    project_dir = _project_dir_from_run_dir(run_dir)
+    candidates: list[tuple[dict[str, Any], Path]] = []
+    seen_sources: set[str] = set()
+    for asset in plan.get("content_assets", []):
+        source = _first_compatible_material_file(_extract_material_paths(asset), "image2video")
+        if not source:
+            continue
+        resolved = Path(_resolve_material_path(source, project_dir))
+        key = str(resolved).casefold()
+        if key in seen_sources or not resolved.exists() or not resolved.is_file():
+            continue
+        seen_sources.add(key)
+        candidates.append((asset, resolved))
+
+    shortlist_count = min(12, len(candidates))
+    chosen = _spread_candidates(candidates, shortlist_count) if shortlist_count else []
+    visual_candidates = []
+    for index, (asset, source) in enumerate(chosen, start=1):
+        preview_name = f"candidate_{index:02d}{source.suffix.lower()}"
+        preview_path = preview_dir / preview_name
+        shutil.copy2(source, preview_path)
+        visual_candidates.append(
+            {
+                "index": f"{index:02d}",
+                "material_id": str(asset.get("id") or ""),
+                "title": str(asset.get("title") or source.name),
+                "source_path": str(source),
+                "preview_path": preview_path.relative_to(run_dir).as_posix(),
+            }
+        )
+    requested = int(plan.get("format", {}).get("duration_seconds", 0))
+    plan["visual_candidates"] = visual_candidates
+    plan["representative_images"] = []
+    plan["material_supported_duration"] = _material_supported_duration_payload(requested, 0, 0)
+    plan["visual_inspection"] = {
+        "status": "required",
+        "candidate_count": len(visual_candidates),
+    }
+    plan["visual_inspection_policy"] = {
+        "required_before_codex_review": True,
+        "filename_or_tag_only_is_insufficient": True,
+        "pixels_do_not_prove_product_facts": True,
+    }
+
+
+def _material_supported_duration_payload(requested: int, supported: int, usable_count: int) -> dict[str, Any]:
+    return {
+        "requested_seconds": requested,
+        "supported_seconds": supported,
+        "unique_usable_image_count": usable_count,
+        "status": "supported" if supported >= requested else "shorter_duration_recommended",
+        "recommendation": (
+            "现有不重复正式图片可支撑目标时长。"
+            if supported >= requested
+            else f"建议把视频缩短到不超过 {supported} 秒，或先补充并整理更多不同图片。"
+        ),
+    }
+
+
+def _validate_visual_assessment(assessment: dict[str, Any]) -> None:
+    required = ["material_id", "subject", "clarity", "composition", "vertical_crop", "usable"]
+    missing = [key for key in required if key not in assessment or (key != "usable" and not str(assessment.get(key) or "").strip())]
+    if missing:
+        raise ValueError("素材视觉检查缺少字段：" + "、".join(missing))
+    if not isinstance(assessment.get("usable"), bool):
+        raise ValueError("素材视觉检查 usable 必须是布尔值。")
+
+
+def _validate_semantic_plan_revision(original: dict[str, Any], revised: dict[str, Any]) -> None:
+    for immutable in ["product", "language_version", "platforms", "format", "knowledge_boundary", "content_assets", "prompt_policy"]:
+        if revised.get(immutable) != original.get(immutable):
+            raise ValueError(f"策划语义修改不得改变受保护字段：{immutable}")
+    brief = revised.get("video_brief") or {}
+    missing = [field for field in CORE_VIDEO_BRIEF_FIELDS if not str(brief.get(field) or "").strip()]
+    if missing:
+        raise ValueError("修改后的策划简报缺少核心字段：" + "、".join(missing))
+    for section in ["visual_strategy", "creative_quality", "story_outline"]:
+        value = revised.get(section)
+        if value is None:
+            continue
+        if not isinstance(value, dict) or any(not str(item).strip() for item in value.values()):
+            raise ValueError(f"修改后的 {section} 必须是非空字符串字段组成的对象。")
+
+
+def _material_visual_inspection_action_message(run_dir: Path, inspection_path: Path) -> str:
+    return "\n".join(
+        [
+            "已生成视频策划草稿和候选图片。",
+            "",
+            "Codex 下一步必须在当前轮次实际打开候选图片，检查主体、清晰度、构图、竖屏裁切和近重复，再记录检查结果。",
+            f"检查清单：{inspection_path}",
+            "这一步是 Agent 内部动作，不应要求用户编辑 JSON 或运行脚本。",
+        ]
+    )
+
+
+def _spread_candidates(candidates: list[tuple[dict[str, Any], Path]], count: int) -> list[tuple[dict[str, Any], Path]]:
+    if count >= len(candidates):
+        return candidates
+    if count <= 1:
+        return [candidates[0]]
+    indexes = [round(index * (len(candidates) - 1) / (count - 1)) for index in range(count)]
+    return [candidates[index] for index in indexes]
+
+
+def _video_plan_review_message(run_dir: Path, plan: dict[str, Any]) -> str:
+    brief = plan["video_brief"]
+    lines = [
+        "## 视频策划摘要",
+        "",
+        f"- 给谁看：{brief['audience']}",
+        f"- 看完记住：{brief['intended_takeaway']}",
+        f"- 重点信息：{brief['priority_messages']}",
+        f"- 画面安排：{brief['visual_balance']}",
+        f"- 结尾行动：{brief['desired_action']}",
+        "",
+        "下面是本次策划的代表图片。Codex 必须先实际查看这些图片，再把它们展示给用户确认：",
+        "",
+    ]
+    for item in plan.get("representative_images", []):
+        preview = (run_dir / item["preview_path"]).resolve()
+        lines.extend(
+            [
+                f"### 代表图 {item['index']}｜{item['title']}",
+                f"原图：{item['source_path']}",
+                f"![代表图 {item['index']}](<{preview}>)",
+                "",
+            ]
+        )
+    support = plan.get("material_supported_duration") or {}
+    if support.get("status") != "supported":
+        lines.extend([f"素材提醒：{support.get('recommendation')}", ""])
+    lines.append("确认请回复 `确认策划`；需要调整时直接说明要改什么。")
+    return "\n".join(lines)
+
+
+def _storyboard_review_message(run_dir: Path, storyboard: dict[str, Any]) -> str:
+    lines = ["## 分镜确认", ""]
+    elapsed = 0
+    for shot in storyboard.get("shots", []):
+        duration = int(shot.get("duration_seconds", 0))
+        start = elapsed
+        end = elapsed + duration
+        elapsed = end
+        preview = shot.get("image_preview") or {}
+        source = preview.get("source_path") or "无"
+        lines.extend(
+            [
+                f"### 镜头 {shot['shot_id']}｜{start}–{end} 秒",
+                f"- 用途：{shot['message']}",
+                f"- 动作/画面：{shot['visual_description']}",
+                f"- 原图：{source}",
+            ]
+        )
+        if preview.get("preview_path"):
+            preview_path = (run_dir / preview["preview_path"]).resolve()
+            lines.append(f"![镜头 {shot['shot_id']} 参考图](<{preview_path}>)")
+        else:
+            lines.append("- 图片：当前镜头没有可显示的真实参考图。")
+        lines.append("")
+    summary = storyboard.get("image_reference_summary") or {}
+    if summary.get("status") == "warning":
+        lines.extend([f"重复图片警告：{summary.get('message')}", ""])
+    lines.append("确认请回复 `确认分镜`。确认前可以直接说“删除镜头 03”或“镜头 04 图片换成 E:/.../image.jpg”。")
+    return "\n".join(lines)
+
+
 def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: datetime) -> dict[str, Any]:
     duration = int(plan["format"]["duration_seconds"])
     shot_duration = 5
     shot_count = max(1, duration // shot_duration)
-    content_assets = plan.get("content_assets", [])
-    primary = plan["creative_direction"]["primary"]
+    content_assets = list(plan.get("content_assets", []))
+    inspected_ids = plan.get("inspected_usable_material_ids")
+    if isinstance(inspected_ids, list):
+        allowed_ids = {str(item) for item in inspected_ids}
+        content_assets = [asset for asset in content_assets if str(asset.get("id") or "") in allowed_ids]
+    brief = plan["video_brief"]
     external_name = _display_product_name(plan)
     shots = []
     used_material_ids: set[str] = set()
+    repetition_approval = plan.get("material_repetition_approved") or {}
+    allow_repetition = bool(repetition_approval.get("approved"))
     for index in range(1, shot_count + 1):
         shot_id = f"{index:02d}"
         role = _shot_role(index, shot_count)
-        selected_material = _select_material_for_shot(content_assets, role, used_material_ids)
+        selected_material = _select_material_for_shot(content_assets, role, used_material_ids, allow_repetition=allow_repetition)
         if selected_material and selected_material.get("id"):
             used_material_ids.add(str(selected_material["id"]))
         product_visible = role not in {"opening_environment", "closing_cta"} or bool(selected_material)
@@ -2376,8 +2871,8 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
             "shot_id": shot_id,
             "duration_seconds": shot_duration,
             "role": role,
-            "visual_description": _shot_visual_description(role, external_name, primary, bool(selected_material)),
-            "message": _shot_message(role, primary, external_name),
+            "visual_description": _shot_visual_description(role, external_name, brief, bool(selected_material)),
+            "message": _shot_message(role, brief, external_name),
             "product_visible": product_visible,
             "material_mode": material_mode,
             "selected_material": selected_material,
@@ -2389,18 +2884,18 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
             "human_face_risk": _material_human_face_risk(selected_material),
             "human_face_policy": "allow_partial_hands_or_back_view_only",
             "risk_notes": _shot_risk_notes(material_mode, product_visible, bool(selected_material)),
-            "creative_quality_checks": _shot_creative_quality_checks(role, primary, plan["creative_quality"]),
+            "creative_quality_checks": _shot_creative_quality_checks(role, brief, plan["creative_quality"]),
         }
         shot["shot_design_validation"] = _validate_shot_design(shot)
         shots.append(shot)
-    return {
+    storyboard = {
         "schema_version": "storyboard-v1",
         "generated_at": now.isoformat(),
         "status": "draft_pending_confirmation",
         "language_version": plan["language_version"],
         "platforms": plan["platforms"],
         "format": plan["format"],
-        "creative_direction": plan["creative_direction"],
+        "video_brief": brief,
         "material_priority": plan["visual_strategy"]["material_priority"],
         "production_style": plan["production_style"],
         "creative_quality": plan["creative_quality"],
@@ -2414,6 +2909,9 @@ def _build_storyboard_payload(state: dict[str, Any], plan: dict[str, Any], now: 
         },
         "next_step": "确认分镜后规划即梦任务。",
     }
+    if allow_repetition:
+        storyboard["deliberate_repetition_approved"] = repetition_approval
+    return storyboard
 
 
 def _attach_storyboard_image_previews(run_dir: Path, storyboard: dict[str, Any]) -> None:
@@ -2690,18 +3188,20 @@ def _select_material_for_shot(
     content_assets: list[dict[str, Any]],
     role: str,
     used_material_ids: set[str],
+    allow_repetition: bool = False,
 ) -> dict[str, Any] | None:
     candidates = []
     for position, asset in enumerate(content_assets):
         material_id = str(asset.get("id") or "")
-        if not material_id or material_id in used_material_ids:
+        if not material_id or (material_id in used_material_ids and not allow_repetition):
             continue
         media_types = {str(item).lower() for item in asset.get("media_types", [])}
         if "image" not in media_types:
             continue
         role_score = _material_role_score(asset, role)
         path_score = 1000 if _material_has_image_reference(asset) else 0
-        candidates.append((-(path_score + role_score), position, asset))
+        repetition_penalty = 10000 if material_id in used_material_ids else 0
+        candidates.append((repetition_penalty - (path_score + role_score), position, asset))
     if not candidates:
         return None
     candidates.sort(key=lambda item: (item[0], item[1]))
@@ -2759,7 +3259,7 @@ def _shot_material_mode(role: str, selected_material: dict[str, Any] | None, pro
     return "text2video"
 
 
-def _shot_visual_description(role: str, product_name: str, primary: dict[str, str], has_asset: bool) -> str:
+def _shot_visual_description(role: str, product_name: str, brief: dict[str, str], has_asset: bool) -> str:
     if role == "opening_environment":
         return f"Vertical industrial short-video opening for {product_name}, clean high-temperature insulation context, no text subtitles."
     if role == "product_hero":
@@ -2767,13 +3267,13 @@ def _shot_visual_description(role: str, product_name: str, primary: dict[str, st
     if role == "product_detail":
         return f"Close-up of {product_name} texture, edge, thickness and flexible woven detail, realistic product material."
     if role == "benefit_visual":
-        return f"Visual metaphor for {primary['name']} using controlled heat-insulation industrial imagery, no exaggerated test result."
+        return "Controlled industrial visual supporting the confirmed product value in the approved brief, with no exaggerated test result."
     if role == "application_context":
         return f"Confirmed industrial application context for {product_name}, simulated only if no real application material exists."
     return f"Closing product and inquiry-oriented shot for {product_name}, clean industrial background, no platform UI conflict."
 
 
-def _shot_message(role: str, primary: dict[str, str], product_name: str) -> str:
+def _shot_message(role: str, brief: dict[str, str], product_name: str) -> str:
     if role == "opening_environment":
         return "开场建立工业高温隔热需求。"
     if role == "product_hero":
@@ -2781,10 +3281,10 @@ def _shot_message(role: str, primary: dict[str, str], product_name: str) -> str:
     if role == "product_detail":
         return "展示真实织纹、边缘和材料细节。"
     if role == "benefit_visual":
-        return f"围绕{primary['name']}呈现核心价值。"
+        return f"围绕“{brief['intended_takeaway']}”呈现核心价值。"
     if role == "application_context":
         return "呈现已确认应用方向，避免虚构真实案例。"
-    return "收束到品牌记忆和轻量 CTA。"
+    return f"收束到下一步行动：{brief['desired_action']}"
 
 
 def _shot_risk_notes(material_mode: str, product_visible: bool, has_asset: bool) -> str:
@@ -2915,14 +3415,14 @@ def _seedance_media_kind(material: dict[str, Any]) -> str:
 def _material_reference_usage(shot: dict[str, Any], media_kind: str) -> str:
     role = str(shot.get("role") or "")
     if role == "product_hero":
-        return "真实产品首帧参考"
+        return "a real-product first-frame reference"
     if role == "product_detail":
-        return "织纹、边缘和材料细节参考"
+        return "a woven texture, edge, and material-detail reference"
     if role == "closing_cta":
-        return "产品定格或尾帧参考"
+        return "a stable product freeze-frame or last-frame reference"
     if role == "application_context":
-        return "已确认应用场景中的产品外观参考"
-    return "真实产品外观参考"
+        return "a product-appearance reference in a confirmed application context"
+    return "a real-product appearance reference"
 
 
 def _material_reference_execution_strategy(media_kind: str) -> str:
@@ -3843,7 +4343,7 @@ def _render_dreamina_results(results: dict[str, Any]) -> str:
             "## 下一步",
             "",
             "- 如果镜头可用，回复：确认镜头。",
-            "- 如果单个镜头需要重做，回复：重做镜头 03，并说明原因。",
+            "- 本期不提供生成结果改进或单镜头重做；结果不接受时请记录原因并新建视频任务。",
             "",
         ]
     )
@@ -4377,7 +4877,8 @@ def _build_workflow_status(run_dir: Path, state: dict[str, Any], now: datetime) 
         "language_version": state.get("language_version"),
         "platforms": state.get("platforms", []),
         "duration_seconds": state.get("duration_seconds"),
-        "creative_direction": state.get("creative_direction", {}),
+        "video_brief": state.get("video_brief", {}),
+        "interview": state.get("interview", {}),
         "confirmations": state.get("confirmations", {}),
         "suggested_replies": _suggested_replies_for_state(state),
         "available_outputs": available_outputs,
@@ -4390,9 +4891,7 @@ def _build_workflow_status(run_dir: Path, state: dict[str, Any], now: datetime) 
 
 
 def _render_workflow_status(status: dict[str, Any]) -> str:
-    direction = status.get("creative_direction", {})
-    primary = direction.get("primary") or {}
-    supporting = direction.get("supporting") or {}
+    brief = status.get("video_brief", {})
     lines = [
         "# 视频创作当前状态",
         "",
@@ -4402,8 +4901,8 @@ def _render_workflow_status(status: dict[str, Any]) -> str:
         f"- 语言版本：{status.get('language_version')}",
         f"- 平台：{', '.join(status.get('platforms', []))}",
         f"- 时长：{status.get('duration_seconds')} 秒",
-        f"- 主创意方向：{primary.get('name', '未记录')}",
-        f"- 辅助创意方向：{supporting.get('name', '无') if supporting else '无'}",
+        f"- 目标受众：{brief.get('audience', '待访谈')}",
+        f"- 希望观众记住：{brief.get('intended_takeaway', '待访谈')}",
         "",
         "## 建议回复",
         "",
@@ -4426,7 +4925,7 @@ def _render_workflow_status(status: dict[str, Any]) -> str:
             "- 只从当前阶段继续，不重复已确认步骤。",
             "- 已确认的付费即梦动作不会因为恢复状态而自动重新提交。",
             "- 普通员工继续通过 `$tuolin-video-workflow` 或自然语言回复操作。",
-            "- 生成策划前必须先由用户确认主创意方向和辅助创意方向；Agent 不得代替用户自动选择。",
+            "- 生成策划前必须完成当前运行的视频创作访谈；只追问尚未明确的核心业务信息。",
             "",
         ]
     )
@@ -4436,10 +4935,17 @@ def _render_workflow_status(status: dict[str, Any]) -> str:
 def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
     pending = str(state.get("current_pending_confirmation") or "")
     phase = str(state.get("phase") or "")
-    if pending.startswith(("确认重做镜头", "提交重做镜头", "查询重做镜头", "继续查询重做镜头")):
-        return [pending]
-    if pending == "确认创意方向":
-        return ["主方向：采购指南型，辅助方向：产品细节型", "主方向：多卖点概览型，辅助方向：采购指南型"]
+    if phase == "awaiting_video_creation_interview":
+        return ["按推荐", "剩下都按推荐"]
+    if phase in {
+        "awaiting_material_visual_inspection",
+    } or state.get("status") in {
+        "semantic_plan_revision_required",
+        "semantic_storyboard_revision_required",
+    }:
+        return []
+    if phase == "stopped" and state.get("status") == "video_results_not_accepted":
+        return ["新建一个视频任务"]
     if pending == "确认策划":
         return ["确认策划", "修改策划，开场更突出客户痛点"]
     if pending == "确认分镜":
@@ -4449,7 +4955,7 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
     }:
         return [pending]
     if phase == "awaiting_shot_confirmation":
-        return ["确认镜头", "重做镜头 03"]
+        return ["确认镜头"]
     if phase in {"ready_for_video_assembly", "awaiting_video_assembly"}:
         return ["合并视频"]
     if pending:
@@ -4459,26 +4965,6 @@ def _suggested_replies_for_state(state: dict[str, Any]) -> list[str]:
 
 def _normalize_user_reply(reply: str) -> str:
     return re.sub(r"\s+", " ", reply.strip()).lower()
-
-
-def _parse_creative_direction_selection(reply: str) -> tuple[str, str | None] | None:
-    text = reply.strip()
-    if not text:
-        return None
-    primary_match = re.search(r"主方向\s*[：:为是]?\s*([^\n，,；;。]+)", text)
-    if not primary_match and not re.search(r"确认创意方向|选择创意方向|确认方向", text):
-        return None
-    supporting_match = re.search(r"辅助方向\s*[：:为是]?\s*([^\n，,；;。]+)", text)
-    if primary_match:
-        primary = primary_match.group(1).strip()
-    else:
-        # Explicit confirmation without a primary direction is intentionally rejected.
-        # Users must name the direction; the Agent must not silently choose the top recommendation.
-        raise ValueError("确认创意方向时必须写明主方向，例如：主方向：采购指南型，辅助方向：产品细节型。")
-    supporting = supporting_match.group(1).strip() if supporting_match else None
-    if supporting and supporting in {"无", "不选", "不要", "none"}:
-        supporting = None
-    return primary, supporting
 
 
 def _parse_plan_revision_request(normalized_reply: str, original_reply: str) -> str | None:
@@ -4535,6 +5021,31 @@ def _parse_shot_deletion_request(reply: str) -> list[str] | None:
     if not numbers:
         return None
     return [_normalize_shot_id(number) for number in numbers]
+
+
+def _parse_shot_reorder_request(reply: str) -> tuple[str, str, str] | None:
+    text = reply.strip()
+    match = re.search(
+        r"(?:把)?镜头\s*0?(\d{1,2})\s*(?:移动|移|放|调整)?到?镜头\s*0?(\d{1,2})\s*(前面|之前|后面|之后)",
+        text,
+    )
+    if not match:
+        return None
+    position = "before" if match.group(3) in {"前面", "之前"} else "after"
+    return _normalize_shot_id(match.group(1)), position, _normalize_shot_id(match.group(2))
+
+
+def _parse_video_duration_revision(reply: str) -> int | None:
+    match = re.search(r"(?:缩短|改|调整)(?:视频)?(?:时长)?(?:到|为|成)\s*(\d{1,3})\s*秒", reply)
+    return int(match.group(1)) if match else None
+
+
+def _is_storyboard_repetition_approval(reply: str) -> bool:
+    normalized = _normalize_user_reply(reply)
+    return bool(
+        re.search(r"(允许|同意|确认|接受|批准)", normalized)
+        and re.search(r"(重复图片|图片重复|重复参考图|重复素材)", normalized)
+    )
 
 
 def _parse_shot_retry_confirmation(reply: str) -> str | None:
@@ -4948,42 +5459,34 @@ def _material_availability_user_summary(counts: dict[str, int], warnings: list[s
     return "暂无可用于视频生成的真实素材参考。"
 
 
-def _visual_strategy(primary: dict[str, str], supporting: dict[str, str] | None, content_assets: list[dict[str, Any]]) -> dict[str, str]:
-    support_text = f"，辅助方向为{supporting['name']}" if supporting else ""
+def _visual_strategy_from_brief(brief: dict[str, str], content_assets: list[dict[str, Any]]) -> dict[str, str]:
     coverage = "优先使用已整理内容素材" if content_assets else "当前缺少已整理内容素材，后续分镜需谨慎使用 AI 模拟"
     return {
-        "summary": f"围绕{primary['name']}组织叙事{support_text}；{coverage}。",
+        "summary": f"围绕“{brief['intended_takeaway']}”组织叙事，画面采用“{brief['visual_balance']}”；{coverage}。",
         "material_priority": "知识卡文字依据 > 真实产品图片转视频 > 真实应用图片转视频 > AI 模拟环境镜头 > 纯文本生成环境镜头",
         "ai_risk_control": "任何展示具体产品的 AI 镜头必须使用真实产品图片作参考；模拟场景必须标记为 AI 生成。",
     }
 
 
-def _direction_quality_profile(primary: dict[str, str]) -> dict[str, str]:
-    return CREATIVE_DIRECTION_QUALITY_MATRIX.get(primary["id"], CREATIVE_DIRECTION_QUALITY_MATRIX["product_overview"])
-
-
-def _production_style_profile(primary: dict[str, str], supporting: dict[str, str] | None) -> dict[str, str]:
-    candidate_ids = {primary["id"]}
-    if supporting:
-        candidate_ids.add(supporting["id"])
-    for style_id, profile in INDUSTRIAL_VIDEO_STYLE_MATRIX.items():
-        if candidate_ids & set(profile["best_for"]):
-            return {
-                "id": style_id,
-                "name": profile["name"],
-                "visual_language": profile["visual_language"],
-                "matched_direction_ids": sorted(candidate_ids & set(profile["best_for"])),
-            }
-    fallback = INDUSTRIAL_VIDEO_STYLE_MATRIX["industrial_professional"]
+def _creative_quality_from_brief(brief: dict[str, str]) -> dict[str, str]:
     return {
-        "id": "industrial_professional",
-        "name": fallback["name"],
-        "visual_language": fallback["visual_language"],
-        "matched_direction_ids": [primary["id"]],
+        "hook": f"前 2 秒让目标受众看到与“{brief['intended_takeaway']}”直接相关的真实产品或应用画面。",
+        "visual_focus": f"画面比例遵循：{brief['visual_balance']}",
+        "message_focus": f"优先讲清：{brief['priority_messages']}",
+        "cta_rule": f"结尾引导：{brief['desired_action']}",
     }
 
 
-def _shot_creative_quality_checks(role: str, primary: dict[str, str], quality: dict[str, str]) -> list[str]:
+def _production_style_from_brief(brief: dict[str, str]) -> dict[str, str]:
+    return {
+        "id": "industrial_professional",
+        "name": "工业专业型",
+        "visual_language": "clean industrial product visuals, credible application context, stable camera movement, realistic material texture",
+        "brief_visual_balance": brief["visual_balance"],
+    }
+
+
+def _shot_creative_quality_checks(role: str, brief: dict[str, str], quality: dict[str, str]) -> list[str]:
     checks = []
     if role == "opening_environment":
         checks.append(quality["hook"])
@@ -4993,12 +5496,7 @@ def _shot_creative_quality_checks(role: str, primary: dict[str, str], quality: d
         checks.append(quality["cta_rule"])
     else:
         checks.append(quality["message_focus"])
-    if primary["id"] == "inquiry_conversion" and role == "closing_cta":
-        checks.append("询盘转化型结尾必须包含明确 CTA。")
-    if primary["id"] == "performance_test":
-        checks.append("性能测试型不得把演示视觉表述为正式检测结果。")
-    if primary["id"] == "real_case_study":
-        checks.append("真实案例型必须基于可公开真实案例素材；缺失时应降级为应用示意。")
+    checks.append(f"不得出现：{brief['excluded_content']}")
     return checks
 
 

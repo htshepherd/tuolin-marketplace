@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "0.1.38",
+  "version": "0.1.40",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn campaign workflows, and quartz-fiber-tape video creation workflows.",
   "author": {
     "name": "Tianjin Tuolin"
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Tuolin Agent 2.0",
     "shortDescription": "Tuolin business agents for knowledge base, LinkedIn, and video creation workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn 30-day campaign workflows, and the quartz-fiber-tape video creation workflow. Video creation is an application-layer Agent that uses the generated Agent interface only, confirms language/version/platform/creative direction before planning, and outputs Dreamina video shot plans plus safe manual submission handoff files.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn 30-day campaign workflows, and the quartz-fiber-tape video creation workflow. Video creation uses a one-question-at-a-time business interview, shows plan and storyboard images directly in Codex, and preserves confirmation-gated Dreamina handoff and assembly.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [

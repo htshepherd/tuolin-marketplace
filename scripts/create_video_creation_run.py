@@ -22,8 +22,6 @@ def main() -> int:
     parser.add_argument("--duration", type=int, default=60, help="Video duration: 15, 20, 30, 45, 60, 90, or 120 seconds.")
     parser.add_argument("--audience", default="", help="Target audience.")
     parser.add_argument("--objective", default="", help="Core objective.")
-    parser.add_argument("--primary-direction", default="", help="Primary video creative direction id, name, or number.")
-    parser.add_argument("--supporting-direction", help="Optional supporting video creative direction id, name, or number.")
     parser.add_argument("--project-dir", default=".", help="Knowledge project directory.")
     parser.add_argument("--config", help="Optional config JSON path.")
     parser.add_argument("--timestamp", help="Optional YYYYMMDD_HHMMSS timestamp for deterministic tests.")
@@ -40,8 +38,6 @@ def main() -> int:
         duration_seconds=args.duration,
         target_audience=args.audience,
         core_objective=args.objective,
-        primary_direction=args.primary_direction,
-        supporting_direction=args.supporting_direction,
         now=now,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
