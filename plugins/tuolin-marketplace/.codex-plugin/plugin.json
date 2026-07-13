@@ -1,7 +1,7 @@
 {
   "name": "tuolin-marketplace",
-  "version": "0.1.40",
-  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn campaign workflows, and quartz-fiber-tape video creation workflows.",
+  "version": "1.50.0",
+  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn workflows, and evidence-driven YouTube Shorts video creation.",
   "author": {
     "name": "Tianjin Tuolin"
   },
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Tuolin Agent 2.0",
     "shortDescription": "Tuolin business agents for knowledge base, LinkedIn, and video creation workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn 30-day campaign workflows, and the quartz-fiber-tape video creation workflow. Video creation uses a one-question-at-a-time business interview, shows plan and storyboard images directly in Codex, and preserves confirmation-gated Dreamina handoff and assembly.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, and an evidence-driven YouTube Shorts video workflow. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [
@@ -29,11 +29,11 @@
       "Write"
     ],
     "defaultPrompt": [
-      "整理一下拓霖知识库。",
-      "查看当前还有哪些资料需要继续整理。",
-      "有哪些内容需要我确认？",
-      "生成 LinkedIn Day 01 发布图",
-      "做一个15秒英文版石英纤维隔热带产品视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。"
+      "\u6574\u7406\u4e00\u4e0b\u62d3\u9716\u77e5\u8bc6\u5e93\u3002",
+      "\u67e5\u770b\u5f53\u524d\u8fd8\u6709\u54ea\u4e9b\u8d44\u6599\u9700\u8981\u7ee7\u7eed\u6574\u7406\u3002",
+      "\u6709\u54ea\u4e9b\u5185\u5bb9\u9700\u8981\u6211\u786e\u8ba4\uff1f",
+      "\u751f\u6210 LinkedIn Day 01 \u53d1\u5e03\u56fe",
+      "\u505a\u4e00\u4e2a15\u79d2\u82f1\u6587\u7248\u77f3\u82f1\u7ea4\u7ef4\u9694\u70ed\u5e26\u4ea7\u54c1\u89c6\u9891\uff0c\u9762\u5411\u6b27\u7f8e\u5de5\u4e1a\u91c7\u8d2d\u5546\uff0c\u7528\u5728 YouTube Shorts\u3002"
     ],
     "brandColor": "#2563EB"
   }

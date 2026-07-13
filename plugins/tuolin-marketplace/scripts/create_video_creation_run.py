@@ -17,7 +17,7 @@ def main() -> int:
         "--platform",
         action="append",
         required=True,
-        help="Target platform. Repeat for both platforms. Supported: youtube_shorts, tiktok.",
+        help="Target platform. Current release supports youtube_shorts only.",
     )
     parser.add_argument("--duration", type=int, default=60, help="Video duration: 15, 20, 30, 45, 60, 90, or 120 seconds.")
     parser.add_argument("--audience", default="", help="Target audience.")
