@@ -76,10 +76,22 @@ TYPE_FIELDS = {
         "decision_options": ["采用A", "采用B"],
         "blocking_level": "blocks_external",
     },
+    "video_profile": {
+        "video_asset_id": "video_asset_1234567890abcdef1234567890abcdef",
+        "product_id": "product/quartz_fiber_tape",
+        "profile_revision": "video_profile_rev_1234567890abcdef",
+        "content_digest": "sha256:" + "a" * 64,
+        "processing_state": "review_required",
+        "use_capabilities": ["product_detail_reference"],
+    },
 }
 
 
 class CardValidatorTests(unittest.TestCase):
+    def test_video_profile_is_supported_card_type(self) -> None:
+        self.assertIn("video_profile", PROFILE["card_types"])
+        self.assertIn("video_profile", PROFILE["type_required_fields"])
+
     def test_all_ten_card_types_have_valid_minimum_frontmatter(self) -> None:
         self.assertEqual(set(TYPE_FIELDS), PROFILE["card_types"])
         for card_type, fields in TYPE_FIELDS.items():

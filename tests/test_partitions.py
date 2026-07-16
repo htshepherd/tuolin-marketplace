@@ -155,7 +155,7 @@ class PartitionScanTests(unittest.TestCase):
             self.assertEqual(summary.product_pending_registration_count, 1)
             self.assertEqual(summary.recommended_next_action, "continue_reading")
 
-    def test_pdf_and_video_processing_progress_detects_cache_outputs(self) -> None:
+    def test_progress_counts_valid_profiles_not_legacy_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             initialize_project(paths)
@@ -186,11 +186,12 @@ class PartitionScanTests(unittest.TestCase):
 
             summary = scan_partition(paths, quartz)
 
-            self.assertEqual(summary.pending_processing_count, 0)
+            self.assertEqual(summary.pending_processing_count, 1)
             self.assertEqual(summary.pdf_processed_count, 1)
-            self.assertEqual(summary.video_processed_count, 1)
+            self.assertEqual(summary.video_processed_count, 0)
+            self.assertEqual(summary.video_pending_count, 1)
             self.assertEqual(summary.product_pending_registration_count, 0)
-            self.assertEqual(summary.recommended_next_action, "prepare_raw")
+            self.assertEqual(summary.recommended_next_action, "continue_reading")
 
     def test_raw_change_after_snapshot_sets_needs_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

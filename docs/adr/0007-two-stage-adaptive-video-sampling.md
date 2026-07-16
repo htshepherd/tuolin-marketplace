@@ -1,0 +1,3 @@
+# Use two-stage adaptive sampling for video understanding
+
+Knowledge-base video analysis first samples uniformly across the video's duration to establish broad structure, then adds frames around meaningful scene, subject, visibility, action, and process-state changes. Installation, test, and production videos explicitly cover before, action, and after states; black, blurred, and near-duplicate frames are excluded or replaced. This avoids both the blindness of one-frame sampling and the cost of dense fixed-interval extraction, while keeping task-specific runtime extraction separate from reusable profile analysis.

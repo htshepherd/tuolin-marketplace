@@ -77,7 +77,7 @@ class PartitionOrganizerTests(unittest.TestCase):
                 }.issubset(card_types)
             )
 
-    def test_ten_card_types_can_be_generated_from_sample_materials(self) -> None:
+    def test_partition_samples_generate_legacy_card_types_while_video_profiles_use_dedicated_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             initialize_project(paths)
@@ -101,6 +101,9 @@ class PartitionOrganizerTests(unittest.TestCase):
 
             summary = json.loads((paths.generated_dir / "agent-interface" / "manifest_summary.json").read_text(encoding="utf-8"))
             for card_type, count in summary["counts_by_type"].items():
+                if card_type == "video_profile":
+                    self.assertEqual(count, 0)
+                    continue
                 self.assertGreater(count, 0, card_type)
 
     def test_market_sales_and_customer_materials_do_not_create_product_cards(self) -> None:

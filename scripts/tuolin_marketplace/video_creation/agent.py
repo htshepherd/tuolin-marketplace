@@ -896,6 +896,119 @@ def generate_storyboard(run_dir: Path, overwrite: bool = False, now: datetime | 
     )
 
 
+def set_storyboard_shot_real_clip(
+    run_dir: Path,
+    shot_id: str,
+    *,
+    asset_id: str,
+    profile_revision: str,
+    interface_revision: str,
+    segment_id: str,
+    source_start_seconds: float,
+    source_end_seconds: float,
+    task_clip_path: Path,
+    adaptations: dict[str, Any],
+    audio_policy: str,
+    risk_notes: list[str],
+    now: datetime | None = None,
+) -> VideoCreationStepResult:
+    run_dir = run_dir.expanduser().resolve()
+    state_path = run_dir / "workflow_state.json"
+    state = _load_state(state_path)
+    if state.get("phase") != "awaiting_storyboard_confirmation":
+        raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能绑定真实视频片段。")
+    normalized_shot_id = _normalize_shot_id(shot_id)
+    storyboard_json_path = Path(
+        state.get("files", {}).get("storyboard_json", run_dir / "storyboard.json")
+    )
+    storyboard_md_path = Path(
+        state.get("files", {}).get("storyboard_md", run_dir / "storyboard.md")
+    )
+    storyboard = _load_json_file(storyboard_json_path, "storyboard.json")
+    shot = next(
+        (
+            item
+            for item in storyboard.get("shots", [])
+            if str(item.get("shot_id") or "") == normalized_shot_id
+        ),
+        None,
+    )
+    if shot is None:
+        raise ValueError(f"找不到镜头 {normalized_shot_id}。")
+    task_path = task_clip_path.expanduser().resolve()
+    try:
+        task_path.relative_to(run_dir)
+    except ValueError as exc:
+        raise ValueError("real task clip must be stored inside the current video run") from exc
+    if not task_path.is_file() or task_path.stat().st_size <= 0:
+        raise FileNotFoundError(task_path)
+    start = float(source_start_seconds)
+    end = float(source_end_seconds)
+    if end <= start:
+        raise ValueError("real task clip source range is invalid")
+    if abs((end - start) - float(shot.get("duration_seconds") or 0)) > 0.05:
+        raise ValueError("real task clip duration must match the storyboard shot duration")
+    clip = {
+        "asset_id": asset_id,
+        "profile_revision": profile_revision,
+        "interface_revision": interface_revision,
+        "segment_id": segment_id,
+        "source_range": {
+            "start_seconds": start,
+            "end_seconds": end,
+        },
+        "task_clip_path": str(task_path),
+        "preview_path": str(task_path),
+        "content_fingerprint": _file_sha256(task_path),
+        "adaptations": dict(adaptations),
+        "audio_policy": audio_policy,
+        "risk_notes": list(risk_notes),
+        "selection_policy": "prefer_real_over_regeneration",
+    }
+    _validate_real_video_clip_authorization(run_dir, clip)
+    shot["material_mode"] = "real_video_clip"
+    shot["ai_generated"] = False
+    shot["requires_real_product_reference"] = False
+    shot["selected_material"] = None
+    shot["selected_materials"] = []
+    shot["shot_reference_sequence"] = []
+    shot["image_preview"] = None
+    shot["image_previews"] = []
+    shot["first_frame_reference_id"] = None
+    shot["last_frame_reference_id"] = None
+    shot["frame_control_risk"] = ""
+    shot["real_video_clip"] = clip
+    shot["risk_notes"] = "；".join(risk_notes) if risk_notes else "使用已授权真实任务片段。"
+    shot["shot_design_validation"] = {
+        "status": "ok",
+        "messages": ["真实任务片段已绑定，确认时必须展示并使用同一文件。"],
+    }
+    _validate_storyboard_real_clip_contract(run_dir, storyboard)
+    storyboard_json_path.write_text(
+        json.dumps(storyboard, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    storyboard_md_path.write_text(_render_storyboard(storyboard), encoding="utf-8")
+    timestamp = _timestamp(now)
+    state["confirmations"]["storyboard"] = False
+    _clear_downstream_confirmations(state, after="storyboard")
+    state["updated_at"] = timestamp
+    _write_state(state_path, state)
+    _append_change(
+        run_dir,
+        timestamp,
+        f"镜头 {normalized_shot_id} 绑定已授权真实任务片段；即梦不得重新生成该镜头。",
+    )
+    return VideoCreationStepResult(
+        run_dir=str(run_dir),
+        workflow_state_path=str(state_path),
+        status=state["status"],
+        phase=state["phase"],
+        output_paths=(str(storyboard_md_path), str(storyboard_json_path), str(task_path)),
+        message=_storyboard_review_message(run_dir, storyboard),
+    )
+
+
 def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreationStepResult:
     run_dir = run_dir.expanduser().resolve()
     state_path = run_dir / "workflow_state.json"
@@ -912,6 +1025,7 @@ def confirm_storyboard(run_dir: Path, now: datetime | None = None) -> VideoCreat
     if state.get("phase") != "awaiting_storyboard_confirmation":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能确认分镜。")
     storyboard = _load_json_file(required[1], "storyboard.json")
+    _validate_storyboard_real_clip_contract(run_dir, storyboard)
     _validate_storyboard_srt(storyboard, required[2].read_text(encoding="utf-8"))
     _validate_storyboard_reference_contract(storyboard)
     image_summary = storyboard.get("image_reference_summary") or {}
@@ -1031,6 +1145,7 @@ def generate_dreamina_jobs(run_dir: Path, overwrite: bool = False, now: datetime
 
     plan = _load_json_file(Path(state["files"]["video_plan_json"]), "video_plan.json")
     storyboard = _load_json_file(Path(state["files"]["storyboard_json"]), "storyboard.json")
+    _validate_storyboard_real_clip_contract(run_dir, storyboard)
     prompts = _load_json_file(Path(state["files"]["prompts_json"]), "prompts.json")
     timing = {}
     jobs = _build_dreamina_jobs_payload(state, plan, storyboard, prompts, timing, now or datetime.now())
@@ -1114,6 +1229,13 @@ def submit_dreamina_jobs(
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能提交即梦任务。")
     if not state.get("confirmations", {}).get("dreamina_generation"):
         raise ValueError("即梦生成尚未确认，不能提交任务。")
+    storyboard_path = Path(
+        state.get("files", {}).get("storyboard_json", run_dir / "storyboard.json")
+    )
+    _validate_storyboard_real_clip_contract(
+        run_dir,
+        _load_json_file(storyboard_path, "storyboard.json"),
+    )
 
     jobs_json_path = Path(state.get("files", {}).get("dreamina_jobs_json", run_dir / "dreamina_generation" / "dreamina_jobs.json"))
     authorized_hash = str(state.get("dreamina_authorization", {}).get("jobs_sha256") or "")
@@ -3672,6 +3794,109 @@ def _storyboard_image_reference_summary(storyboard: dict[str, Any]) -> dict[str,
     }
 
 
+def _validate_storyboard_real_clip_contract(
+    run_dir: Path,
+    storyboard: dict[str, Any],
+) -> None:
+    run_root = run_dir.expanduser().resolve()
+    for shot in storyboard.get("shots", []):
+        if shot.get("material_mode") != "real_video_clip":
+            continue
+        shot_id = str(shot.get("shot_id") or "")
+        clip = dict(shot.get("real_video_clip") or {})
+        required = {
+            "asset_id",
+            "profile_revision",
+            "interface_revision",
+            "segment_id",
+            "source_range",
+            "task_clip_path",
+            "preview_path",
+            "content_fingerprint",
+            "adaptations",
+            "audio_policy",
+        }
+        missing = sorted(required - set(clip))
+        if missing:
+            raise ValueError(
+                f"镜头 {shot_id} 的真实片段记录缺少：{'、'.join(missing)}"
+            )
+        task_path = Path(str(clip["task_clip_path"])).expanduser().resolve()
+        preview_path = Path(str(clip["preview_path"])).expanduser().resolve()
+        if preview_path != task_path:
+            raise ValueError(
+                f"镜头 {shot_id} must preview the exact task clip; representative frames cannot substitute."
+            )
+        try:
+            task_path.relative_to(run_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"镜头 {shot_id} 的真实任务片段不在当前视频运行目录内。"
+            ) from exc
+        if not task_path.is_file() or task_path.stat().st_size <= 0:
+            raise FileNotFoundError(task_path)
+        if _file_sha256(task_path) != clip.get("content_fingerprint"):
+            raise ValueError(f"镜头 {shot_id} 的真实任务片段内容已经变化。")
+        source_range = dict(clip.get("source_range") or {})
+        start = float(source_range.get("start_seconds", -1))
+        end = float(source_range.get("end_seconds", -1))
+        if end <= start:
+            raise ValueError(f"镜头 {shot_id} 的真实片段源时间范围无效。")
+        if abs((end - start) - float(shot.get("duration_seconds") or 0)) > 0.05:
+            raise ValueError(f"镜头 {shot_id} 的真实片段时长与分镜时长不一致。")
+        if shot.get("ai_generated"):
+            raise ValueError(f"镜头 {shot_id} 已绑定真实任务片段，不能再标记为 AI 生成。")
+        _validate_real_video_clip_authorization(run_root, clip)
+
+
+def _validate_real_video_clip_authorization(run_dir: Path, clip: dict[str, Any]) -> None:
+    authorization_path = run_dir / "video_profile_authorizations.json"
+    if not authorization_path.is_file():
+        raise PermissionError("video run has no profile authorization for the real task clip")
+    authorization = _load_json_file(
+        authorization_path,
+        "video_profile_authorizations.json",
+    )
+    if authorization.get("interface_revision") != clip.get("interface_revision"):
+        raise PermissionError("real task clip interface authorization is stale")
+    authorized = next(
+        (
+            item
+            for item in authorization.get("authorized_profiles", [])
+            if item.get("video_asset_id") == clip.get("asset_id")
+        ),
+        None,
+    )
+    if authorized is None:
+        raise PermissionError("real task clip asset is not authorized for this run")
+    if authorized.get("revoked"):
+        raise PermissionError("real task clip asset authorization has been revoked")
+    if "clip" not in authorized.get("operations", []):
+        raise PermissionError("real task clip operation is not authorized")
+    if authorized.get("profile_revision") != clip.get("profile_revision"):
+        raise PermissionError("real task clip profile revision is stale")
+    segment = next(
+        (
+            item
+            for item in authorized.get("segments", [])
+            if item.get("segment_id") == clip.get("segment_id")
+        ),
+        None,
+    )
+    if segment is None:
+        raise PermissionError("real task clip segment is not authorized")
+    source_range = dict(clip.get("source_range") or {})
+    start = float(source_range.get("start_seconds", -1))
+    end = float(source_range.get("end_seconds", -1))
+    if not (
+        float(segment.get("start_seconds", -1))
+        <= start
+        < end
+        <= float(segment.get("end_seconds", -1))
+    ):
+        raise PermissionError("real task clip range is outside the authorized segment")
+
+
 def _validate_storyboard_reference_contract(storyboard: dict[str, Any]) -> None:
     continuity_fields = ("product_identity", "scale", "environment", "lighting", "action", "transition")
     for shot in storyboard.get("shots", []):
@@ -3839,6 +4064,7 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
         materials = _shot_materials(shot)
         material = "、".join(str(item.get("id") or "") for item in materials) or "无"
         previews = shot.get("image_previews") or ([shot.get("image_preview")] if shot.get("image_preview") else [])
+        real_clip = shot.get("real_video_clip") or {}
         lines.extend(
             [
                 f"### 镜头 {shot['shot_id']}（{shot['duration_seconds']} 秒）",
@@ -3861,6 +4087,22 @@ def _render_storyboard(storyboard: dict[str, Any]) -> str:
                 "",
             ]
         )
+        if real_clip:
+            source_range = real_clip.get("source_range") or {}
+            lines.extend(
+                [
+                    f"- 真实片段 Asset ID：{real_clip.get('asset_id')}",
+                    f"- Profile 修订：{real_clip.get('profile_revision')}",
+                    (
+                        "- 源时间范围："
+                        f"{source_range.get('start_seconds')}–{source_range.get('end_seconds')} 秒"
+                    ),
+                    f"- 任务片段/实际预览：[{Path(str(real_clip.get('task_clip_path') or '')).name}](<{real_clip.get('preview_path')}>)",
+                    f"- 自动适配：{json.dumps(real_clip.get('adaptations') or {}, ensure_ascii=False)}",
+                    f"- 音频策略：{real_clip.get('audio_policy')}",
+                    "",
+                ]
+            )
         for preview in previews:
             lines.append(
                 f"- 参考图 {preview.get('reference_order', 1)}｜{preview.get('reference_role') or 'reference'}｜"
@@ -4586,7 +4828,23 @@ def _build_dreamina_jobs_payload(
     material_reference_map = prompts.get("material_reference_map") or _build_material_reference_map(storyboard, capability_profile)
     material_limit_blockers = _material_reference_limit_blockers(material_reference_map, capability_profile)
     jobs = []
+    real_task_clips = []
     for shot in storyboard.get("shots", []):
+        if shot.get("material_mode") == "real_video_clip":
+            clip = dict(shot.get("real_video_clip") or {})
+            real_task_clips.append(
+                {
+                    "shot_id": shot["shot_id"],
+                    "task_clip_path": clip.get("task_clip_path"),
+                    "asset_id": clip.get("asset_id"),
+                    "profile_revision": clip.get("profile_revision"),
+                    "source_range": clip.get("source_range"),
+                    "adaptations": clip.get("adaptations", {}),
+                    "audio_policy": clip.get("audio_policy"),
+                    "selection_policy": "prefer_real_over_regeneration",
+                }
+            )
+            continue
         prompt = prompt_by_shot.get(shot["shot_id"], {})
         shot_materials = _shot_materials(shot)
         provider_adaptation_blockers: list[str] = []
@@ -4669,6 +4927,7 @@ def _build_dreamina_jobs_payload(
         "estimated_total_credits": estimated_total,
         "submit_requires_confirmation": "确认即梦生成",
         "jobs": jobs,
+        "real_task_clips": real_task_clips,
         "policy": {
             "do_not_submit_before_confirmation": True,
             "product_shots_require_real_reference": True,
@@ -5250,27 +5509,45 @@ def _build_video_assembly_manifest(
     storyboard: dict[str, Any],
     now: datetime,
 ) -> dict[str, Any]:
+    _validate_storyboard_real_clip_contract(run_dir, storyboard)
     output_video_path = run_dir / "dreamina_generation" / "stitched_video.mp4"
     concat_file = run_dir / "dreamina_generation" / "concat_shots.txt"
     expected_shot_ids = [str(shot.get("shot_id") or "") for shot in storyboard.get("shots", [])]
     shot_by_id = {str(shot.get("shot_id") or ""): shot for shot in storyboard.get("shots", [])}
     result_by_shot = {str(item.get("shot_id") or ""): item for item in results.get("results", [])}
-    ordered_results = [result_by_shot[shot_id] for shot_id in expected_shot_ids if shot_id in result_by_shot]
+    real_shot_ids = {
+        shot_id
+        for shot_id, shot in shot_by_id.items()
+        if shot.get("material_mode") == "real_video_clip"
+    }
+    generated_shot_ids = [
+        shot_id for shot_id in expected_shot_ids if shot_id not in real_shot_ids
+    ]
     shot_inputs: list[dict[str, Any]] = []
     blockers: list[str] = []
-    missing_shots = [shot_id for shot_id in expected_shot_ids if shot_id not in result_by_shot]
+    missing_shots = [shot_id for shot_id in generated_shot_ids if shot_id not in result_by_shot]
     extra_shots = [shot_id for shot_id in result_by_shot if shot_id not in shot_by_id]
     if missing_shots:
         blockers.append("缺少已确认分镜结果：" + "、".join(missing_shots))
     if extra_shots:
         blockers.append("存在无法映射到已确认分镜的结果：" + "、".join(extra_shots))
     current_second = 0
-    for item in ordered_results:
-        shot_id = str(item.get("shot_id") or "")
+    for shot_id in expected_shot_ids:
+        shot = shot_by_id.get(shot_id, {})
+        real_clip = dict(shot.get("real_video_clip") or {})
+        if shot_id in real_shot_ids:
+            item = {
+                "shot_id": shot_id,
+                "status": "succeeded",
+                "output_path": real_clip.get("task_clip_path"),
+            }
+            source_type = "real_video_clip"
+        else:
+            item = result_by_shot.get(shot_id, {})
+            source_type = "dreamina_generated"
         output_path = str(item.get("output_path") or "").strip()
         path = Path(output_path) if output_path else None
         exists = bool(path and path.exists() and path.is_file())
-        shot = shot_by_id.get(shot_id, {})
         duration = int(shot.get("duration_seconds") or 0) or 5
         subtitle_text = _subtitle_text_for_shot(shot)
         if not output_path:
@@ -5282,6 +5559,7 @@ def _build_video_assembly_manifest(
         shot_inputs.append(
             {
                 "shot_id": shot_id,
+                "source_type": source_type,
                 "status": item.get("status"),
                 "input_path": output_path,
                 "exists": exists,

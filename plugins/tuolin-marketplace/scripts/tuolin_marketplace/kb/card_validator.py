@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ PROFILE = {
         "content_asset",
         "evidence",
         "review_item",
+        "video_profile",
     },
     "card_statuses": {"draft", "review_required", "official", "archived"},
     "usage_scopes": {
@@ -65,6 +67,14 @@ PROFILE = {
         "content_asset": {"asset_category", "media_types", "related_products", "usable_for"},
         "evidence": {"evidence_type", "source_paths", "proves", "confidence"},
         "review_item": {"review_reason", "affected_cards", "decision_options", "blocking_level"},
+        "video_profile": {
+            "video_asset_id",
+            "product_id",
+            "profile_revision",
+            "content_digest",
+            "processing_state",
+            "use_capabilities",
+        },
     },
 }
 
@@ -81,6 +91,7 @@ DIR_TYPE_PREFIXES = {
     "内容素材": "content_asset",
     "证据": "evidence",
     "复核项": "review_item",
+    "视频档案": "video_profile",
 }
 
 
@@ -111,6 +122,8 @@ def validate_card_file(path: Path) -> ValidationResult:
 
     errors = validate_frontmatter(frontmatter)
     errors.extend(validate_path_matches_id(path, frontmatter))
+    if frontmatter.get("type") == "video_profile":
+        errors.extend(validate_video_profile_pair(path, frontmatter))
     return ValidationResult(path=path, skipped=False, errors=tuple(errors))
 
 
@@ -149,6 +162,49 @@ def validate_frontmatter(frontmatter: dict[str, Any]) -> list[str]:
     _validate_list_field(frontmatter, "tags", errors)
     _validate_list_field(frontmatter, "evidence_refs", errors)
     _validate_list_field(frontmatter, "review_refs", errors)
+    if card_type == "video_profile":
+        _validate_list_field(frontmatter, "use_capabilities", errors)
+    return errors
+
+
+def validate_video_profile_pair(
+    markdown_path: Path,
+    frontmatter: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    structured_path = markdown_path.with_suffix(".json")
+    if not structured_path.is_file():
+        return ["missing video profile JSON counterpart"]
+    try:
+        structured = json.loads(structured_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return [f"invalid video profile JSON counterpart: {exc}"]
+    comparisons = {
+        "profile id": (frontmatter.get("id"), structured.get("profile_id")),
+        "video asset id": (
+            frontmatter.get("video_asset_id"),
+            structured.get("video_asset_id"),
+        ),
+        "profile revision": (
+            frontmatter.get("profile_revision"),
+            structured.get("profile_revision"),
+        ),
+        "content digest": (
+            frontmatter.get("content_digest"),
+            structured.get("content_digest"),
+        ),
+    }
+    for label, (markdown_value, structured_value) in comparisons.items():
+        if markdown_value != structured_value:
+            errors.append(f"video profile pair has conflicting {label}")
+    asset_id = str(frontmatter.get("video_asset_id") or "")
+    if markdown_path.stem != asset_id:
+        errors.append("video profile filename must use video_asset_id")
+    if not re.fullmatch(r"video_asset_[0-9a-f]{32}", asset_id):
+        errors.append("invalid video profile video_asset_id")
+    expected_suffix = f"/{asset_id}"
+    if not str(frontmatter.get("id") or "").endswith(expected_suffix):
+        errors.append("video profile id must end with video_asset_id")
     return errors
 
 

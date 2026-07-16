@@ -11,6 +11,7 @@ card_types:
   - content_asset
   - evidence
   - review_item
+  - video_profile
 card_statuses:
   - draft
   - review_required

@@ -1,6 +1,8 @@
 # PRD：将视频创作 Agent 升级为证据驱动的创意需求追问工作流
 
 > 实现状态（2026-07-13）：本地首期实现与自动化验证已完成。按用户要求不创建 GitHub Issue、不安装或发布插件、不执行真实付费生成。真实工业品访谈质量和实际 Dreamina 多图能力保留为 HITL 验收。
+>
+> 2026-07-16 视频知识链路补充：`docs/prd/video-knowledge-profile-and-runtime-use.md` 已取代本文中“只读取官方图片”和“知识库视频不供策划或引用使用”的限制。该补充尚待按独立纵向切片开发；在完成前，现有图片链路继续作为运行时基线。
 
 ## Problem Statement
 
@@ -12,18 +14,18 @@
 
 ## Solution
 
-将 **Creative Discovery Core（创意需求追问核心）** 建设为视频 Agent 的首要质量能力。Agent 在策划前必须通过知识库 Agent 读取接口获得当前产品的正式知识卡和官方图片，结合目标受众、业务场景、公开 YouTube 趋势证据和实际素材可行性，动态决定下一项最有价值的问题。每次只推进一个依赖决策，给出一个有理由、有证据的建议，并询问用户是否确认；用户的普通确认只作用于当前决策。
+将 **Creative Discovery Core（创意需求追问核心）** 建设为视频 Agent 的首要质量能力。Agent 在策划前必须通过知识库 Agent 读取接口获得当前产品的正式知识卡、官方图片和已发布的有效视频档案，结合目标受众、业务场景、公开 YouTube 趋势证据和实际素材可行性，动态决定下一项最有价值的问题。每次只推进一个依赖决策，给出一个有理由、有证据的建议，并询问用户是否确认；用户的普通确认只作用于当前决策。
 
 追问不采用固定问题脚本或预设创意方向菜单，而以 **Decision Sufficiency（决策充分性）** 为完成标准。只有当产品知识来源、YouTube Shorts 格式、语言与时长、可行动受众、受众问题场景、观看动机、观众兴趣方向、趋势机制、核心记忆、期望行动、优先事实、人的关联角度、素材可行性、风险和 AI 模拟边界均已得到证据支持或用户确认后，才允许把对话决策转换为正式视频策划。
 
-整个用户流程统一为：读取正式产品知识与图片 → 动态追问 → 公开 YouTube 趋势扫描与素材检查 → 在 Codex 中确认策划 → 动态生成并在 Codex 中共同确认可视化分镜与标准 SRT → 内部生成 Prompt → 在 Codex 中确认即梦任务和额度 → 显式确认真实提交 → 操作者在即梦网页端监测 → 操作者声明全部完成后一次性下载并校验 → 合并视频。Markdown 和 JSON 仅用于持久化、审计与恢复，不作为用户确认界面。
+整个用户流程统一为：读取正式产品知识、官方图片与有效视频档案 → 动态追问 → 公开 YouTube 趋势扫描与素材检查 → 在 Codex 中确认策划 → 提取选中视频的精确任务帧或真实片段 → 动态生成并在 Codex 中共同确认可视化分镜与标准 SRT → 内部生成 Prompt 或直接使用真实片段 → 在 Codex 中确认即梦任务和额度 → 显式确认真实提交 → 操作者在即梦网页端监测 → 操作者声明全部完成后一次性下载并校验 → 合并视频。Markdown 和 JSON 仅用于持久化、审计与恢复，不作为用户确认界面。
 
 ## User Stories
 
 1. As a Tuolin video operator, I want to start a new video task with a natural-language business goal, so that I do not need to know internal scripts or data structures.
 2. As a Tuolin video operator, I want every new task to receive an isolated run, so that artifacts and state from different videos cannot be mixed.
 3. As a Tuolin video operator, I want the Agent to read the current product’s formal knowledge card through the knowledge Agent interface before interviewing me, so that the conversation is grounded in approved facts.
-4. As a Tuolin video operator, I want the Agent to read only official product images associated with that knowledge context, so that unrelated or stale assets are not introduced.
+4. As a Tuolin video operator, I want the Agent to read only official product images and valid authorized video profiles associated with that knowledge context, so that unrelated, stale, or revoked assets are not introduced.
 5. As a knowledge owner, I want video creation to stop when the Agent read interface is missing or stale, so that downstream work cannot silently consume old knowledge.
 6. As a product owner, I want the video Agent to avoid inventing product names, certifications, parameters, applications, or claims, so that external content remains defensible.
 7. As a Tuolin video operator, I want the Agent to infer already-known requirements from my initial request, so that I am only asked about unresolved decisions.
@@ -155,7 +157,7 @@
 - TTS generation, voice cloning, voiceover audio synthesis, background music, logo composition, subtitle burn-in, Jianying/CapCut automation, and final editorial polish.
 - Automatic publishing to YouTube, publishing titles, descriptions, hashtags, or LinkedIn reuse.
 - New product-fact authoring or raw knowledge-base organization inside the video Agent.
-- Use of knowledge-base video files as planning or Dreamina references in the current release.
+- Direct raw-video browsing or use of unprofiled, stale, excluded, or revoked knowledge-base videos. Valid authorized profiles may provide representative frames, task frames, and real task clips under the separate video-knowledge PRD.
 - Importing fixed entertainment, cinematic, viral, lifestyle, or industrial creative-direction taxonomies from external skills.
 - Guaranteeing virality. Trend evidence informs a defensible creative mechanism but does not promise reach or conversion.
 - Provider features that cannot be verified against the actual selected Dreamina mode and local execution contract.

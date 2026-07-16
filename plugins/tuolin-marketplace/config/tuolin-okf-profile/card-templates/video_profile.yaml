@@ -1,0 +1,20 @@
+card_template_version: video-profile-card-v1
+type: video_profile
+id: video_profile/{product_slug}/{video_asset_id}
+title: ""
+aliases: []
+status: review_required
+usage_scope: review_before_external
+raw_partitions: []
+tags:
+  - 视频档案
+updated_at: ""
+last_reviewed_at: ""
+evidence_refs: []
+review_refs: []
+video_asset_id: ""
+product_id: ""
+profile_revision: ""
+content_digest: ""
+processing_state: review_required
+use_capabilities: []

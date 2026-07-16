@@ -1,0 +1,3 @@
+# Persist video semantics in formal knowledge and analysis media in generated storage
+
+Validated video summaries, time-coded observations, classifications, use capabilities, risks, and revision metadata are maintained as a human-readable knowledge card plus a one-to-one machine-validatable structured profile in the formal knowledge layer. Analysis frames and short analysis clips remain rebuildable generated artifacts, while selected representative frames are generated files referenced by the profile. The Agent interface is rebuilt from the formal profile rather than treating transient analysis output as downstream knowledge.

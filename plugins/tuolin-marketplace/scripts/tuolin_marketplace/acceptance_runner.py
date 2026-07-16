@@ -97,9 +97,14 @@ def run_acceptance(project_dir: Path | None = None, write_report: bool = True) -
     checks.append(
         _check(
             "AC-005",
-            "10 类卡片都有样例并通过 generated 汇总",
+            "10 类通用卡片都有样例，video_profile 由专用视频发布链路管理",
             ("UC-001", "UC-002", "UC-005"),
-            all(counts_by_type.get(card_type, 0) > 0 for card_type in PROFILE["card_types"]),
+            all(
+                counts_by_type.get(card_type, 0) > 0
+                for card_type in PROFILE["card_types"]
+                if card_type != "video_profile"
+            )
+            and counts_by_type.get("video_profile") == 0,
             {"counts_by_type": counts_by_type, "domain_results": domain_results},
         )
     )

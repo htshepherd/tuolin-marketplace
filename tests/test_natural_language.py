@@ -2,17 +2,542 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from scripts.tuolin_marketplace.agent_interface import rebuild_agent_interface
+from scripts.tuolin_marketplace.application_scenario_video_batches import (
+    plan_scenario_acceptance_sample,
+    record_application_scenario_scope,
+)
 from scripts.tuolin_marketplace.natural_language import route_natural_language
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
 
 
 class NaturalLanguageRoutingTests(unittest.TestCase):
+    def test_natural_language_accepts_complete_scenario_sample_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            sample = plan_scenario_acceptance_sample(
+                [
+                    {
+                        "asset_id": f"video_asset_{index:032x}",
+                        "confidence": "medium",
+                        "duration_seconds": float(index),
+                        "has_audio": False,
+                    }
+                    for index in range(1, 4)
+                ],
+                first_batch=True,
+            )
+            record_application_scenario_scope(
+                paths,
+                product_id="product/quartz_fiber_tape",
+                source_application_scenario="汽车排气管",
+                profile_ids=[],
+                status="pending_acceptance",
+                acceptance_sample=sample,
+            )
+            asset_text = "、".join(sample.selected_asset_ids)
+
+            response = route_natural_language(
+                paths,
+                f"确认应用场景“汽车排气管”验收 Asset ID：{asset_text}",
+            )
+
+            self.assertEqual(
+                response.intent,
+                "application_scenario_scope_verified",
+            )
+            self.assertTrue(response.executed)
+            self.assertFalse(response.needs_confirmation)
+            self.assertFalse(response.details["formal_profile_published"])
+            self.assertEqual(
+                response.details["accepted_asset_ids"],
+                list(sample.selected_asset_ids),
+            )
+
+    def test_natural_language_lists_scenario_acceptance_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            sample = plan_scenario_acceptance_sample(
+                [
+                    {
+                        "asset_id": f"video_asset_{index:032x}",
+                        "confidence": "medium",
+                        "duration_seconds": float(index),
+                        "has_audio": False,
+                    }
+                    for index in range(1, 4)
+                ],
+                first_batch=True,
+            )
+            record_application_scenario_scope(
+                paths,
+                product_id="product/quartz_fiber_tape",
+                source_application_scenario="汽车排气管",
+                profile_ids=[],
+                status="pending_acceptance",
+                acceptance_sample=sample,
+            )
+
+            response = route_natural_language(
+                paths,
+                "查看各应用场景的风险抽样验收清单。",
+            )
+
+            self.assertEqual(
+                response.intent,
+                "application_scenario_acceptance_samples",
+            )
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertEqual(
+                response.details["scenarios"][0]["selected_asset_ids"],
+                list(sample.selected_asset_ids),
+            )
+            self.assertIn("汽车排气管", response.message)
+
+    def test_natural_language_reports_application_scenario_video_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            root = (
+                paths.raw_dir
+                / "01_产品"
+                / "02_石英纤维隔热带"
+                / "04_应用场景素材"
+            )
+            for scenario, count in (("汽车排气管", 2), ("工业炉管道", 1)):
+                for index in range(count):
+                    video = root / scenario / "子场景" / f"{index}.mp4"
+                    video.parent.mkdir(parents=True, exist_ok=True)
+                    video.write_bytes(b"video")
+
+            response = route_natural_language(
+                paths,
+                "查看石英纤维隔热带应用场景视频批次状态。",
+            )
+
+            self.assertEqual(response.intent, "application_scenario_video_status")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertEqual(
+                response.details["scenarios"],
+                [
+                    {"name": "工业炉管道", "video_count": 1, "scope_status": "not_started"},
+                    {"name": "汽车排气管", "video_count": 2, "scope_status": "not_started"},
+                ],
+            )
+            self.assertEqual(
+                response.copyable_reply,
+                "确认，开始按应用场景子文件夹处理石英纤维隔热带视频。",
+            )
+
+    def test_natural_language_processes_application_videos_by_scenario_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            root = (
+                paths.raw_dir
+                / "01_产品"
+                / "02_石英纤维隔热带"
+                / "04_应用场景素材"
+            )
+            for scenario in ("汽车排气管", "工业炉管道"):
+                video = root / scenario / "子场景" / f"{scenario}.mp4"
+                video.parent.mkdir(parents=True, exist_ok=True)
+                video.write_bytes(scenario.encode("utf-8"))
+
+            def runner(command, **kwargs):
+                if command[-1] == "-version":
+                    return subprocess.CompletedProcess(command, 0, "available", "")
+                if command[0] == "ffprobe":
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        json.dumps(
+                            {
+                                "streams": [
+                                    {
+                                        "codec_type": "video",
+                                        "duration": "12",
+                                        "width": 1920,
+                                        "height": 1080,
+                                        "avg_frame_rate": "30/1",
+                                        "codec_name": "h264",
+                                    }
+                                ],
+                                "format": {"duration": "12"},
+                            }
+                        ),
+                        "",
+                    )
+                if any("gt(scene" in argument for argument in command):
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                output_path = Path(command[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"png")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            response = route_natural_language(
+                paths,
+                "确认，开始按应用场景子文件夹处理石英纤维隔热带视频。",
+                video_tool_runner=runner,
+                video_frame_decoder=lambda path: bytes(
+                    (row * 31 + column * (int(path.stem.split("_")[1]) + 3) * 17)
+                    % 256
+                    for row in range(16)
+                    for column in range(16)
+                ),
+            )
+
+            self.assertEqual(
+                response.intent,
+                "application_scenario_video_batches_prepared",
+            )
+            self.assertTrue(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertEqual(response.details["scenario_count"], 2)
+            self.assertEqual(response.details["video_count"], 2)
+            self.assertFalse(response.details["formal_profile_published"])
+            self.assertEqual(
+                {item["scope_status"] for item in response.details["scenarios"]},
+                {"pending_acceptance"},
+            )
+
+    def test_video_tracer_status_reports_batch_blocker_without_exposing_cache_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            batch_report = (
+                paths.generated_dir
+                / "cache"
+                / "video-tracer-inspection"
+                / "batches"
+                / "quartz_fiber_tape"
+                / "candidate-batch.json"
+            )
+            batch_report.parent.mkdir(parents=True)
+            batch_report.write_text(
+                json.dumps(
+                    {
+                        "status": "blocked_source_count_mismatch",
+                        "product_id": "product/quartz_fiber_tape",
+                        "expected_count": 8,
+                        "discovered_count": 3,
+                        "recommendation_allowed": False,
+                        "formal_profile_published": False,
+                        "candidates": [
+                            {
+                                "asset_id": "video_asset_1234567890abcdef1234567890abcdef",
+                                "source_relative_path": "01_产品/02_石英纤维隔热带/03_产品视频/demo.mp4",
+                                "status": "codex_review_completed",
+                                "inspection_report": str(
+                                    paths.generated_dir / "cache" / "private" / "inspection.json"
+                                ),
+                                "codex_review": {
+                                    "title": "卷装产品展示",
+                                    "tracer_suitability": "possible_fallback",
+                                    "tracer_reason": "产品清晰，但缺少连续动作。",
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = route_natural_language(paths, "查看石英纤维隔热带产品视频候选状态。")
+
+            self.assertEqual(response.intent, "video_tracer_status")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertIn("3/8", response.message)
+            self.assertIn("固定 raw 文件夹", response.copyable_reply)
+            self.assertEqual(response.details["candidates"][0]["title"], "卷装产品展示")
+            self.assertNotIn("inspection_report", response.details["candidates"][0])
+            self.assertNotIn(str(paths.generated_dir), response.message)
+
+    def test_natural_language_confirms_only_the_recommended_tracer_asset_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            asset_id = "video_asset_1234567890abcdef1234567890abcdef"
+            inspection_report = (
+                paths.generated_dir
+                / "cache"
+                / "video-tracer-inspection"
+                / "fingerprint"
+                / "inspection.json"
+            )
+            inspection_report.parent.mkdir(parents=True)
+            inspection_report.write_text(
+                json.dumps(
+                    {
+                        "status": "codex_review_completed",
+                        "asset": {"asset_id": asset_id},
+                        "formal_profile_published": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            batch_report = (
+                paths.generated_dir
+                / "cache"
+                / "video-tracer-inspection"
+                / "batches"
+                / "quartz_fiber_tape"
+                / "candidate-batch.json"
+            )
+            batch_report.parent.mkdir(parents=True)
+            batch_report.write_text(
+                json.dumps(
+                    {
+                        "status": "awaiting_tracer_confirmation",
+                        "expected_count": 8,
+                        "discovered_count": 8,
+                        "recommendation_allowed": True,
+                        "formal_profile_published": False,
+                        "tracer_recommendation": {
+                            "recommended_asset_id": asset_id,
+                            "reason": "产品清晰且风险较低。",
+                        },
+                        "candidates": [
+                            {
+                                "asset_id": asset_id,
+                                "status": "codex_review_completed",
+                                "inspection_report": str(inspection_report),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = route_natural_language(paths, f"确认 tracer Asset ID：{asset_id}")
+
+            self.assertEqual(response.intent, "video_tracer_confirmed")
+            self.assertTrue(response.executed)
+            self.assertFalse(response.needs_confirmation)
+            self.assertIn(asset_id, response.message)
+            updated_batch = json.loads(batch_report.read_text(encoding="utf-8"))
+            self.assertEqual(updated_batch["status"], "tracer_confirmed")
+            self.assertFalse(updated_batch["recommendation_allowed"])
+            updated_inspection = json.loads(inspection_report.read_text(encoding="utf-8"))
+            self.assertEqual(updated_inspection["status"], "tracer_confirmed")
+            self.assertFalse(updated_inspection["formal_profile_published"])
+            self.assertEqual(
+                list((paths.knowledge_dir / "视频档案").rglob("*")),
+                [],
+            )
+
+    def test_natural_language_rejects_a_different_tracer_asset_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            recommended_asset_id = "video_asset_1234567890abcdef1234567890abcdef"
+            different_asset_id = "video_asset_abcdef1234567890abcdef1234567890"
+            batch_report = (
+                paths.generated_dir
+                / "cache"
+                / "video-tracer-inspection"
+                / "batches"
+                / "quartz_fiber_tape"
+                / "candidate-batch.json"
+            )
+            batch_report.parent.mkdir(parents=True)
+            batch_report.write_text(
+                json.dumps(
+                    {
+                        "status": "awaiting_tracer_confirmation",
+                        "expected_count": 8,
+                        "discovered_count": 8,
+                        "recommendation_allowed": True,
+                        "tracer_recommendation": {
+                            "recommended_asset_id": recommended_asset_id,
+                            "reason": "产品清晰且风险较低。",
+                        },
+                        "candidates": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = route_natural_language(
+                paths,
+                f"确认 tracer Asset ID：{different_asset_id}",
+            )
+
+            self.assertEqual(response.intent, "video_tracer_confirmation_blocked")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertIn("两者不一致", response.message)
+            unchanged = json.loads(batch_report.read_text(encoding="utf-8"))
+            self.assertEqual(unchanged["status"], "awaiting_tracer_confirmation")
+
+    def test_natural_language_video_inspection_blocks_before_tools_when_fixed_batch_is_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            folder = (
+                paths.raw_dir
+                / "01_产品"
+                / "02_石英纤维隔热带"
+                / "03_产品视频"
+            )
+            (folder / "one.mp4").write_bytes(b"one")
+            (folder / "two.mov").write_bytes(b"two")
+            (folder / "three.mp4").write_bytes(b"three")
+
+            response = route_natural_language(
+                paths,
+                "确认，检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            )
+
+            self.assertEqual(response.intent, "video_tracer_inspection_blocked")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertIn("3/8", response.message)
+            self.assertIn("绝对路径", response.copyable_reply)
+            self.assertFalse(
+                (
+                    paths.generated_dir
+                    / "cache"
+                    / "video-tracer-inspection"
+                    / "batches"
+                    / "quartz_fiber_tape"
+                    / "candidate-batch.json"
+                ).exists()
+            )
+
+    def test_natural_language_finds_the_existing_legacy_fixed_product_video_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            legacy_folder = (
+                paths.raw_dir
+                / "04_产品"
+                / "01_石英纤维隔热带"
+                / "03_视频"
+            )
+            legacy_folder.mkdir(parents=True)
+            for index in range(8):
+                (legacy_folder / f"video-{index:02d}.mp4").write_bytes(f"video-{index}".encode())
+
+            response = route_natural_language(
+                paths,
+                "确认，检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            )
+
+            self.assertEqual(response.intent, "video_tracer_inspection_ready")
+            self.assertFalse(response.executed)
+            self.assertTrue(response.needs_confirmation)
+            self.assertEqual(response.details["discovered_count"], 8)
+            self.assertEqual(response.details["source_folder"], str(legacy_folder))
+
+    def test_natural_language_blocks_when_new_and_legacy_video_folders_both_contain_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            canonical_folder = (
+                paths.raw_dir
+                / "01_产品"
+                / "02_石英纤维隔热带"
+                / "03_产品视频"
+            )
+            legacy_folder = (
+                paths.raw_dir
+                / "04_产品"
+                / "01_石英纤维隔热带"
+                / "03_视频"
+            )
+            legacy_folder.mkdir(parents=True)
+            (canonical_folder / "canonical.mp4").write_bytes(b"canonical")
+            (legacy_folder / "legacy.mp4").write_bytes(b"legacy")
+
+            response = route_natural_language(
+                paths,
+                "确认，检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            )
+
+            self.assertEqual(response.intent, "video_tracer_inspection_blocked")
+            self.assertFalse(response.executed)
+            self.assertEqual(response.details["status"], "blocked_source_folder_conflict")
+            self.assertEqual(len(response.details["candidate_folders"]), 2)
+
+    def test_natural_language_confirmation_prepares_all_eight_video_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            folder = (
+                paths.raw_dir
+                / "01_产品"
+                / "02_石英纤维隔热带"
+                / "03_产品视频"
+            )
+            for index in range(8):
+                (folder / f"video-{index:02d}.mp4").write_bytes(f"video-{index}".encode())
+
+            def runner(command, **kwargs):
+                if command[0] == "ffprobe":
+                    payload = {
+                        "format": {"duration": "6.0"},
+                        "streams": [
+                            {
+                                "codec_type": "video",
+                                "codec_name": "h264",
+                                "width": 1280,
+                                "height": 720,
+                                "avg_frame_rate": "30/1",
+                            }
+                        ],
+                    }
+                    return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+                if any("gt(scene" in argument for argument in command):
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                output_path = Path(command[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"png")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            response = route_natural_language(
+                paths,
+                "确认，开始处理这 8 条石英纤维隔热带产品视频候选。",
+                video_tool_runner=runner,
+                video_frame_decoder=lambda path: bytes(
+                    (row * 31 + column * (int(path.stem.split("_")[1]) + 3) * 17) % 256
+                    for row in range(16)
+                    for column in range(16)
+                ),
+            )
+
+            self.assertEqual(response.intent, "video_tracer_candidates_prepared")
+            self.assertTrue(response.executed)
+            self.assertFalse(response.needs_confirmation)
+            self.assertIn("8 条", response.message)
+            self.assertEqual(response.details["status"], "awaiting_codex_review")
+            self.assertEqual(response.details["candidate_count"], 8)
+            self.assertTrue(
+                (
+                    paths.generated_dir
+                    / "cache"
+                    / "video-tracer-inspection"
+                    / "batches"
+                    / "quartz_fiber_tape"
+                    / "candidate-batch.json"
+                ).is_file()
+            )
+            self.assertEqual(
+                list((paths.knowledge_dir / "视频档案").rglob("*")),
+                [],
+            )
+
     def test_organize_knowledge_recommends_one_next_step_without_executing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

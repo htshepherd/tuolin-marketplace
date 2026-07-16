@@ -8,12 +8,18 @@ from pathlib import Path
 from typing import Any
 
 from .card_validator import PROFILE, parse_frontmatter, validate_card_file
+from .video_audio_policy import (
+    build_downstream_audio_summary,
+    redact_transcript_for_downstream,
+)
+from .video_test_evidence import build_downstream_test_summary
 from .partitions import scan_all_partitions, summaries_to_json
 from ..shared.project_layout import ProjectPaths
 
 
 def rebuild_generated_indexes(paths: ProjectPaths) -> dict[str, Any]:
     cards = []
+    video_profiles = []
     validation_errors = []
     for card_path in sorted(paths.knowledge_dir.rglob("*.md")):
         result = validate_card_file(card_path)
@@ -25,6 +31,10 @@ def rebuild_generated_indexes(paths: ProjectPaths) -> dict[str, Any]:
         frontmatter = parse_frontmatter(card_path.read_text(encoding="utf-8"))
         relative_path = card_path.relative_to(paths.knowledge_dir).as_posix()
         body = _card_body(card_path)
+        if frontmatter["type"] == "video_profile":
+            video_profiles.append(
+                json.loads(card_path.with_suffix(".json").read_text(encoding="utf-8"))
+            )
         cards.append(
             {
                 "id": frontmatter["id"],
@@ -103,8 +113,18 @@ def rebuild_generated_indexes(paths: ProjectPaths) -> dict[str, Any]:
                 "evidence_lookup",
                 "review_queue",
                 "task_context",
+                "video_profile_catalog",
+                "video_profile_detail",
+                "visual_vector_index_unavailable",
+                "codex_visual_rerank_available",
             ],
         },
+    )
+    _write_video_profile_interface(
+        paths,
+        video_profiles,
+        interface_revision,
+        generated_at,
     )
     _write_build_report(paths, manifest_summary, validation_errors)
     _write_review_report(paths, cards, generated_at)
@@ -246,6 +266,8 @@ def _interface_revision(cards: list[dict[str, Any]], partition_summaries: list[d
                 "tags": card.get("tags", []),
                 "review_refs": card.get("review_refs", []),
                 "evidence_refs": card.get("evidence_refs", []),
+                "profile_revision": card["frontmatter"].get("profile_revision"),
+                "content_digest": card["frontmatter"].get("content_digest"),
             }
             for card in cards
         ],
@@ -265,6 +287,163 @@ def _interface_revision(cards: list[dict[str, Any]], partition_summaries: list[d
     }
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _write_video_profile_interface(
+    paths: ProjectPaths,
+    profiles: list[dict[str, Any]],
+    interface_revision: str,
+    generated_at: str,
+) -> None:
+    root = paths.generated_dir / "agent-interface" / "video-profiles"
+    details_dir = root / "details"
+    details_dir.mkdir(parents=True, exist_ok=True)
+    for stale in details_dir.glob("*.json"):
+        stale.unlink()
+    catalog = []
+    private_media = []
+    registry_available, active_source_revisions = (
+        _active_video_source_revisions(paths)
+    )
+    for profile in sorted(profiles, key=lambda item: str(item.get("profile_id") or "")):
+        if profile.get("processing_state") == "revoked":
+            continue
+        if registry_available and active_source_revisions.get(
+            str(profile.get("video_asset_id") or "")
+        ) != profile.get("source_revision"):
+            continue
+        profile_revision = str(profile["profile_revision"])
+        representative_refs = []
+        detail_frames = []
+        for index, frame in enumerate(profile.get("representative_frames", []), start=1):
+            media_ref = f"video-profile-media://{profile_revision}/{index:02d}"
+            generated_ref = str(frame.get("generated_ref") or "")
+            media_path = (paths.generated_dir / generated_ref).resolve()
+            try:
+                normalized_ref = media_path.relative_to(paths.generated_dir.resolve())
+            except ValueError as exc:
+                raise ValueError("formal video profile media escapes generated_dir") from exc
+            if not media_path.is_file():
+                raise FileNotFoundError(media_path)
+            representative_refs.append(
+                {
+                    "media_ref": media_ref,
+                    "timestamp_seconds": frame["timestamp_seconds"],
+                    "description": frame.get("description", ""),
+                }
+            )
+            detail_frames.append(
+                {
+                    **{
+                        key: value
+                        for key, value in frame.items()
+                        if key != "generated_ref"
+                    },
+                    "media_ref": media_ref,
+                    "content_fingerprint": _file_sha256(media_path),
+                }
+            )
+            private_media.append(
+                {
+                    "profile_id": profile["profile_id"],
+                    "profile_revision": profile_revision,
+                    "media_ref": media_ref,
+                    "generated_ref": normalized_ref.as_posix(),
+                    "content_fingerprint": _file_sha256(media_path),
+                }
+            )
+        detail = {
+            **profile,
+            "transcript_detail": redact_transcript_for_downstream(
+                dict(profile.get("transcript_detail") or {})
+            ),
+            "representative_frames": detail_frames,
+            "interface_revision": interface_revision,
+            "interface_state": "formal_active",
+        }
+        asset_id = str(profile["video_asset_id"])
+        _write_json(details_dir / f"{asset_id}.json", detail)
+        catalog.append(
+            {
+                "profile_id": profile["profile_id"],
+                "video_asset_id": asset_id,
+                "product_id": profile["product_id"],
+                "profile_revision": profile_revision,
+                "title": profile["title"],
+                "summary": profile["summary"],
+                "source_classification": profile["source_classification"],
+                "observed_classifications": profile["observed_classifications"],
+                "use_capabilities": profile["use_capabilities"],
+                "product_visibility": profile["product_visibility"],
+                "reuse_modes": sorted(
+                    {
+                        str(segment.get("reuse_mode"))
+                        for segment in profile.get("key_segments", [])
+                        if segment.get("reuse_mode")
+                        and segment.get("use_exclusion", {}).get("status")
+                        != "excluded"
+                    }
+                ),
+                "risk_summary": profile["risk_summary"],
+                "processing_state": profile["processing_state"],
+                "representative_frames": representative_refs,
+                "audio_summary": build_downstream_audio_summary(profile),
+                "test_summary": build_downstream_test_summary(profile),
+            }
+        )
+    _write_json(root / "catalog.json", catalog)
+    _write_json(
+        root / "manifest.json",
+        {
+            "schema_version": "video-profile-interface-v1",
+            "interface_revision": interface_revision,
+            "generated_at": generated_at,
+            "state": "formal_active",
+            "catalog": "catalog.json",
+            "details": "details/",
+            "capabilities": [
+                "video_profile_catalog",
+                "video_profile_detail",
+                "visual_vector_index_unavailable",
+                "codex_visual_rerank_available",
+            ],
+        },
+    )
+    _write_json(
+        paths.generated_dir
+        / "cache"
+        / "video-profile-interface"
+        / "media-index.json",
+        {
+            "schema_version": "video-profile-private-media-index-v1",
+            "interface_revision": interface_revision,
+            "media": private_media,
+        },
+    )
+
+
+def _active_video_source_revisions(
+    paths: ProjectPaths,
+) -> tuple[bool, dict[str, str]]:
+    registry_path = (
+        paths.generated_dir / "cache" / "video-assets" / "registry.json"
+    )
+    if not registry_path.is_file():
+        return False, {}
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    return True, {
+        str(item.get("asset_id")): str(item.get("source_fingerprint"))
+        for item in registry.get("assets", [])
+        if item.get("asset_id") and item.get("source_fingerprint")
+    }
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _invalidate_contexts(paths: ProjectPaths, interface_revision: str) -> dict[str, Any]:

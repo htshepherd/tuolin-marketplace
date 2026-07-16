@@ -156,6 +156,295 @@ _Avoid_: requiring users to invoke internal runners or copy run-directory paths
 The `video_creation` downstream task context used by the complete quartz-fiber-tape video workflow.
 _Avoid_: video_script, treating video creation as only narration writing
 
+**Authorized Video Reference**:
+A video-asset reference published by the **Knowledge Producer** that permits task-scoped read access to exactly one registered source video without permitting raw-directory browsing.
+_Avoid_: raw access, raw scan, arbitrary local video path
+
+**Video Asset ID**:
+An opaque stable identifier used by downstream retrieval and runtime extraction to refer to one registered source video without exposing or accepting its raw filesystem path.
+_Avoid_: raw path as API contract, user-supplied local path, filename-only identity
+
+**Video Asset Identity Reconciliation**:
+The controlled comparison of persistent asset registration, source fingerprint, prior and current path, and concurrent copies used to decide whether a discovered file is a moved asset, a new duplicate asset, or a new source revision.
+_Avoid_: path-derived identity, automatic duplicate merge, assuming every same-path file is unchanged
+
+**Video Content Profile**:
+A persistent, one-source-video semantic record that describes observable content, time-coded moments, visual usability, and the video's authorized downstream uses without turning visible phenomena into product-performance facts.
+_Avoid_: transient task analysis, filename-only metadata, product claim
+
+**Video Profile Card**:
+The formal `video_profile` knowledge-card type that owns one video's persistent human-readable semantic profile and is linked one-to-one with its machine-validatable structured representation.
+_Avoid_: expanding `content_asset` into a semantic timeline, generated-cache-only profile, independently maintained Markdown and JSON
+
+**Video Profile Title**:
+A concise source-video label optimized for catalog scanning and retrieval.
+_Avoid_: raw filename alone, full video summary, marketing headline
+
+**Video Profile Summary**:
+A two-to-four-sentence whole-video description of the main subject, setting, action flow, and overall visual-use value without replacing time-coded segment detail.
+_Avoid_: keyword list, product claim, complete timeline
+
+**Video Segment Description**:
+The time-ranged description of one key segment's visible subject, action, state, environment, use capability, audio context, and risks.
+_Avoid_: whole-video generalization, fixed storyboard copy
+
+**Segment Product Visibility**:
+The time-ranged assessment of whether the product is absent, partially visible, clearly visible, or identity-confirmable, together with size, duration, occlusion, focus, clarity, and supported visual uses.
+_Avoid_: whole-video boolean, equating visual clarity with confirmed product identity
+
+**Segment Composition Safety**:
+The source-independent description of subject position, action area, crop margins, overlays, and protected visual regions, plus derived suitability for current target aspect ratios.
+_Avoid_: one vertical-crop boolean, permanently binding the profile to one platform
+
+**Segment Identifier Risk**:
+The time-ranged classification of visible subtitles, watermarks, platform UI, brands, customer or project names, and personal identifiers that may restrict direct reuse.
+_Avoid_: generic visual-quality warning, silent removal of provenance or privacy information
+
+**Segment Person Risk**:
+The time-ranged record of human visibility, identifiability, age concern, and known authorization status used to control external reuse.
+_Avoid_: assuming company possession equals portrait consent, one generic human-face flag
+
+**Candidate Video Evidence Link**:
+An automatically proposed relationship between a video profile or segment and a formal evidence source that remains non-authoritative until confirmed.
+_Avoid_: automatic proof relationship, external claim support
+
+**Confirmed Video Evidence Link**:
+A reviewed relationship showing that a video profile or segment belongs to or is covered by a specific formal evidence source and may use only that source's approved conditions and conclusions.
+_Avoid_: product association alone, directory proximity alone, broader claim than the evidence supports
+
+**Segment Editing Suitability**:
+The technical reuse assessment of one key segment as ready, adaptable, reference-only, or unusable, separate from the segment's semantic value.
+_Avoid_: assuming useful content is directly publishable, one whole-video quality rating
+
+**Video Asset Card**:
+The existing content-asset record that identifies one source video, its product relationship, local source, media type, and downstream authorization without describing the video's timeline.
+_Avoid_: video summary, key-moment analysis, product claim
+
+**Video Observation**:
+A time-coded, confidence-bearing statement about directly visible video content that may guide material selection but does not establish product performance.
+_Avoid_: product fact, test conclusion, certification evidence
+
+**Video Claim Interpretation**:
+A conclusion about product identity, test success, performance, temperature, safety, certification, or causality inferred from video content and therefore blocked until supported by formal evidence or human review.
+_Avoid_: treating visible appearance as proof
+
+**Video Analysis Frame**:
+A rebuildable frame sampled by the **Knowledge Producer** to create or refresh a **Video Content Profile** through broad temporal coverage and targeted process-change inspection.
+_Avoid_: task-specific shot reference, formal evidence, permanent raw derivative
+
+**Video Representative Frame**:
+One of three to six rebuildable preview images selected from a source video's analysis to communicate its main visible content through the Agent interface.
+_Avoid_: full analysis-frame set, final storyboard frame, product evidence
+
+**Representative Frame Reference**:
+A revision-bound Agent-interface media reference that exposes a representative frame's preview capability and metadata without exposing generated-cache or raw filesystem paths.
+_Avoid_: Base64 in every knowledge response, permanent unversioned file path, unrestricted cache-directory access
+
+**Task Video Frame**:
+A precise frame extracted through **Runtime Frame Extraction** for one selected source video and one concrete video-creation task.
+_Avoid_: reusable knowledge asset, raw derivative archive, automatically published content asset
+
+**Task Video Clip**:
+A task-scoped copy of a selected **Video Key Segment** created for direct use in the current storyboard and assembled video.
+_Avoid_: modified raw source, formal knowledge asset, AI-regenerated substitute for usable footage
+
+**Video Use Capability**:
+A stable, time-ranged description of how visible source-video material may support planning, such as product display, installation step, application context, test process, production process, transition, or before-and-after comparison.
+_Avoid_: fixed storyboard shot number, proof claim, task-specific creative decision
+
+**Video Source Classification**:
+The human-organized source category and full descendant folder path under a product's fixed material folders, preserved as provenance and an analysis prior rather than proof of visible content.
+_Avoid_: observed scene truth, inferred product fact, flattened top-level label
+
+**Video Observed Classification**:
+The confidence-bearing categories supported by actual video observations, including the time ranges in which each category is visible.
+_Avoid_: copying the source folder label without visual confirmation
+
+**Source Application Scenario**:
+A human-maintained application-scenario classification represented by descendant folders beneath the fixed application-material folder.
+_Avoid_: visually confirmed application, customer case proof, performance claim
+
+**Video Key Segment**:
+A bounded source-video interval that contains one coherent visible action, process stage, state, or change and may be evaluated for direct clip reuse or task-specific frame extraction.
+_Avoid_: isolated timestamp, whole-video summary, fixed storyboard shot
+
+**Video Anchor Moment**:
+A precise timestamp within a **Video Key Segment** selected for visual verification, representative preview, or exact task-frame extraction.
+_Avoid_: replacing the segment's start and end, implied performance result
+
+**Runtime Frame Extraction**:
+A controlled read of one **Authorized Video Reference** that copies requested source-video frames into the current **Video Creation Run** without modifying raw or publishing the extracted frames as formal knowledge.
+_Avoid_: direct raw access, knowledge-base rebuild, pre-extracting every possible task frame
+
+**Runtime Clip Extraction**:
+A controlled read of one **Authorized Video Reference** that copies a selected **Video Key Segment** into the current **Video Creation Run** without modifying the source video.
+_Avoid_: editing raw, unrestricted raw access, regenerating usable real footage
+
+**Video Audio Observation**:
+A time-coded description or transcript of audible speech, process sound, ambience, noise, or music that may guide editing but does not establish a product fact.
+_Avoid_: verified claim, automatic permission to publish a voice or music track
+
+**Video Transcript Detail**:
+The complete time-coded source-speech transcription retained in profile detail for audit, with sensitivity and claim-risk annotations.
+_Avoid_: catalog payload, verified product knowledge, unrestricted downstream disclosure
+
+**Speech Transcription Adapter**:
+A replaceable, local-first interface that converts detected source speech into language-labeled, time-coded transcript items with confidence, speaker segmentation when available, unrecognized intervals, and tool and model provenance.
+_Avoid_: hard-coding one ASR vendor, silently uploading enterprise video, treating unavailable transcription as proof that no important speech exists
+
+**Video Analysis Provenance**:
+The profile-linked record of the tools, models, policies, prompt-template revision, analyzed media inputs, validation outcome, and human interventions that produced the current video semantics.
+_Avoid_: opaque generated profile, embedding full execution logs in the business summary
+
+**Video Profile Amendment**:
+A previewed, audited human correction to selected profile fields that preserves the source and original machine proposal while avoiding unnecessary full re-analysis.
+_Avoid_: direct untracked file edit, silently overwriting the analysis history, using amendment for systemic sampling failure
+
+**Video Use Exclusion**:
+A reviewed, reversible authorization restriction applied to a whole source video or selected key segments without deleting or altering raw media.
+_Avoid_: raw deletion, undocumented blacklist, permanent loss of profile history
+
+**Video Profile Migration**:
+A deterministic, audited conversion of an older profile representation when every new value can be derived without new media interpretation.
+_Avoid_: default-filling new semantic fields, treating migration as re-analysis
+
+**Video Analysis Budget**:
+The soft per-source limit on frames, temporal clips, and multimodal inputs that controls processing cost while requiring explicit segmentation or depth escalation rather than silent coverage loss.
+_Avoid_: hard truncation presented as complete analysis, unlimited extraction
+
+**Video Analysis Cache Retention**:
+The reference-aware lifecycle policy that retains representative media, temporary analysis frames and clips, disputed evidence, and task-local extracts for different periods while never modifying raw source video.
+_Avoid_: permanent retention of every temporary frame, extension-based bulk deletion, treating raw media as disposable cache
+
+**Video Analysis Capability Preflight**:
+The batch-start gate that verifies required media inspection, extraction, and semantic-analysis capabilities before any source video enters processing and records available optional or degraded capabilities.
+_Avoid_: discovering missing mandatory tools halfway through a batch, marking source videos failed because the processing environment was not ready
+
+**Video Batch Impact Scope**:
+The set of profiles, source scenarios, or business categories affected by a detected pipeline or acceptance defect and therefore paused or invalidated together.
+_Avoid_: always blocking the whole library, always treating defects as isolated
+
+**Video Knowledge-to-Creation Tracer**:
+The minimum real end-to-end proof that one unchanged raw source video becomes a validated profile, an Agent-interface retrieval result, an authorized task frame or clip, a confirmed storyboard preview, and a real assembly input.
+_Avoid_: schema-only completion, extraction-script demo, mocked downstream use
+
+**Tracer Source Video**:
+The low-risk real product video selected to exercise continuous action, key segments, product visibility, runtime frame and clip extraction, storyboard preview, and direct assembly in the first tracer.
+_Avoid_: static easiest sample, test-validation footage, corrupt or privacy-heavy source
+
+**Tracer Candidate Inspection Cache**:
+The rebuildable, source-fingerprint-scoped temporary media used only to compare product-video candidates before the tracer source is confirmed.
+_Avoid_: formal analysis cache, video-creation run asset, published representative frame
+
+**Source Audio Use Policy**:
+The profile-level assessment of whether a source segment's original audio may be retained, should be muted, must be muted, or requires human review because of speech, privacy, noise, or music-rights risk.
+_Avoid_: assuming every extracted clip may publish its original audio
+
+**Video Profile Revision**:
+The source fingerprint, source-classification fingerprint, profile schema version, and analysis-policy version that together prove a **Video Content Profile** still describes its current source video.
+_Avoid_: filename-only identity, silently reusing stale semantic analysis
+
+**Video Profile Processing State**:
+The per-source-video lifecycle state that distinguishes registered, processing, valid, review-required, failed, excluded, and stale profiles.
+_Avoid_: one aggregate success flag for the whole product partition
+
+**Legacy Video Frame Cache**:
+Frame files produced by the previous single-point extraction behavior that may remain as historical cache but do not establish a valid current video profile.
+_Avoid_: processed-video completion, representative-frame migration without validation
+
+**Visual Observation Scope**:
+The usage authorization for a valid video profile that permits retrieval, material selection, visual planning, and editing decisions while forbidding use as proof of product parameters, performance, certification, temperature, or safety.
+_Avoid_: external product-fact authorization, evidence-only source existence, unrestricted marketing claim use
+
+**Video Observation State**:
+The local state of one observation, segment, classification, transcript item, or reuse recommendation, independent of the overall profile state.
+_Avoid_: invalidating the entire profile for every uncertain detail
+
+**Video Observation Confidence**:
+An explainable confidence assessment synthesized from traceable source, temporal, visual, audio, quality, and cross-analysis signals.
+_Avoid_: opaque model self-rating, confidence without supporting reasons
+
+**Video Segment Group**:
+A set of semantically similar key segments within one source video that preserves one preferred segment and ranked alternatives rather than deleting repeated actions.
+_Avoid_: frame-level perceptual duplicate set, destructive semantic deduplication
+
+**Video Asset Family**:
+A cross-source relationship that distinguishes identical source content, near-duplicate encodes, complementary views of the same event, and semantically similar but separate scenes without modifying any raw file.
+_Avoid_: automatic source merge, raw cleanup, treating similar scenarios as one recording
+
+**Video Profile Batch Acceptance**:
+The risk-based human review of a completed profile batch that validates pipeline quality and publication safety without converting visual observations into product facts.
+_Avoid_: approving every observation as a product claim, skipping first-batch validation, accepting a batch with systemic errors
+
+**Video Profile Batch**:
+One explicitly confirmed knowledge-work unit containing either the fixed product-video folder, one canonical source-application-scenario folder, or the final test-validation folder.
+_Avoid_: unbounded all-video scan, arbitrary file-count chunk detached from business classification
+
+**Video Profile Checkpoint**:
+The source-fingerprint-bound atomic result saved after one video's prepared inputs, Codex semantic review, formal profile draft, representative-frame references, validation outcome, and processing state have been completed.
+_Avoid_: waiting until the whole batch to persist work, treating a partial unvalidated draft as published knowledge, reprocessing unchanged successful videos after interruption
+
+**Video Profile Publication Transaction**:
+The staged-to-formal promotion, Agent-interface rebuild, and interface verification sequence that makes an accepted video profile available to downstream consumers only when the entire publication sequence succeeds.
+_Avoid_: downstream reading staging files, switching to an unverified interface, destroying the last verified interface on publication failure
+
+**Video Batch Maturity**:
+The rollout state that determines whether a validated batch requires acceptance before downstream automatic selection or may publish optimistically under monitored sampling.
+_Avoid_: treating first-run and stable incremental batches identically
+
+**Video Source Revocation**:
+The withdrawal of a previously selectable profile or segment because its batch, source identity, privacy, rights, test interpretation, or analysis validity is no longer trusted.
+_Avoid_: deleting task artifacts silently, ignoring a high-risk withdrawal
+
+**Runtime Video Extraction Audit**:
+The task-local record of every authorized frame or clip extraction, including run, interface revision, asset and profile revisions, requested time bounds, operation, validation outcome, output, and revocation state.
+_Avoid_: unlogged source read, token-only authorization with no task provenance
+
+**Candidate Video Preview**:
+A low-cost task-local clip extracted for internal comparison among shortlisted segments before one segment is selected for formal storyboard use.
+_Avoid_: final task clip, unlimited exploratory extraction, user-confirmed storyboard material
+
+**Video Material Retrieval**:
+The downstream selection process that first applies hard structured constraints to authorized video profiles and segments, then ranks the remaining candidates by semantic relevance to the current confirmed brief or shot need.
+_Avoid_: unbounded raw search, semantic similarity without safety filters, fixed-label lookup only
+
+**Representative Frame Visual Index**:
+A rebuildable visual-embedding projection of authorized representative frames that remains bound to their asset, profile revision, timestamp, and key segment and is used only after structured authorization and risk filtering.
+_Current status_: deferred; not required for the first implementation
+_Avoid_: orphan image embeddings, visual similarity as product proof, making an unconfigured embedding model a launch dependency
+
+**Codex Representative Frame Rerank**:
+The current visual-ranking step in which structured and textual retrieval produces a small authorized candidate set and Codex inspects the candidates' representative frames before selecting or ordering material.
+_Avoid_: scanning the whole image cache, ranking from text alone when visual distinctions matter, claiming that a persistent visual-vector index exists
+
+**Task Video Preview**:
+A run-local preview of the exact **Task Video Clip** or **Task Video Frame** proposed for a storyboard shot and shown before storyboard confirmation.
+_Avoid_: profile representative frame standing in for a direct clip, hidden source interval, post-confirmation substitution
+
+**Meaning-Preserving Video Adaptation**:
+A disclosed technical transformation of a **Task Video Clip** that preserves visible action, chronology, identity, and observational meaning while making the clip usable in the target deliverable.
+_Avoid_: changing the apparent test result, reordering actions, undisclosed synthetic alteration
+
+**Video Profile Catalog**:
+A lightweight Agent-interface projection of valid video profiles used for structured filtering and semantic ranking without loading every complete profile into a task context.
+_Avoid_: full transcript dump, raw file listing, complete profile payload for every video
+
+**Test-Footage Publication Gate**:
+The external-use check that permits test footage only when the intended statement is supported by formal evidence or constrained to a reviewed neutral description of what is visibly occurring.
+_Avoid_: treating authentic footage as automatic proof, implying a passed test through montage alone
+
+**Video Understanding Pipeline**:
+The coordinated use of deterministic media inspection, adaptive sampling, quality and duplicate checks, speech transcription, multimodal interpretation, and structural validation to produce a valid **Video Content Profile**.
+_Avoid_: filename-only classification, one-frame interpretation, model-guessed media metadata
+
+**Codex Video Semantic Review**:
+The current semantic-analysis execution boundary in which the knowledge-base Agent prepares bounded frames, clips, media facts, source classification, and available transcript evidence for direct inspection and structured judgment by Codex without requiring a user-supplied external-model API key.
+_Avoid_: hidden third-party model calls, asking the user to configure a multimodal API, granting Codex unrestricted raw-directory browsing
+
+**Video Analysis Clip**:
+A short, low-cost, rebuildable derivative used only to verify motion continuity, action boundaries, change persistence, source stability, or direct-reuse suitability during profile generation.
+_Avoid_: downstream task clip, published representative asset, mandatory derivative for every source video
+
 **Video Creation Run**:
 One language-specific quartz-fiber-tape video production record stored under `generated/reports/video-creation/`.
 _Avoid_: formal knowledge, raw evidence archive
@@ -369,6 +658,340 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - The working Dreamina CLI submission, manual-submission JSON, and resumable PowerShell handoff remain stable execution infrastructure; automated result-status querying is removed from the current user-facing flow because the operator monitors completion in the Dreamina web interface.
 - The initial **Video Creation Context** is requested only for the quartz-fiber-tape product identified from the user's natural-language video request.
 - The initial **Video Creation Context** contains the quartz-fiber-tape product card and only the content-asset cards explicitly related to that product.
+- A **Video Creation Context** may contain **Authorized Video References** published by the **Knowledge Producer** for videos explicitly related to its fixed product scope.
+- An **Authorized Video Reference** exposes a **Video Asset ID**, profile ID, source revision, allowed operations, and revocation state rather than a raw execution path.
+- The knowledge producer privately resolves **Video Asset IDs** to current source paths and validates product scope, profile revision, allowed operation, task identity, timestamp bounds, and revocation before runtime extraction.
+- **Runtime Frame Extraction** and **Runtime Clip Extraction** accept an authorized **Video Asset ID** and task-scoped parameters; they must reject arbitrary raw or local paths supplied by the downstream consumer.
+- User-facing receipts may show a business-readable relative source location for traceability, but downstream execution does not depend on that path.
+- A newly registered source video receives a persisted opaque **Video Asset ID** that is not derived from its filename, directory, or content hash.
+- **Video Asset Identity Reconciliation** preserves the existing asset ID when a source is renamed or moved, its prior path has disappeared, and its content fingerprint still matches.
+- When identical content exists concurrently at both the prior and newly discovered locations, the new copy receives a distinct asset ID and the two assets are related through an exact-duplicate **Video Asset Family**.
+- Replacing the bytes at an already registered path preserves the asset ID as the business identity of that registration but creates a new source revision and immediately invalidates the prior semantic profile.
+- When the system cannot reliably distinguish a move from a copy, it must request human reconciliation rather than silently merging registrations.
+- Downstream retrieval and extraction continue to use the asset ID after moves or revisions and never receive or submit the private raw-path mapping.
+- Each registered source video has one **Video Asset Card** and at most one current **Video Content Profile** published by the **Knowledge Producer**.
+- A **Video Asset Card** and its **Video Content Profile** have a one-to-one relationship: the asset card owns identity and authorization, while the profile owns time-coded semantic understanding.
+- The existing `content_asset` card type remains responsible for source registration, media type, source classification, related product, authorization identity, and **Video Asset ID**.
+- A new formal `video_profile` card type represents the **Video Profile Card** and owns the persistent semantic profile rather than adding the full semantic timeline to `content_asset`.
+- Published profile files use `knowledge/okf/视频档案/{product_slug}/{video_asset_id}.md` for the human-readable card and a same-name `.json` file for the complete machine-validatable structure.
+- The Markdown and JSON forms are projections of one validated domain object and are written in one **Video Profile Publication Transaction**; they must not be edited or versioned independently.
+- A missing counterpart, mismatched profile revision, mismatched content digest, or conflicting semantic value invalidates the profile and prevents interface publication.
+- Staged profile pairs use the same relative product and asset layout beneath `generated/staging/video-profiles/{batch_id}/`.
+- Analysis frames, analysis clips, tool logs, Codex input manifests, and verbose provenance remain under generated cache or batch-report storage and never become formal profile-card files.
+- The Agent interface adds a `video_profile` catalog projection and on-demand detail reader generated from the validated formal profile pair; downstream consumers use profile and asset identifiers rather than either file path.
+- Each **Video Content Profile** provides a **Video Profile Title**, one **Video Profile Summary**, and a **Video Segment Description** for every key segment.
+- The title supports catalog scanning, the summary supports candidate comparison, and segment descriptions support concrete retrieval, preview, extraction, and storyboard decisions.
+- A whole-video summary never substitutes for key-segment time bounds and descriptions.
+- Every key segment records **Segment Product Visibility** rather than relying on one whole-video visible/not-visible flag.
+- Clear visibility describes appearance quality; identity-confirmable additionally requires enough supported evidence to associate the visible object with the registered product.
+- A segment may be useful for action explanation while remaining unsuitable for a product hero, detail, or identity-bearing shot.
+- The whole-video profile summarizes the best supported visibility level and the proportion of useful product-visible segments without replacing segment-level assessment.
+- Every key segment records **Segment Composition Safety**, including source aspect ratio, subject and action position, crop margins, protected product, tool, and face regions, overlay locations, and whether dynamic subject-following crop would be required.
+- The profile derives a current 9:16 suitability of direct, padding-required, dynamic-crop-required, or unsuitable from the general composition record.
+- General composition safety remains reusable for future aspect ratios; a platform-specific score does not replace or erase source composition information.
+- Every key segment records **Segment Identifier Risk** for Tuolin-owned marks, third-party brands, customer or project names, platform watermarks or UI, vehicle plates, badges, contact details, burned-in subtitles, and unidentified visible marks.
+- Current Tuolin-owned marks may normally remain after checking that they are still valid; third-party or customer identifiers require human review.
+- Personal identifiers must be cropped, masked, or treated as a blocker before external use.
+- Platform watermarks and conflicting burned-in subtitles reduce direct-reuse suitability and should prefer an alternate source when available.
+- Masking, blurring, or cropping an identifier is a disclosed adaptation; generative removal must not conceal source provenance or rights risk.
+- Every key segment records **Segment Person Risk** separately for visibility and authorization: none, hands-only, unidentifiable back view, blurred face, clearly identifiable face, possible minor, or uncertain.
+- Hands-only and unidentifiable back-view footage may remain low-risk candidates after checking badges, tattoos, and other identifiers.
+- A clearly identifiable face without recorded authorization cannot enter automatic external selection.
+- Possible minors block automatic external use.
+- Possession of a company media file does not by itself establish portrait authorization.
+- Cropping or masking a person is a disclosed adaptation; generative face replacement or silent person removal is not ordinary **Meaning-Preserving Video Adaptation**.
+- The pipeline may propose **Candidate Video Evidence Links** using directory proximity, filenames, dates, identifiers, visible report numbers, speech, and source context.
+- A candidate link never supports a product conclusion or passes the **Test-Footage Publication Gate**.
+- A link becomes a **Confirmed Video Evidence Link** only through explicit source metadata, a clearly matching report or test identifier, or human review.
+- A confirmed link authorizes only the conditions and conclusions actually covered by the linked formal evidence.
+- Product-card association defines product scope but does not establish a test-result relationship.
+- Conflicting video observations and linked evidence require knowledge review before external use.
+- A **Video Content Profile** stores neutral source semantics, observable actions, use capabilities, allowed observation-level expressions, prohibited interpretations, reuse modes, risks, and evidence boundaries.
+- The knowledge producer does not persist marketing copy, fixed voiceover, hooks, claims, calls to action, or audience-specific shot wording in a video profile.
+- The **Video Creation Consumer** generates task language from the **Confirmed Video Brief**, formal product knowledge, and the selected neutral video semantics.
+- Every **Video Key Segment** records **Segment Editing Suitability** independently from its content meaning.
+- `ready` segments may be directly extracted without more than routine normalization; `adaptable` segments require disclosed **Meaning-Preserving Video Adaptation**; `reference-only` segments may support task frames or generation references but not direct clip reuse; `unusable` segments are excluded from automatic downstream use.
+- Suitability considers resolution, frame rate, compression, stability, exposure, focus, action completeness, useful duration, composition, audio, identifiers, people, and whether required changes exceed meaning-preserving adaptation.
+- Whole-video quality summaries may aid catalog ranking but never replace segment-level editing suitability.
+- A **Video Content Profile** persists across video-creation tasks so downstream consumers can select a source video without repeating full semantic analysis.
+- A **Video Content Profile** contains **Video Observations** and task suitability; any **Video Claim Interpretation** still requires separate formal evidence or human review.
+- **Video Analysis Frames** are selected through two stages: uniform temporal coverage for whole-video understanding, followed by targeted sampling around scene, subject, visibility, action, and process-state changes.
+- Short videos receive enough broad samples to represent beginning, development, and ending; longer videos are segmented and capped so analysis depth grows by meaningful sections rather than by every elapsed second.
+- Installation, test, and production-process videos receive targeted before, action, and after sampling in addition to broad coverage.
+- Black, severely blurred, and near-duplicate samples should be replaced or excluded before observations are produced.
+- **Video Analysis Frames** support rebuilding the persistent profile; **Runtime Frame Extraction** creates separate task artifacts after a downstream consumer selects a video.
+- Each published **Video Content Profile** exposes three to six **Video Representative Frames** with source timestamps and visual descriptions.
+- **Video Representative Frames** live in rebuildable generated storage and may be read through the Agent interface for material selection.
+- The lightweight **Video Profile Catalog** exposes only thumbnail-sized **Representative Frame References**, source timestamps, short visual summaries, and risk states; it does not inline image bytes or Base64 payloads.
+- On-demand profile detail exposes all three to six representative-frame references with dimensions, content fingerprint, source timestamp, related key segment or global-context role, description, and current authorization state.
+- A **Representative Frame Reference** is bound to the **Video Asset ID**, profile revision, and Agent-interface revision and becomes unusable when the profile is stale, excluded, or revoked.
+- The interface resolves representative images through a controlled local media reference in the current single-machine deployment; a future authorized media endpoint may replace that transport without changing the downstream contract.
+- Representative-frame access never exposes the generated-cache directory or the privately mapped raw source path.
+- Representative-frame selection prioritizes **Video Anchor Moments** from preferred key segments and covers the source video's main distinct use capabilities.
+- A small number of global environment or subject-establishing frames may supplement segment anchors when they add whole-video context.
+- Installation and test-process profiles should represent before, action, and after states when those states are visibly available.
+- Representative frames must not all come from one repeated action merely because it is visually attractive.
+- Each representative frame records its source key segment or is explicitly marked as a global context frame.
+- Selecting a **Video Representative Frame** does not make it the final storyboard reference; the consumer creates a **Task Video Frame** at the chosen precise time when the video is used.
+- **Task Video Frames** live only inside the current **Video Creation Run** and are not automatically written back to knowledge cards.
+- A **Video Content Profile** publishes one or more **Video Use Capabilities** with applicable time ranges, visual clarity, continuity needs, crop suitability, human-presence risk, and supported reuse modes.
+- A **Video Use Capability** never assigns a permanent storyboard shot number; the **Video Creation Consumer** maps it to a concrete shot role from the current confirmed brief and plan.
+- A **Video Content Profile** preserves both **Video Source Classification** and **Video Observed Classification**.
+- **Video Source Classification** includes the fixed top-level material category and the complete relative descendant folder path; descendant folders must not be discarded when the asset is indexed.
+- Beneath the fixed application-material folder, descendant folders define **Source Application Scenarios** and therefore carry stronger business meaning than generic storage folders.
+- The first descendant folder beneath the fixed application-material folder is the canonical **Source Application Scenario**.
+- Deeper descendant folders are preserved in order as source context but do not receive a fixed semantic type until their names and video observations support a role such as action, process stage, source party, batch, or other context.
+- A **Source Application Scenario** may guide retrieval and analysis immediately, but the profile must still record whether and when that application is visibly supported by the video.
+- Each meaningful time-coded entry in a **Video Content Profile** is a **Video Key Segment** with start and end timestamps, a visible role such as preparation, action, change, completion, or result view, and a statement of whether motion continuity is required.
+- A **Video Key Segment** contains one or more **Video Anchor Moments** used for representative frames and later precise runtime extraction.
+- A **Video Key Segment** may carry a suggested trim range with small lead-in and lead-out buffers, but the video consumer decides the final task edit.
+- A **Video Key Segment** declares whether it supports direct clip reuse, frame-reference reuse, both, or neither.
+- A **Video Content Profile** records whether an audio track exists and associates **Video Audio Observations** with relevant **Video Key Segments**.
+- Speech may be transcribed with language and timestamps, but spoken parameters, test conclusions, promises, and product identities remain **Video Claim Interpretations** until separately supported.
+- Speech transcription is provided through a replaceable **Speech Transcription Adapter** rather than being coupled to one ASR implementation.
+- The default adapter policy is local-first; sending enterprise source video or audio to a cloud transcription service requires explicit configuration and authorization.
+- Adapter output records detected language, time-coded text, confidence, speaker segments when available, unrecognized intervals, and tool and model version.
+- Videos with no detected speech may skip transcription while retaining their non-speech **Video Audio Observations**.
+- If clear speech exists but no transcription adapter is available, visual analysis may still produce a valid profile under **Visual Observation Scope**, but the profile and Agent interface must explicitly report that audio understanding is incomplete.
+- An ASR-unavailable profile must not imply that the source contains no important speech; its original audio defaults to human-review-required or mute-recommended until reviewed.
+- Adding or replacing a transcript for an otherwise current source updates the audio section and provenance, revalidates the profile, and forces a verified Agent-interface refresh without requiring unrelated visual semantics to be regenerated.
+- Complete source speech is retained as **Video Transcript Detail** rather than embedded in the lightweight **Video Profile Catalog**.
+- Transcript detail annotates personal or customer information, contact details, unsupported parameters, promises, test conclusions, and other sensitive or claim-bearing content.
+- Candidate comparison uses transcript summaries; shortlisted segment detail returns only the segment's transcript excerpt with minimal neighboring context.
+- Sensitive transcript content is redacted from downstream payloads by default and remains available only to the authorized knowledge-review workflow.
+- A transcript is an audio observation and never becomes formal product knowledge without independent evidence and review.
+- Every **Video Content Profile** references **Video Analysis Provenance** containing tool and model versions, analysis-policy version, prompt-template version or hash, input frame, clip, and transcript identifiers, source classification, validation result, and human acceptance or modification events.
+- The formal profile stores decision-relevant provenance references and revision identifiers; verbose commands, prompts, timings, stdout, stderr, and stage logs remain in generated reports.
+- A changed model, prompt template, tool behavior, or analysis policy can select affected profiles for re-analysis through their provenance and **Video Profile Revision**.
+- Each material observation or segment can be traced to supporting analysis frames, clips, and transcript ranges without exposing those complete inputs to downstream consumers.
+- A **Video Profile Amendment** may correct classification, segment description, small timestamp-boundary errors, risk state, evidence links, and preferred or alternative segment relationships.
+- Amendments require a modification preview, target profile and item identity, original machine proposal, revised value, reason, reviewer, and timestamp.
+- Applying an amendment revalidates the profile, refreshes and verifies the Agent interface, and invalidates affected downstream contexts.
+- Amendments do not modify raw source video or rewrite analysis cache artifacts.
+- Source changes, missing primary content caused by inadequate sampling, systemic errors, invalid media metadata, and analysis-policy upgrades require full re-analysis rather than amendment.
+- A **Video Use Exclusion** records target scope, restriction scope, reason, reviewer, timestamp, and current status.
+- Restriction scope may prohibit all downstream use, external use only, direct clip reuse only, original-audio reuse only, or selected key segments.
+- Excluded sources and segments remain in formal knowledge for audit and asset-family relationships but are filtered from prohibited downstream retrieval and extraction.
+- Applying or restoring an exclusion refreshes and verifies the Agent interface and triggers **Video Source Revocation** handling for active tasks when applicable.
+- Exclusion never deletes, moves, renames, or modifies raw media.
+- A **Video Profile Migration** is allowed only for structural changes or new values deterministically derivable from the prior validated profile.
+- Migration revalidates the converted profile, preserves the previous revision, and records the migration rule and outcome.
+- Any new field requiring visual, temporal, audio, identity, risk, or multimodal judgment makes the prior profile stale and requires re-analysis.
+- Missing semantic values must not be filled with defaults that imply the source was newly analyzed.
+- A profile that does not satisfy the current downstream contract remains unavailable for automatic selection until migration or re-analysis completes.
+- The default **Video Analysis Budget** allows up to twenty-four analysis frames, up to six analysis clips of roughly three to twelve seconds, and three to six representative frames per source video.
+- Complete useful speech may be transcribed in chunks rather than truncated, and multimodal inputs are divided by chapter or segment when they exceed one analysis context.
+- Complex or long videos automatically segment and escalate analysis depth within the already confirmed batch workflow.
+- If the budget cannot provide reliable coverage, the source is marked as requiring deeper analysis rather than silently publishing an incomplete profile.
+- Batch receipts disclose every automatic depth escalation and its reason.
+- An analysis budget controls cost and execution shape; it never authorizes hiding unobserved portions or claiming processing completeness.
+- **Video Analysis Cache Retention** keeps the three to six representative frames referenced by the current valid profile for the lifetime of that profile revision.
+- Other analysis frames and **Video Analysis Clips** remain available through batch acceptance and are eligible for automatic cleanup thirty days after acceptance.
+- Cache supporting a review-required, failed, disputed, or actively investigated result is retained until that issue is resolved.
+- **Task Video Frames**, **Task Video Clips**, and task previews follow the retention policy of their owning **Video Creation Run** rather than the knowledge-analysis cache policy.
+- Cleanup operates from an explicit cache manifest containing source fingerprint, profile revision, cache role, creation time, acceptance state, and live references.
+- Cleanup must not infer disposability from a directory name or file extension and must skip any artifact referenced by a current profile, unresolved review, or active run.
+- Cache cleanup never deletes, moves, renames, rewrites, or recompresses raw source video.
+- Every **Video Profile Batch** runs a **Video Analysis Capability Preflight** before processing begins.
+- `ffprobe` is mandatory for duration, stream, codec, resolution, frame-rate, rotation, and audio-track inspection.
+- `ffmpeg` is mandatory for analysis-frame extraction, **Video Analysis Clips**, and precise runtime frame and clip extraction.
+- An available Codex session capable of **Codex Video Semantic Review** is mandatory for publishing descriptions, key actions, visibility, classification, and reuse semantics.
+- The current release does not require or accept a user-supplied API key for video semantic analysis and does not silently call a separately configured cloud multimodal model.
+- The knowledge-base Agent prepares only the bounded analysis frames, necessary analysis clips, deterministic media facts, folder classification, and available transcript inputs selected by the confirmed batch policy; Codex does not receive general raw-directory browsing authority.
+- A **Speech Transcription Adapter** is optional and follows the explicit incomplete-audio rules when unavailable.
+- Optional quality, duplicate-detection, or supporting analysis components may use a documented controlled fallback when the fallback still satisfies the profile contract.
+- The preflight receipt records tool availability, versions, configured adapters, controlled fallbacks, and unsupported capabilities.
+- A missing mandatory capability blocks the batch before source processing, consumes no batch work, and does not mark individual videos failed.
+- An unexpected component failure during processing is isolated to the affected source when local; a systemic failure pauses the applicable **Video Batch Impact Scope** and prevents publication of suspect profiles.
+- Each reusable **Video Key Segment** has a **Source Audio Use Policy** of retain, mute-recommended, mute-required, or human-review-required.
+- Privacy-bearing speech, customer identity, unclear publication consent, and suspected copyrighted music prevent automatic original-audio reuse.
+- Every **Video Content Profile** carries a **Video Profile Revision** tied to the source-video content, source classification, profile schema, and analysis policy.
+- A changed source-video fingerprint invalidates all prior observations, segments, representative frames, and audio analysis until the profile is rebuilt.
+- A changed source path or source-folder classification invalidates source classification and requires classification reconciliation even when video bytes are unchanged.
+- A changed profile schema or analysis policy marks older profiles for re-analysis rather than silently treating them as current.
+- Missing representative-frame files may be rebuilt from a still-valid source and profile revision; semantic revision mismatch requires full re-analysis.
+- An invalid or failed profile may leave its **Video Asset Card** visible as a registered asset, but the Agent interface must not publish its stale semantic content as usable.
+- A **Video Creation Run** locks its Agent-interface revision and does not silently switch to a rebuilt profile during the active task.
+- Each source video is an atomic profile-processing unit with its own **Video Profile Processing State**.
+- One video's bounded analysis inputs, Codex proposal, formal structured profile, representative-frame references, structural validation, and processing state are persisted as a **Video Profile Checkpoint** before the next source begins.
+- A valid checkpoint is resumable only when its source fingerprint, source classification, profile schema, analysis policy, and required capability revisions still match.
+- After interruption, the batch resumes at the first missing, failed, stale, or invalid checkpoint and does not re-analyze unchanged valid checkpoints.
+- A checkpoint preserves completed work but does not bypass the batch's required acceptance or **Video Batch Maturity** publication gate.
+- **Video Profile Checkpoints** are written to a batch staging area and remain available to the knowledge-review workflow but invisible to downstream Agent-interface retrieval.
+- Accepted profiles enter the formal knowledge layer only through a **Video Profile Publication Transaction**.
+- The transaction promotes the allowed staged profiles, rebuilds the Agent interface, and verifies that the new profile and representative-frame references are readable under the expected interface revision.
+- If promotion, interface rebuild, or verification fails, the new interface revision is not activated, downstream consumers continue using the last verified revision, and the batch is reported incomplete.
+- Failed, review-required, stale, and excluded staging outcomes remain visible to knowledge maintenance while being omitted or filtered from downstream selectable catalog results according to their state.
+- Stable optimistic publication still uses one atomic profile promotion plus verified interface activation; it never exposes staging files directly.
+- A scoped rollback or revocation removes only the affected publication range and preserves the last unaffected verified knowledge and interface state.
+- Video processing completion is determined by a current, structurally valid **Video Content Profile** whose source and analysis revisions match; the existence of extracted images alone is insufficient.
+- Existing **Legacy Video Frame Cache** files remain rebuildable historical artifacts and cause every video without a valid profile to report as registered but awaiting profile generation.
+- A legacy frame may be reused only when the new pipeline verifies its source revision, timestamp provenance, quality, and relevance; it is never promoted automatically into a representative frame or observation.
+- Product and subfolder progress are recalculated from profile states rather than from the presence of any JPG, JPEG, or PNG under the old cache path.
+- A failed source video does not roll back other valid profiles; validated profiles may be published incrementally through a verified Agent-interface refresh.
+- Failed, incomplete, or stale profiles expose no usable semantic payload to downstream consumers, while their registered **Video Asset Cards** and concrete processing errors remain visible to the knowledge workflow.
+- Product-level progress separately reports registered videos, valid profiles, pending profiles, failed profiles, review-required profiles, and explicitly excluded videos.
+- A product partition is not “video processing complete” until every registered video has a valid profile or an explicit human exclusion.
+- **Video Material Retrieval** is limited to valid **Video Content Profiles** already authorized in the current **Video Creation Context**.
+- Structured filtering precedes semantic ranking and may constrain product, source scenario, observed classification, **Video Use Capability**, product visibility, motion continuity, reuse mode, crop suitability, human risk, audio policy, and profile state.
+- Semantic ranking currently uses profile summaries, **Video Key Segment** descriptions, action and visual descriptions, audio transcripts, and preserved source-folder context.
+- Formal video-profile fields, source-folder classification, actions, visibility, risks, use capabilities, titles, summaries, and segment descriptions are indexed as structured and textual retrieval inputs.
+- After structured and textual retrieval produces a bounded authorized candidate set, **Codex Representative Frame Rerank** opens the candidates' representative frames and evaluates composition, action, subject presentation, scenario appearance, clarity, crop suitability, and near-duplicates.
+- Structured product, authorization, profile-state, exclusion, and risk filters always run before Codex visual reranking.
+- The current interface reports `visual_vector_index_unavailable` and `codex_visual_rerank_available`; it must not claim persistent image-vector search.
+- The first implementation does not install a local visual-embedding model and does not request an API key for one.
+- A future **Representative Frame Visual Index** may improve initial recall at larger scale, but it remains subject to the same hard filters and cannot independently establish product identity, application truth, test result, or another product fact.
+- Adding or replacing a future visual-embedding model rebuilds only that derived index and provenance without changing accepted profile observations or human-review decisions.
+- Semantic relevance cannot override a structured blocker, broaden product scope, authorize raw discovery, or convert a **Video Observation** into a product fact.
+- Plan review may use **Video Representative Frames**, profile summaries, key-segment ranges, and use-capability descriptions without extracting every candidate clip.
+- Before storyboard confirmation, every directly reused **Task Video Clip** must be extracted and presented as a **Task Video Preview** with source asset, exact source range, visible-action description, source-audio policy, and risks.
+- A shot that uses a **Task Video Frame** must show the exact extracted image rather than only its profile representative frame.
+- A direct-clip shot cannot be confirmed from text or one profile preview image alone, and the clip may not be replaced after confirmation without resetting storyboard confirmation.
+- Automatic **Meaning-Preserving Video Adaptation** may trim the selected range, honor source rotation metadata, transcode at high quality, normalize resolution and frame rate, apply the confirmed 9:16 crop or padding, and mute audio according to the **Source Audio Use Policy**.
+- Any speed change, stabilization, color or sharpness manipulation, denoising, internal action removal, mirroring, chronology change, frame interpolation, or generative extension must be disclosed and requires confirmation when it could change motion perception or visual authenticity.
+- No adaptation may change the apparent action, before-and-after order, product identity, test state, or meaning of a **Video Observation**.
+- The storyboard records the source range and every planned adaptation so the confirmed **Task Video Preview** matches the intended task output.
+- The Agent interface exposes video semantics in three stages: **Video Profile Catalog**, on-demand **Video Content Profile** detail, and authorized runtime extraction.
+- A **Video Profile Catalog** entry includes only decision-relevant summary fields such as source classification, observed classifications, use capabilities, product visibility, reuse modes, risk summary, profile state, and representative-frame references.
+- The three-stage image delivery path is catalog thumbnail reference, full-profile representative-frame reference, then run-local exact **Task Video Frame** or **Task Video Clip** after a concrete use is selected.
+- Complete key segments, anchor moments, observations, audio transcripts, and detailed risks are loaded only for shortlisted profile IDs.
+- Source-video bytes are read only after a concrete segment or anchor is selected for **Runtime Clip Extraction** or **Runtime Frame Extraction**.
+- Building a **Video Creation Context** must not inject every complete video profile or transcript into the downstream context.
+- **Video Material Retrieval**, candidate comparison, profile-detail loading, reuse-mode choice, and proposed source-segment assignment are **Professional Video Decisions** owned by the **Video Creation Consumer**.
+- The user does not complete a separate source-video selection workflow before planning; the plan explains the recommended real-footage strategy, and the storyboard shows the exact **Task Video Previews** and **Task Video Frames**.
+- A separate user question is required only when materially different source choices imply different business meaning and the **Confirmed Video Brief** cannot resolve the choice.
+- Replacing a proposed video or segment remains available through natural-language plan or storyboard revision.
+- Every externally proposed test-process or before-and-after segment passes the **Test-Footage Publication Gate**.
+- Formally supported test footage may communicate only the conditions and conclusions covered by its linked evidence.
+- Unsupported but clearly identified test footage may be shown only with neutral observation language and explicit review risk; it must not use words or editing that imply passing, proof, certified performance, temperature tolerance, or causality.
+- Unclear product identity, unclear test conditions, or ambiguous before-and-after meaning blocks external use.
+- Runtime trimming must not hide an adverse result, reorder test states, or manufacture a more favorable comparison.
+- Unsupported spoken test conclusions must be muted or excluded from externally reused clips.
+- The **Video Understanding Pipeline** obtains duration, resolution, frame rate, rotation, streams, and audio presence from deterministic media inspection rather than model inference.
+- Deterministic extraction produces broad samples, change candidates, exact anchor frames, and analysis media without modifying the source video.
+- Quality checks identify black, severely blurred, and near-duplicate frames before semantic interpretation.
+- Time-coded speech transcription runs only when useful speech is present and remains separate from verified product knowledge.
+- **Codex Video Semantic Review** combines source classification, ordered visual evidence, analysis clips when required, and audio observations to propose summaries, segments, observations, classifications, use capabilities, and risks.
+- Codex semantic output must conform to the formal profile schema and pass source-link, timestamp-range, required-field, risk, and structural validation before it can be published.
+- The original Codex proposal is not itself formal knowledge; only its validated profile representation and accepted human-review state enter the knowledge layer.
+- Analysis provenance records the available Codex runtime or model identity, policy and prompt-template revision, bounded media inputs, validation outcome, and human changes when that identity is exposed by the execution environment.
+- If Codex cannot inspect the prepared visual inputs in the current environment, **Video Analysis Capability Preflight** blocks the batch rather than falling back to an unknown service or publishing filename-based semantics.
+- Structural validation verifies source revision, timestamp bounds, representative-frame existence, segment consistency, required risk fields, and review boundaries before publication.
+- Tool failure and semantic uncertainty remain explicit **Video Profile Processing States**; the pipeline must not fabricate missing media facts.
+- Ordered **Video Analysis Frames** are the default semantic input for static product views, slow environment views, and frame-reference-only assets.
+- The pipeline creates **Video Analysis Clips** only when continuous action, process completion, before-and-after change, rapid motion, inconsistent frame evidence, or likely direct clip reuse requires temporal verification.
+- **Video Analysis Clips** are low-cost rebuildable cache artifacts; they are not published through the Agent interface and are distinct from final **Task Video Clips**.
+- A **Video Content Profile** has one canonical Chinese semantic description; the system does not maintain separate Chinese and English profile variants.
+- Stable classification, role, risk, state, confidence, reuse-mode, and audio-policy codes remain language-independent.
+- Source speech transcripts preserve their original language and may include a Chinese interpretation for knowledge maintenance.
+- A downstream task translates only the profile excerpts needed for its selected **Video Language Version** and does not write those translations back to the profile.
+- The canonical **Video Content Profile** is maintained in the formal knowledge layer because its semantic observations, time ranges, risks, and reuse guidance persist across downstream tasks.
+- The formal knowledge layer provides a human-readable profile card and a one-to-one machine-validatable structured profile representation.
+- A valid published **Video Content Profile** may be official under **Visual Observation Scope** even when its observations were produced automatically.
+- Card validity answers whether the profile is current and structurally usable; **Visual Observation Scope** answers what downstream consumers may do with it; observation confidence answers how certain each visual interpretation is.
+- **Visual Observation Scope** permits search, candidate ranking, material selection, storyboard planning, runtime extraction, and editing decisions but never upgrades a **Video Observation** into a verified product fact.
+- Each observation, key segment, classification, transcript item, and reuse recommendation has its own **Video Observation State** and confidence.
+- Profile publication is blocked only when the source cannot be read, asset identity or product scope is untrustworthy, timestamp bounds are invalid, primary content cannot be understood, all representative frames are unusable, or structural validation fails.
+- Local uncertainty such as one dark interval, unclear action, uncertain scenario, partial product visibility, unclear speech, or uninterpretable test outcome remains attached to that item and does not invalidate unrelated usable observations.
+- Low-confidence or review-required items remain auditable in profile detail but are excluded from automatic **Video Material Retrieval** and automatic segment assignment.
+- Every automatically usable item has **Video Observation Confidence** with a normalized level or score, supporting reasons, and explicit warnings.
+- Confidence may incorporate source classification agreement, repeated-frame consistency, analysis-clip support, visible duration and area, temporal continuity, audio-visual agreement, image quality, occlusion, conflicting analysis results, and supported product identity.
+- Source-folder agreement may raise confidence but cannot establish visible content by itself.
+- A model may interpret evidence but cannot publish an unexplained confidence label without traceable supporting signals.
+- Semantically similar **Video Key Segments** within one source video form a **Video Segment Group**.
+- Each **Video Segment Group** identifies one preferred segment using product clarity, action completeness, crop suitability, occlusion and face risk, audio risk, stability, and useful duration.
+- Non-preferred group members remain available as ranked alternatives with explicit reasons rather than being deleted.
+- Frame-level black, blur, and near-duplicate filtering may remove redundant analysis frames, but it must not substitute for semantic segment grouping.
+- **Video Material Retrieval** returns preferred group members by default and may expand to alternatives when a task constraint cannot be satisfied.
+- Cross-video comparison creates **Video Asset Families** after individual valid profiles exist.
+- A **Video Asset Family** distinguishes exact content duplicates, near-duplicate encodes or edits, complementary multi-angle recordings of the same event, and semantically similar but separate scenes.
+- Exact and near-duplicate families may identify a preferred source using media quality, completeness, crop suitability, risk, and profile confidence; all registered sources remain traceable.
+- Complementary multi-angle family members remain co-preferred when their different views add real planning value.
+- Asset-family relationships influence retrieval ranking and duplicate warnings but never merge, move, rename, or delete raw videos automatically.
+- Initial profile rollout proceeds in business-verifiable batches rather than one unbounded full-library run.
+- The first batch is the fixed product-video folder so identity, product visibility, representative frames, key segments, and direct clip reuse can be validated on a small set.
+- Application videos are processed next, one canonical **Source Application Scenario** folder at a time.
+- Test and validation videos are processed last because test interpretation, before-and-after observations, evidence linkage, audio handling, and the **Test-Footage Publication Gate** require the most mature pipeline behavior.
+- After the initial rollout, only new, changed, stale, or explicitly re-requested profiles are processed.
+- The initial product-video batch receives full **Video Profile Batch Acceptance** across all source videos.
+- For the first batch of each **Source Application Scenario**, a batch of ten or fewer profiles is reviewed in full; a larger batch reviews at least five profiles covering preferred segments, low-confidence items, long videos, and videos with audio.
+- After a scenario's pipeline behavior is stable, later batches review ten percent with a minimum of three profiles.
+- Test and validation batches receive full review of external-use risk fields, and every test segment proposed for an external task is reviewed again through the task workflow.
+- A systemic sampling, classification, timing, audio, or risk error blocks batch acceptance and requires affected profiles to be rebuilt after the rule is corrected.
+- **Video Profile Batch Acceptance** validates semantic extraction quality and risk handling; it does not authorize unsupported product claims.
+- Ordinary users start video-profile work through natural language and confirm exactly one proposed **Video Profile Batch** at a time.
+- Before confirmation, the knowledge producer shows the batch's source category or scenario, video count, planned outputs, tool use, raw immutability, and acceptance level.
+- After confirmation, deterministic inspection, adaptive extraction, semantic analysis, profile validation, representative-frame generation, staging, acceptance, and the required **Video Profile Publication Transaction** run as one batch workflow without per-file user commands.
+- Internally, that workflow processes one video at a time and saves a **Video Profile Checkpoint** after each atomic result so the user still manages one batch while execution remains resumable.
+- The batch enters acceptance only after every in-scope source has a valid, review-required, failed, stale, or excluded checkpoint outcome.
+- Gated batches publish selectable profiles only after unified batch acceptance; stable optimistic batches may follow their previously defined monitored publication rule.
+- A systemic defect invalidates or withdraws the affected checkpoints according to **Video Batch Impact Scope**, even when those checkpoints were individually valid.
+- A batch completion receipt reports valid, failed, stale, review-required, and excluded profiles; representative frames; detected asset families; the required acceptance sample; and the verified Agent-interface revision.
+- A batch completion receipt shows six to twelve overview representative images selected across different source videos, main use capabilities, and notable low-confidence or risk examples.
+- Full three-to-six-frame profile previews are shown only when reviewing one selected video profile or its required acceptance sample.
+- Test-validation overview imagery prioritizes visibly available before, process, and after examples without implying a test conclusion.
+- Users are not required to open profile JSON, analysis logs, or cache directories to perform batch acceptance.
+- The next batch is recommended only after the current batch reaches its required acceptance outcome.
+- Initial product-video, first-scenario, and test-validation batches have gated **Video Batch Maturity**: their profiles may be inspected through the knowledge workflow but cannot enter downstream automatic selection before required acceptance.
+- Stable incremental application batches may publish high-confidence valid profiles optimistically while their prescribed sample is reviewed.
+- If monitored sampling finds a systemic defect, every profile from the affected batch is marked unusable, removed from downstream retrieval through a verified Agent-interface refresh, and rebuilt after the rule is corrected.
+- Test-validation profiles never enter external automatic selection before their required risk-field acceptance.
+- Batch publication state is distinct from individual **Video Profile Processing State** and **Video Observation State**.
+- A systemic sampling, timestamp, classification, privacy, rights, or publication-gate defect defines a **Video Batch Impact Scope** and pauses or revokes every affected batch, scenario, or category.
+- An isolated corrupt file, local misclassification, or one review item remains confined to the affected profile or segment and does not mechanically block unrelated batches.
+- A category-specific defect pauses only the relevant source category when other categories remain demonstrably valid.
+- Batch acceptance reports the detected impact scope and the exact work that may continue safely.
+- The video-profile model, validation rules, and understanding pipeline are designed to support future knowledge partitions without product-specific schema assumptions.
+- The initial business integration processes only videos under the five fixed quartz-fiber-tape product material folders.
+- Company, workshop, laboratory, market, customer, and shared-media video integration remains outside the initial rollout and requires its own ownership, authorization, privacy, and downstream-scope decisions.
+- The initial **Video Creation Context** continues to authorize only the quartz-fiber-tape product scope even though the underlying profile capability is reusable.
+- The first implementation milestone is complete only when a **Video Knowledge-to-Creation Tracer** succeeds with a real product video.
+- Implementation begins with one real product-video tracer before building broad batch orchestration.
+- After the single-source tracer passes, the same path expands to the complete fixed product-video batch and receives full acceptance.
+- Application-scenario batching begins only after the product-video path is accepted; test-validation integration remains last.
+- Batch-scale abstractions must be extracted from the proven tracer rather than designed independently of downstream storyboard and assembly needs.
+- The **Tracer Source Video** is decodable, contains a meaningful continuous product action with at least two observable stages, includes a clearly visible product interval, and has `ready` or `adaptable` editing potential.
+- The tracer source should be roughly fifteen seconds to two minutes when available, may include useful low-risk audio, and avoids clear-face, privacy, rights, and test-interpretation complexity.
+- A static product view or test-validation recording is not selected merely because it is easiest to process.
+- If no source satisfies every preferred property, the tracer records which capability could not be exercised and schedules that capability in the full product-video batch.
+- Before implementation locks the tracer source, the Agent inspects all videos in the fixed product-video folder and recommends one **Tracer Source Video** using actual media facts and visual evidence rather than filenames.
+- The recommendation shows source identity, duration, observable action stages, product visibility, audio presence, major risks, and three to six preliminary frames.
+- Selecting the tracer source is an explicit implementation-scope confirmation because the sample determines which end-to-end capabilities the first milestone proves.
+- Tracer-source inspection does not publish a formal profile or modify the knowledge layer.
+- Preliminary tracer-selection frames live in **Tracer Candidate Inspection Cache**, separate from formal profile analysis media and every **Video Creation Run**.
+- The cache is organized by source fingerprint, may be reused only when it satisfies the accepted analysis rules, and may otherwise be rebuilt.
+- Unselected candidate media may be cleaned without touching raw; the candidate report, recommendation, and user confirmation remain auditable.
+- Candidate inspection files do not count as processed video frames in knowledge status and never enter the Agent interface.
+- Accepted video-profile decisions must be synchronized across the domain glossary, architecture decisions, product requirements, implementation slices, and test boundaries.
+- The PRD explicitly supersedes older statements that knowledge-base videos are unavailable to planning or generation when an authorized valid profile and segment now permit use.
+- Vertical implementation slices follow the accepted order: tracer source inspection, one real end-to-end tracer, full product-video batch, application-scenario batches, and final test-validation batches.
+- Tests must stop asserting that all video content assets are excluded and instead verify authorized catalog retrieval, profile detail loading, runtime extraction, direct clip reuse, risk gates, revocation, and raw immutability.
+- The tracer preserves the raw source hash; creates and validates its asset card, semantic profile, representative frames, revision, and provenance; publishes and retrieves it through the three-stage Agent interface; and performs runtime extraction by **Video Asset ID**.
+- The tracer shows the exact task clip and frame, source range, audio policy, risks, and adaptations in storyboard confirmation and uses the real task clip as an assembly input rather than regenerating it.
+- The tracer verifies that arbitrary raw paths are rejected, stale profiles are not published as usable, and a high-risk revocation blocks later confirmation or submission.
+- Adding an extraction script, cache images, card type, JSON schema, or catalog endpoint without downstream storyboard and assembly use is not completion.
+- Runtime-extracted task files remain in their **Video Creation Run** for audit when their source receives **Video Source Revocation**; the system does not silently delete or replace them.
+- Plan confirmation, storyboard confirmation, and real external submission recheck the current source-revocation state for every selected profile and segment.
+- Before plan confirmation, revoked candidates are re-retrieved; before storyboard confirmation, affected previews are regenerated from approved replacements.
+- After storyboard confirmation but before real submission, a revocation blocks submission until the affected material is replaced or an allowed non-high-risk override is explicitly confirmed.
+- Product-identity, privacy, test-misrepresentation, and rights-related revocations cannot be overridden inside the video task.
+- Completed or already-submitted runs preserve their historical artifacts and record the later revocation rather than rewriting prior state.
+- The local single-user workflow authorizes runtime extraction through the combined **Video Creation Run** identity, locked Agent-interface revision, **Video Asset ID**, profile revision, allowed operation, and current revocation check.
+- The local workflow does not require short-lived extraction tokens; signed short-lived authorization is reconsidered only if extraction becomes a remote or multi-user service.
+- Every attempted runtime extraction writes a **Runtime Video Extraction Audit**, including rejected attempts.
+- For one planned visual use, the video consumer may extract at most three **Candidate Video Previews** when profile text and representative frames cannot reliably distinguish shortlisted segments.
+- Candidate previews use analysis-quality output and do not receive final crop, encoding, or other delivery adaptations.
+- High-cost or delivery-quality **Meaning-Preserving Video Adaptation** runs only after one segment is selected.
+- Plan review normally shows the Agent's recommended material; materially different business meanings may require showing alternatives and asking one focused question.
+- Unselected candidate previews remain task inspection artifacts and never enter formal knowledge or the confirmed storyboard.
+- **Video Analysis Frames** and **Video Analysis Clips** remain rebuildable generated cache artifacts; their selected **Video Representative Frames** are generated files referenced by the formal profile rather than raw evidence files.
+- The Agent interface rebuilds its **Video Profile Catalog** and on-demand profile details from the formal profile representation; downstream consumers do not parse knowledge Markdown directly.
+- **Video Source Classification** guides sampling and classification but cannot override contradictory or absent visual observations.
+- Matching source and observed classifications may increase confidence; a conflict must remain visible to downstream consumers and may require review when it affects product identity or external interpretation.
+- Downstream material selection uses the time-ranged **Video Observed Classification** and **Video Use Capabilities**, while retaining source classification as provenance.
+- High-confidence **Video Observations** may be published for downstream planning without per-video human approval.
+- Ambiguous product identity, uncertain scene classification, and every **Video Claim Interpretation** must enter knowledge review rather than downstream planning facts.
+- When the video consumer selects a source video for a concrete shot, it must visually recheck the relevant time-coded **Video Observations** through **Runtime Frame Extraction**.
 - The initial video consumer does not expand retrieval through keyword search and does not read knowledge for other products.
 - Each **Video Creation Run** is stored at `generated/reports/video-creation/{timestamp}_quartz_fiber_tape_{zh|en}/`.
 - Every **New Video Task** creates its own timestamped **Video Creation Run** directory; plan, storyboard, prompts, Dreamina records, generated clips, and assembly files from separate tasks must never be mixed.
@@ -380,13 +1003,21 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - The initial workflow does not monitor or switch knowledge revisions during an active run.
 - If the quartz-fiber-tape knowledge or Agent interface is unavailable, the video consumer stops and routes the user to organize the product through the knowledge producer first.
 - The video consumer does not organize knowledge, scan raw, or bypass the formal interface with ad hoc facts.
+- `raw_access=false` forbids raw-directory discovery and arbitrary file reads; it does not forbid **Runtime Frame Extraction** or **Runtime Clip Extraction** through an **Authorized Video Reference**.
+- Runtime extraction must validate the selected video against the current **Video Creation Context**, read the source video without modifying it, and write **Task Video Frames** or **Task Video Clips** only inside the current **Video Creation Run**.
+- Frames created by **Runtime Frame Extraction** are task artifacts, not formal knowledge or reusable evidence, unless a later knowledge-producer workflow explicitly reviews and publishes them.
+- Clips created by **Runtime Clip Extraction** are task artifacts, not formal knowledge or replacements for their source **Video Content Profiles**.
+- Runtime frame selection starts from published **Video Anchor Moments**.
+- If an anchor does not satisfy the task composition, the consumer may inspect a bounded neighborhood and then at most five candidate frames within the authorized **Video Key Segment** for that shot.
+- Runtime frame exploration cannot cross the authorized key-segment bounds or scan the whole source video.
+- The selected **Task Video Frame** must pass the same pixel-level subject, clarity, composition, crop, duplication, identifier, and person-risk checks required for storyboard imagery.
 - User-provided wording preferences may influence creative treatment, but task-specific product facts, parameters, performance claims, or promises that are absent from formal knowledge cannot enter a video.
 - New product facts must be confirmed and published through the knowledge producer before video creation uses them; the video consumer has no one-run fact exception.
-- The video workflow uses formal knowledge-card text and image content assets; knowledge-base video files are not used for planning or Dreamina task generation in the current scope.
+- The video workflow uses formal knowledge-card text, image content assets, and authorized video profiles; usable real source-video segments may be selected for planning and direct clip reuse.
 - When real application imagery is unavailable, Dreamina may generate a simulated application scene only for applications confirmed by formal knowledge.
 - AI-generated scenes must be identified as generated in the run record and must not be represented as a real customer case, real test record, or product-performance evidence.
 - Generated scenes must not introduce unsupported equipment details, parameters, applications, or performance outcomes.
-- Shot material selection follows this strict fallback order: real product image animated into video, real application image animated into video, AI-simulated scene, then text-only generated video.
+- Shot material selection prefers a suitable real **Task Video Clip**, then a real image or **Task Video Frame** animated into video, then an evidence-safe AI-simulated scene, and finally text-only generated video.
 - A lower-priority material mode is used only when higher-priority modes cannot satisfy the shot.
 - Any generated shot that visibly contains the product must use real product or real application imagery as an image-to-video visual reference.
 - A **Visual Storyboard** must show each selected image as an inline thumbnail or preview, not only as a local path or content-asset ID.
@@ -537,7 +1168,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. Put new facts through the knowledge producer first; only creative wording preferences may remain task-local."
 >
 > **Dev:** "Can the video workflow use knowledge-base video files for planning or Dreamina generation?"
-> **Domain expert:** "No. In the current scope, use formal knowledge-card text and image content assets only."
+> **Domain expert:** "Yes, when an authorized **Video Content Profile** identifies a suitable segment. Prefer a real **Task Video Clip** over regenerating usable footage, and use **Task Video Frames** when still-image reference is needed."
 >
 > **Dev:** "Can Dreamina invent an application scene when no real application image exists?"
 > **Domain expert:** "Yes, but only for a formally confirmed application, with clear generated-asset traceability and no implication that it is a real case or test."
@@ -611,6 +1242,231 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "What state should a rejected generated result leave behind?"
 > **Domain expert:** "Write a result-acceptance record, mark the run stopped, and direct the user to create a new task. Do not silently rewind or resubmit the confirmed storyboard."
 
+> **Dev:** "Can the video consumer browse raw to find a useful moment in a source video?"
+> **Domain expert:** "No. It may request **Runtime Frame Extraction** only from an **Authorized Video Reference** already present in the current **Video Creation Context**."
+
+> **Dev:** "Can the runtime extractor accept a raw path from the video consumer?"
+> **Domain expert:** "No. It accepts a **Video Asset ID** and validates the current authorized mapping internally."
+
+> **Dev:** "Should moving a source video create a new asset, or should copying it reuse the same ID?"
+> **Domain expert:** "Neither by path alone. **Video Asset Identity Reconciliation** preserves identity for a verified move, assigns a new ID to a concurrent copy, and routes ambiguity to human review."
+
+> **Dev:** "Can the video consumer use frame extraction to browse the entire source video again?"
+> **Domain expert:** "No. Start from **Video Anchor Moments** and explore only a bounded number of frames inside the authorized **Video Key Segment**."
+
+> **Dev:** "Should every catalog response embed all representative images, or return their cache paths?"
+> **Domain expert:** "Neither. Return revision-bound **Representative Frame References** and load only the images needed for candidate or profile inspection."
+
+> **Dev:** "Should every new video task re-analyze the whole source video?"
+> **Domain expert:** "No. The **Knowledge Producer** publishes one persistent **Video Content Profile** per source video; the task uses it for selection and performs only task-specific frame extraction."
+
+> **Dev:** "Should the full video timeline be added to `content_asset`, or kept only as generated JSON?"
+> **Domain expert:** "Neither. Add a formal `video_profile` **Video Profile Card** with atomic human-readable Markdown and machine-validatable JSON projections linked to the existing asset identity."
+
+> **Dev:** "Is one paragraph saying what the video is about enough?"
+> **Domain expert:** "No. Use a short **Video Profile Title**, a whole-video **Video Profile Summary**, and time-coded **Video Segment Descriptions**."
+
+> **Dev:** "If the woven tape is sharp and fills the frame, is its product identity automatically confirmed?"
+> **Domain expert:** "No. **Segment Product Visibility** separates clear appearance from identity-confirmable evidence."
+
+> **Dev:** "Should the long-lived profile store only whether a frame crops well to 9:16?"
+> **Domain expert:** "No. Store general **Segment Composition Safety** and derive the current 9:16 suitability from it."
+
+> **Dev:** "Can the Agent silently remove a third-party watermark to make a clip usable?"
+> **Domain expert:** "No. Record the **Segment Identifier Risk**, prefer another source, and disclose any allowed crop or mask; never erase provenance or rights concerns silently."
+
+> **Dev:** "Can a source clip with a clear employee face be used because it is stored in the company knowledge library?"
+> **Domain expert:** "No. **Segment Person Risk** separates identifiability from authorization; a clear face needs recorded authorization before automatic external selection."
+
+> **Dev:** "Can a test video inherit a report's conclusions because both files are in the same folder?"
+> **Domain expert:** "No. Directory proximity creates only a **Candidate Video Evidence Link**; external support requires a **Confirmed Video Evidence Link**."
+
+> **Dev:** "Should a profile say 'easy installation improves insulation performance' because it shows wrapping?"
+> **Domain expert:** "No. Record the visible wrapping action and its use capability; task-specific marketing language belongs to the video consumer and must use formal knowledge."
+
+> **Dev:** "If a segment shows a valuable action, is it automatically suitable for direct editing?"
+> **Domain expert:** "No. Evaluate its separate **Segment Editing Suitability**; useful content may still be reference-only or unusable."
+
+> **Dev:** "Should the existing content-asset card contain the whole video timeline?"
+> **Domain expert:** "No. The **Video Asset Card** owns source identity and authorization; its one-to-one **Video Content Profile** owns the video's semantic timeline."
+
+> **Dev:** "If a flame-test video ends with the tape still looking intact, can the profile say the product passed?"
+> **Domain expert:** "No. It may record the visible before-and-after appearance as **Video Observations**; passing the test is a **Video Claim Interpretation** that requires formal evidence or human review."
+
+> **Dev:** "Should video analysis sample every fixed number of seconds?"
+> **Domain expert:** "No. Use uniform coverage to establish the whole-video structure, then add **Video Analysis Frames** around meaningful scene, subject, visibility, action, and process-state changes."
+
+> **Dev:** "Should downstream planning receive every sampled frame?"
+> **Domain expert:** "No. Publish three to six **Video Representative Frames** for preview, then extract a precise **Task Video Frame** from the selected source video when a concrete shot needs it."
+
+> **Dev:** "Can all representative frames come from the most attractive five seconds?"
+> **Domain expert:** "No. Prefer key-segment anchors and cover the video's distinct main content; use only a few global context frames when needed."
+
+> **Dev:** "Should the knowledge producer label a source segment as 'shot 03'?"
+> **Domain expert:** "No. Publish a stable **Video Use Capability** and time range; the video consumer assigns the concrete storyboard role for each task."
+
+> **Dev:** "If a video is stored under the fixed test-material folder, does that prove the visible segment is a test?"
+> **Domain expert:** "No. Preserve the complete **Video Source Classification** as provenance and an analysis prior, then publish the actual time-ranged **Video Observed Classification** separately."
+
+> **Dev:** "Does a child folder under application materials have business meaning?"
+> **Domain expert:** "Yes. It defines a human-maintained **Source Application Scenario**, but the video profile must still distinguish that assigned scenario from what is visibly confirmed in the footage."
+
+> **Dev:** "Do all nested folders under an application scenario define more scenarios?"
+> **Domain expert:** "No. Only the first descendant folder is the canonical **Source Application Scenario**; deeper folders remain ordered source context until analysis assigns a supported meaning."
+
+> **Dev:** "Is one timestamp enough to describe an installation action?"
+> **Domain expert:** "No. Record the complete action as a **Video Key Segment** and include **Video Anchor Moments** for representative preview and precise frame extraction."
+
+> **Dev:** "If a real source-video segment already satisfies the shot, should the Agent regenerate it from a frame?"
+> **Domain expert:** "No. Create a **Task Video Clip** through **Runtime Clip Extraction** and use the real footage; generate a replacement only when the source segment cannot satisfy the confirmed shot."
+
+> **Dev:** "Can a directly reused source clip always keep its original audio?"
+> **Domain expert:** "No. Read its **Source Audio Use Policy**; speech, privacy, noise, and music-rights risk may require muting or human review."
+
+> **Dev:** "Should every downstream context receive the complete source transcript?"
+> **Domain expert:** "No. Retain **Video Transcript Detail** for audit and disclose only the selected segment's redacted excerpt when needed."
+
+> **Dev:** "If no ASR tool is installed, can the profile say the video has no important speech?"
+> **Domain expert:** "No. Publish the visual scope only, expose the audio-analysis gap, and keep original-audio reuse under review until a **Speech Transcription Adapter** or a human resolves it."
+
+> **Dev:** "Should a future maintainer have to guess which model and frames produced a segment classification?"
+> **Domain expert:** "No. Link every profile to **Video Analysis Provenance** and keep verbose execution logs separately in generated reports."
+
+> **Dev:** "Must one mislabeled segment force the whole source video through analysis again?"
+> **Domain expert:** "No. Use a previewed **Video Profile Amendment** for a local correction; reserve full re-analysis for source, sampling, metadata, or systemic-policy problems."
+
+> **Dev:** "Does excluding a risky customer video mean deleting it from raw?"
+> **Domain expert:** "No. Apply a scoped **Video Use Exclusion**, preserve the source and audit history, and remove only the prohibited authorization."
+
+> **Dev:** "Can a new visual-risk field be populated with 'none' during schema migration?"
+> **Domain expert:** "No. If the value requires viewing the source, migration cannot invent it; mark the profile stale and re-analyze."
+
+> **Dev:** "Can a long video be called complete after silently dropping frames to stay under budget?"
+> **Domain expert:** "No. Use the **Video Analysis Budget** to trigger segmentation or explicit deeper analysis, not silent coverage loss."
+
+> **Dev:** "Can cleanup delete every JPEG thirty days after analysis?"
+> **Domain expert:** "No. Follow the **Video Analysis Cache Retention** manifest and live references; current representative frames and unresolved review material remain, and raw media is never cache."
+
+> **Dev:** "Should a batch begin and mark videos failed before discovering that ffmpeg or the semantic analyzer is unavailable?"
+> **Domain expert:** "No. **Video Analysis Capability Preflight** blocks an unready environment before processing and distinguishes environment failure from source-video failure."
+
+> **Dev:** "Can a video profile remain usable after the source file is replaced under the same filename?"
+> **Domain expert:** "No. Its **Video Profile Revision** no longer matches, so downstream semantic use is blocked until the profile is rebuilt."
+
+> **Dev:** "Should one corrupt video prevent every successfully analyzed video from reaching downstream consumers?"
+> **Domain expert:** "No. Process each video atomically and publish valid profiles incrementally, while the product remains visibly incomplete until failures are resolved or explicitly excluded."
+
+> **Dev:** "If Codex stops after six videos, must the batch restart from the first one?"
+> **Domain expert:** "No. Resume from the first incomplete **Video Profile Checkpoint** when earlier checkpoints and their source and policy revisions still match."
+
+> **Dev:** "Can downstream Agents read a validated checkpoint before batch acceptance and interface verification finish?"
+> **Domain expert:** "No. A checkpoint remains staged until a **Video Profile Publication Transaction** promotes it and activates a verified Agent-interface revision."
+
+> **Dev:** "Does an old zero-second frame mean a video remains processed after the upgrade?"
+> **Domain expert:** "No. A **Legacy Video Frame Cache** does not count as completion; only a current validated profile does."
+
+> **Dev:** "Should the video consumer find source footage through tags alone or unrestricted semantic search?"
+> **Domain expert:** "Neither. **Video Material Retrieval** first applies structured product, state, visibility, reuse, and risk constraints, then semantically ranks only the authorized candidates."
+
+> **Dev:** "Can a visually similar representative frame establish that a video shows the same product or a successful test?"
+> **Domain expert:** "No. The **Representative Frame Visual Index** improves ranking only after hard filters; identity and claims still require profile evidence and review."
+
+> **Dev:** "Must the first release deploy a visual-vector model before downstream Agents can find useful video?"
+> **Domain expert:** "No. Use structured and textual recall followed by **Codex Representative Frame Rerank**; report the vector index as unavailable rather than inventing one."
+
+> **Dev:** "Can a storyboard confirm direct use of a source segment from its profile summary and one representative frame?"
+> **Domain expert:** "No. Extract the exact segment into the run and show its **Task Video Preview** before storyboard confirmation."
+
+> **Dev:** "Can runtime extraction silently speed up or enhance a real test clip?"
+> **Domain expert:** "No. Automatic **Meaning-Preserving Video Adaptation** is limited to technical normalization; any change that may alter motion perception or authenticity must be disclosed and confirmed."
+
+> **Dev:** "Should the video context include every full profile and transcript for all registered videos?"
+> **Domain expert:** "No. Search the **Video Profile Catalog**, load details only for shortlisted profiles, and read source bytes only for authorized runtime extraction."
+
+> **Dev:** "Must an employee browse and choose source videos before the Agent creates a plan?"
+> **Domain expert:** "No. Source selection is a **Professional Video Decision**; explain the recommendation in the plan and show the exact extracted material during storyboard confirmation."
+
+> **Dev:** "Is authentic test footage automatically safe for an external product video?"
+> **Domain expert:** "No. Apply the **Test-Footage Publication Gate**: use linked evidence for conclusions, or keep the presentation strictly neutral and visibly under review."
+
+> **Dev:** "Can a model infer a video's duration, key actions, and audio content from one extracted image?"
+> **Domain expert:** "No. Use the **Video Understanding Pipeline** so deterministic tools establish media facts and multimodal analysis interprets ordered visual and audio evidence."
+
+> **Dev:** "Must the operator configure a third-party multimodal API key before video profiles can be created?"
+> **Domain expert:** "No. The current release uses **Codex Video Semantic Review** directly; the knowledge Agent prepares bounded inputs and validates the result without hidden external-model configuration."
+
+> **Dev:** "Must every source video be transcoded into analysis clips before it can be understood?"
+> **Domain expert:** "No. Start with ordered frames and create **Video Analysis Clips** only when temporal behavior or direct-reuse suitability cannot be assessed reliably from stills."
+
+> **Dev:** "Should each source video maintain separate Chinese and English semantic profiles?"
+> **Domain expert:** "No. Keep one canonical Chinese profile with language-independent codes, then translate selected excerpts inside the downstream task."
+
+> **Dev:** "Do video observations belong only in generated cache because they were model-produced?"
+> **Domain expert:** "No. Persist the validated semantic profile in the formal knowledge layer; keep only the analysis media in rebuildable generated storage."
+
+> **Dev:** "Does an official video profile mean its visible content proves product performance?"
+> **Domain expert:** "No. Its **Visual Observation Scope** authorizes visual-use decisions only; product facts still require separate evidence and publication authority."
+
+> **Dev:** "Should one uncertain test result make every clear installation segment in the same video unusable?"
+> **Domain expert:** "No. Keep the profile valid and block only the uncertain item's **Video Observation State** from automatic downstream use."
+
+> **Dev:** "Can the multimodal model simply label an observation 'high confidence'?"
+> **Domain expert:** "No. Publish **Video Observation Confidence** only with traceable supporting reasons and warnings from the source, timeline, visual, audio, quality, and consistency signals."
+
+> **Dev:** "Should repeated installation actions inside one video be deleted as duplicates?"
+> **Domain expert:** "No. Create a **Video Segment Group**, prefer the best segment, and retain the others as explained alternatives."
+
+> **Dev:** "Should two nearly identical source videos be merged or deleted?"
+> **Domain expert:** "No. Relate them through a **Video Asset Family**, rank a preferred source when appropriate, and preserve every raw file."
+
+> **Dev:** "Should the first run analyze every registered video at once?"
+> **Domain expert:** "No. Validate product videos first, process application scenarios folder by folder, and leave test-validation videos until the observation and publication gates are mature."
+
+> **Dev:** "Does accepting a profile batch mean every observation becomes an approved product fact?"
+> **Domain expert:** "No. **Video Profile Batch Acceptance** validates pipeline quality and publication boundaries; product facts still require their own evidence and knowledge review."
+
+> **Dev:** "Should an employee run frame-extraction and analysis commands for every source video?"
+> **Domain expert:** "No. Confirm one business-scoped **Video Profile Batch** in natural language; the knowledge producer runs and verifies the internal pipeline."
+
+> **Dev:** "Should a batch receipt show every representative frame from every profile?"
+> **Domain expert:** "No. Show six to twelve cross-profile overview images, then show a profile's complete representative set only during focused review."
+
+> **Dev:** "Should the first product-video batch become automatically selectable immediately after model analysis?"
+> **Domain expert:** "No. Its **Video Batch Maturity** requires acceptance first; only stable incremental batches may publish optimistically under monitored sampling."
+
+> **Dev:** "Should one bad file stop every later application-scenario batch?"
+> **Domain expert:** "No. Use **Video Batch Impact Scope**: isolate local defects and pause only the range affected by systemic ones."
+
+> **Dev:** "Should the first rollout scan company and workshop videos because the pipeline is technically reusable?"
+> **Domain expert:** "No. Keep the capability generic but integrate only the fixed quartz-fiber-tape product folders until other domain boundaries are decided."
+
+> **Dev:** "Is the chain complete when a keyframe JSON file can be generated?"
+> **Domain expert:** "No. Complete the **Video Knowledge-to-Creation Tracer** through retrieval, authorized extraction, storyboard confirmation, and real clip assembly."
+
+> **Dev:** "Should the team build the 164-video batch framework before connecting one real video to storyboard and assembly?"
+> **Domain expert:** "No. Prove one real tracer, expand it to all product videos, then generalize the accepted path into application-scenario batches."
+
+> **Dev:** "Should the tracer use the shortest static product video because it is easiest?"
+> **Domain expert:** "No. Choose a **Tracer Source Video** that proves continuous-action understanding and real clip reuse without introducing test or high-risk privacy complexity."
+
+> **Dev:** "Can the tracer source be chosen from filenames alone?"
+> **Domain expert:** "No. Inspect every product-video candidate, recommend one with actual frames and media facts, and wait for explicit sample confirmation."
+
+> **Dev:** "Should tracer-selection frames count as completed knowledge-base video processing?"
+> **Domain expert:** "No. Keep them in **Tracer Candidate Inspection Cache**; only the accepted formal pipeline can produce a valid profile."
+
+> **Dev:** "Is updating only the glossary enough to prevent the old image-only behavior from returning?"
+> **Domain expert:** "No. Synchronize the PRD, vertical implementation slices, and tests, and explicitly supersede the old video-exclusion rules."
+
+> **Dev:** "Should a later source revocation delete a task's already extracted preview?"
+> **Domain expert:** "No. Preserve it for audit, but recheck **Video Source Revocation** at each confirmation and submission gate and block high-risk material."
+
+> **Dev:** "Does a local extraction need a one-time token for every frame?"
+> **Domain expert:** "No. Bind it to the run and locked revisions, validate the authorized asset and operation, and write a **Runtime Video Extraction Audit**."
+
+> **Dev:** "Can the Agent compare several source clips before choosing one?"
+> **Domain expert:** "Yes, but cap **Candidate Video Previews** at three per planned use and create delivery-quality output only for the selected segment."
+
 ## Flagged Ambiguities
 
 - "审阅" was used for both marketing campaign quality review and knowledge-base fact review. Resolved: use **Marketing Plan Review** for LinkedIn campaign planning and **Knowledge Review** for formal knowledge-base review items.
@@ -618,3 +1474,11 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - “创意方向” was previously modeled as 16 fixed categories with primary and supporting selections. Resolved: remove that taxonomy and use a **Video Creation Interview** to produce a **Confirmed Video Brief**.
 - Product external names were considered as video-workflow constants. Resolved: they are knowledge owned by the **Knowledge Producer**, not by the video consumer.
 - `video_script` was initially retained as the video task-context name. Resolved: rename it to `video_creation` to match the complete production responsibility.
+- “下游反向从 raw 实时截帧” could mean unrestricted raw access. Resolved: use **Runtime Frame Extraction** from an **Authorized Video Reference**; the consumer still cannot browse or scan raw.
+- “视频关键信息” could mean a temporary analysis performed inside each video task. Resolved: persist it as one **Video Content Profile** per source video and publish it through the Agent interface.
+- “视频知识卡” could mean expanding the existing content-asset card. Resolved: keep the **Video Asset Card** for identity and add a separate one-to-one **Video Content Profile** for semantic content.
+- “测试结果或前后变化” mixed visible change with performance conclusions. Resolved: visible changes are **Video Observations**; test success and performance meaning are **Video Claim Interpretations** requiring evidence or review.
+- Folder-based video classification was previously flattened into one asset category. Resolved: preserve the fixed top-level category and complete descendant path as **Video Source Classification**, separate from visually derived **Video Observed Classification**.
+- Application-material child folders were considered generic path metadata. Resolved: they are human-maintained **Source Application Scenarios**, while visible application content remains separately observed and time-ranged.
+- All nested application-material folders could have been treated as equal scenario labels. Resolved: only the first descendant folder defines the **Source Application Scenario**; deeper levels remain ordered source context until analyzed.
+- Source videos were previously treated as information or frame sources only. Resolved: an authorized usable **Video Key Segment** may become a real **Task Video Clip**, and real footage is preferred over regenerating the same content.

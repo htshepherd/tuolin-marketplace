@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import json
 import os
 from pathlib import Path
 import re
-from typing import Any
+import subprocess
+from typing import Any, Callable
 
 from ..kb.agent_interface import knowledge_status
 from ..kb.core_upstream import organize_core_upstream, preview_core_upstream
@@ -26,6 +28,16 @@ from ..kb.partition_organizer import organize_partition
 from .project_layout import ProjectPaths
 from ..kb.question_answering import answer_question
 from ..kb.review_workflow import apply_review_decision, create_review_preview, list_review_items
+from ..kb.video_profiles import (
+    VIDEO_SUFFIXES,
+    confirm_video_tracer_candidate,
+    inspect_video_candidate_batch,
+)
+from ..kb.application_scenario_video_batches import (
+    accept_application_scenario_scope,
+    process_application_scenario_batches,
+    read_application_scenario_scopes,
+)
 
 
 ACTION_LABELS = {
@@ -75,9 +87,24 @@ class NaturalLanguageResponse:
         return asdict(self)
 
 
-def route_natural_language(paths: ProjectPaths, text: str) -> NaturalLanguageResponse:
+def route_natural_language(
+    paths: ProjectPaths,
+    text: str,
+    *,
+    video_tool_runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    video_frame_decoder: Callable[[Path], bytes] | None = None,
+) -> NaturalLanguageResponse:
     utterance = text.strip()
     confirmed = _is_confirmed(utterance)
+
+    video_profile_response = _video_profile_response(
+        paths,
+        utterance,
+        video_tool_runner=video_tool_runner,
+        video_frame_decoder=video_frame_decoder,
+    )
+    if video_profile_response is not None:
+        return video_profile_response
 
     linkedin_response = _linkedin_response(paths, utterance)
     if linkedin_response is not None:
@@ -131,6 +158,800 @@ def route_natural_language(paths: ProjectPaths, text: str) -> NaturalLanguageRes
         )
 
     return _recommend_next_response(paths)
+
+
+def _video_profile_response(
+    paths: ProjectPaths,
+    utterance: str,
+    *,
+    video_tool_runner: Callable[..., subprocess.CompletedProcess[str]] | None,
+    video_frame_decoder: Callable[[Path], bytes] | None,
+) -> NaturalLanguageResponse | None:
+    scenario_acceptance = _application_scenario_acceptance_confirmation(
+        utterance
+    )
+    if scenario_acceptance is not None:
+        scenario, asset_ids = scenario_acceptance
+        return _accept_application_scenario_scope_response(
+            paths,
+            scenario,
+            asset_ids,
+        )
+    if _is_application_scenario_acceptance_sample_request(utterance):
+        return _application_scenario_acceptance_samples_response(paths)
+    if _is_application_scenario_video_processing_confirmation(utterance):
+        return _process_application_scenario_video_batches_response(
+            paths,
+            video_tool_runner=video_tool_runner,
+            video_frame_decoder=video_frame_decoder,
+        )
+    if _is_application_scenario_video_status_request(utterance):
+        return _application_scenario_video_status_response(paths)
+    confirmation_asset_id = _video_tracer_confirmation_asset_id(utterance)
+    if confirmation_asset_id is not None:
+        return _confirm_video_tracer_response(paths, confirmation_asset_id)
+    if _is_video_tracer_processing_confirmation(utterance):
+        return _process_video_tracer_candidates_response(
+            paths,
+            video_tool_runner=video_tool_runner,
+            video_frame_decoder=video_frame_decoder,
+        )
+    if _is_video_tracer_inspection_request(utterance):
+        return _start_video_tracer_inspection_response(paths)
+    if not _is_video_tracer_status_request(utterance):
+        return None
+    report_path = (
+        paths.generated_dir
+        / "cache"
+        / "video-tracer-inspection"
+        / "batches"
+        / "quartz_fiber_tape"
+        / "candidate-batch.json"
+    )
+    if not report_path.is_file():
+        return NaturalLanguageResponse(
+            intent="video_tracer_status",
+            executed=False,
+            needs_confirmation=True,
+            message="石英纤维隔热带产品视频尚未生成候选检查批次。",
+            copyable_reply="确认，检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            details={
+                "status": "not_started",
+                "expected_count": 8,
+                "discovered_count": 0,
+                "candidates": [],
+            },
+        )
+    try:
+        batch = json.loads(report_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return NaturalLanguageResponse(
+            intent="video_tracer_status",
+            executed=False,
+            needs_confirmation=True,
+            message="产品视频候选批次回执损坏，当前不能继续推荐或确认 tracer。",
+            copyable_reply="确认，重新检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            details={"status": "invalid_batch_receipt"},
+        )
+    expected = int(batch.get("expected_count") or 8)
+    discovered = int(batch.get("discovered_count") or 0)
+    candidates = [
+        {
+            "asset_id": candidate.get("asset_id"),
+            "source_relative_path": candidate.get("source_relative_path"),
+            "status": candidate.get("status"),
+            "title": candidate.get("codex_review", {}).get("title"),
+            "tracer_suitability": candidate.get("codex_review", {}).get("tracer_suitability"),
+            "tracer_reason": candidate.get("codex_review", {}).get("tracer_reason"),
+        }
+        for candidate in batch.get("candidates", [])
+    ]
+    status = str(batch.get("status") or "unknown")
+    if status == "blocked_source_count_mismatch":
+        message = (
+            f"石英纤维隔热带产品视频候选批次当前为 {discovered}/{expected}，"
+            "与固定批次数量不一致，因此不能推荐或确认 tracer。"
+        )
+        copyable_reply = "固定 raw 文件夹绝对路径是：<请填写包含全部 8 条产品视频的路径>"
+    elif status == "awaiting_codex_review":
+        message = (
+            f"已登记 {discovered}/{expected} 条产品视频，"
+            "候选帧已经准备，正在等待全部视频完成 Codex 语义复核。"
+        )
+        copyable_reply = "确认，继续完成全部产品视频的 Codex 复核。"
+    elif status == "awaiting_tracer_confirmation":
+        recommendation = batch.get("tracer_recommendation", {})
+        asset_id = recommendation.get("recommended_asset_id")
+        message = (
+            f"全部 {discovered} 条产品视频已完成候选复核。"
+            f"当前推荐 tracer：{asset_id}。{recommendation.get('reason', '')}"
+        )
+        copyable_reply = f"确认 tracer Asset ID：{asset_id}"
+    else:
+        message = (
+            f"石英纤维隔热带产品视频候选批次状态为 {status}，"
+            f"已发现 {discovered}/{expected} 条。"
+        )
+        copyable_reply = None
+    return NaturalLanguageResponse(
+        intent="video_tracer_status",
+        executed=False,
+        needs_confirmation=status != "tracer_confirmed",
+        message=message,
+        copyable_reply=copyable_reply,
+        details={
+            "status": status,
+            "expected_count": expected,
+            "discovered_count": discovered,
+            "recommendation_allowed": bool(batch.get("recommendation_allowed")),
+            "formal_profile_published": bool(batch.get("formal_profile_published")),
+            "tracer_recommendation": batch.get("tracer_recommendation"),
+            "candidates": candidates,
+        },
+    )
+
+
+def _application_scenario_video_status_response(
+    paths: ProjectPaths,
+) -> NaturalLanguageResponse:
+    roots = _quartz_application_video_roots(paths)
+    if not roots:
+        return NaturalLanguageResponse(
+            intent="application_scenario_video_status",
+            executed=False,
+            needs_confirmation=True,
+            message="当前固定 raw 目录中找不到石英纤维隔热带应用场景素材文件夹。",
+            copyable_reply=(
+                "固定应用场景素材文件夹绝对路径是："
+                "<请填写包含各场景子文件夹的路径>"
+            ),
+            details={"status": "blocked_source_folder_missing", "scenarios": []},
+        )
+    if len(roots) > 1:
+        return NaturalLanguageResponse(
+            intent="application_scenario_video_status",
+            executed=False,
+            needs_confirmation=True,
+            message="发现多个石英纤维隔热带应用场景素材根目录，当前不能判断固定来源。",
+            copyable_reply="固定应用场景素材文件夹绝对路径是：<请确认一个路径>",
+            details={
+                "status": "blocked_source_folder_conflict",
+                "candidate_roots": [str(item) for item in roots],
+                "scenarios": [],
+            },
+        )
+    root = roots[0]
+    scopes = {
+        item["source_application_scenario"]: item
+        for item in read_application_scenario_scopes(
+            paths,
+            "product/quartz_fiber_tape",
+        )
+    }
+    scenarios = []
+    for folder in sorted(
+        (item for item in root.iterdir() if item.is_dir()),
+        key=lambda item: item.name,
+    ):
+        video_count = sum(
+            1
+            for item in folder.rglob("*")
+            if item.is_file() and item.suffix.lower() in VIDEO_SUFFIXES
+        )
+        if not video_count:
+            continue
+        scenarios.append(
+            {
+                "name": folder.name,
+                "video_count": video_count,
+                "scope_status": scopes.get(folder.name, {}).get(
+                    "status",
+                    "not_started",
+                ),
+            }
+        )
+    total = sum(item["video_count"] for item in scenarios)
+    return NaturalLanguageResponse(
+        intent="application_scenario_video_status",
+        executed=False,
+        needs_confirmation=True,
+        message=(
+            f"固定应用场景素材根目录中发现 {len(scenarios)} 个一级场景、"
+            f"共 {total} 条视频。处理时将按一级场景分别建立批次，"
+            "更深目录会作为有序来源上下文保留。"
+        ),
+        copyable_reply="确认，开始按应用场景子文件夹处理石英纤维隔热带视频。",
+        details={
+            "status": "awaiting_scenario_batch_confirmation",
+            "source_root": str(root),
+            "scenario_count": len(scenarios),
+            "video_count": total,
+            "scenarios": scenarios,
+        },
+    )
+
+
+def _process_application_scenario_video_batches_response(
+    paths: ProjectPaths,
+    *,
+    video_tool_runner: Callable[..., subprocess.CompletedProcess[str]] | None,
+    video_frame_decoder: Callable[[Path], bytes] | None,
+) -> NaturalLanguageResponse:
+    roots = _quartz_application_video_roots(paths)
+    if len(roots) != 1:
+        return _application_scenario_video_status_response(paths)
+    kwargs: dict[str, Any] = {}
+    if video_tool_runner is not None:
+        kwargs["runner"] = video_tool_runner
+    if video_frame_decoder is not None:
+        kwargs["frame_decoder"] = video_frame_decoder
+    try:
+        result = process_application_scenario_batches(
+            roots[0],
+            paths,
+            product_id="product/quartz_fiber_tape",
+            batch_id="application-scenarios",
+            **kwargs,
+        )
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        return NaturalLanguageResponse(
+            intent="application_scenario_video_batches_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                f"应用场景视频批次未完成：{exc}。"
+                "没有发布正式视频档案，其他已验证场景不受影响。"
+            ),
+            copyable_reply="查看石英纤维隔热带应用场景视频批次状态。",
+            details={
+                "status": "processing_failed",
+                "error": str(exc),
+                "formal_profile_published": False,
+            },
+        )
+    scenarios = [
+        {
+            "name": item.source_application_scenario,
+            "video_count": item.batch_result.completed_count
+            + item.batch_result.failed_count,
+            "valid_count": item.batch_result.completed_count,
+            "failed_count": item.batch_result.failed_count,
+            "scope_status": "pending_acceptance",
+            "acceptance_strategy": item.acceptance_sample.strategy,
+            "acceptance_asset_ids": list(
+                item.acceptance_sample.selected_asset_ids
+            ),
+            "manifest_path": str(item.batch_result.manifest_path),
+        }
+        for item in result.scenarios
+    ]
+    return NaturalLanguageResponse(
+        intent="application_scenario_video_batches_prepared",
+        executed=True,
+        needs_confirmation=True,
+        message=(
+            f"已按 {len(scenarios)} 个一级应用场景分别处理"
+            f" {sum(item['video_count'] for item in scenarios)} 条视频。"
+            "各场景已形成独立检查点和风险抽样清单，当前等待人工验收；"
+            "尚未发布正式视频档案。"
+        ),
+        copyable_reply="查看各应用场景的风险抽样验收清单。",
+        details={
+            "status": result.status,
+            "scenario_count": len(scenarios),
+            "video_count": sum(item["video_count"] for item in scenarios),
+            "formal_profile_published": False,
+            "scenarios": scenarios,
+        },
+    )
+
+
+def _application_scenario_acceptance_samples_response(
+    paths: ProjectPaths,
+) -> NaturalLanguageResponse:
+    scopes = [
+        item
+        for item in read_application_scenario_scopes(
+            paths,
+            "product/quartz_fiber_tape",
+        )
+        if item.get("status") == "pending_acceptance"
+    ]
+    scenarios = [
+        {
+            "name": item["source_application_scenario"],
+            "strategy": item.get("acceptance_sample", {}).get("strategy"),
+            "selected_asset_ids": list(
+                item.get("acceptance_sample", {}).get(
+                    "selected_asset_ids",
+                    [],
+                )
+            ),
+            "total_count": item.get("acceptance_sample", {}).get(
+                "total_count",
+                0,
+            ),
+        }
+        for item in scopes
+    ]
+    if not scenarios:
+        return NaturalLanguageResponse(
+            intent="application_scenario_acceptance_samples",
+            executed=False,
+            needs_confirmation=False,
+            message="当前没有等待人工验收的应用场景视频批次。",
+            details={"status": "no_pending_acceptance", "scenarios": []},
+        )
+    first = scenarios[0]
+    asset_text = "、".join(first["selected_asset_ids"])
+    return NaturalLanguageResponse(
+        intent="application_scenario_acceptance_samples",
+        executed=False,
+        needs_confirmation=True,
+        message=(
+            f"当前有 {len(scenarios)} 个应用场景等待风险抽样验收。"
+            f"请先检查“{first['name']}”：{asset_text}。"
+            "必须完整确认本场景的抽样 Asset ID，部分确认不会放行。"
+        ),
+        copyable_reply=(
+            f"确认应用场景“{first['name']}”验收 Asset ID：{asset_text}"
+        ),
+        details={
+            "status": "awaiting_scenario_acceptance",
+            "scenarios": scenarios,
+        },
+    )
+
+
+def _accept_application_scenario_scope_response(
+    paths: ProjectPaths,
+    scenario: str,
+    asset_ids: list[str],
+) -> NaturalLanguageResponse:
+    try:
+        accepted = accept_application_scenario_scope(
+            paths,
+            product_id="product/quartz_fiber_tape",
+            source_application_scenario=scenario,
+            accepted_asset_ids=asset_ids,
+        )
+    except (KeyError, ValueError) as exc:
+        return NaturalLanguageResponse(
+            intent="application_scenario_scope_acceptance_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=f"应用场景“{scenario}”验收未完成：{exc}",
+            copyable_reply="查看各应用场景的风险抽样验收清单。",
+            details={
+                "status": "acceptance_blocked",
+                "source_application_scenario": scenario,
+                "error": str(exc),
+                "formal_profile_published": False,
+            },
+        )
+    return NaturalLanguageResponse(
+        intent="application_scenario_scope_verified",
+        executed=True,
+        needs_confirmation=False,
+        message=(
+            f"应用场景“{scenario}”的完整风险抽样范围已验证。"
+            "本步骤只更新场景验收范围；尚未把未生成的视频档案误报为正式发布。"
+        ),
+        copyable_reply="查看各应用场景的风险抽样验收清单。",
+        details={
+            "status": accepted["status"],
+            "source_application_scenario": scenario,
+            "accepted_asset_ids": accepted["accepted_asset_ids"],
+            "formal_profile_published": False,
+        },
+    )
+
+
+def _quartz_application_video_roots(paths: ProjectPaths) -> list[Path]:
+    raw_root = paths.raw_dir.resolve()
+    known = [
+        raw_root / "01_产品" / "02_石英纤维隔热带" / "04_应用场景素材",
+        raw_root / "04_产品" / "01_石英纤维隔热带" / "04_应用场景素材",
+    ]
+    candidates = [path.resolve() for path in known if path.is_dir()]
+    if raw_root.is_dir():
+        for path in raw_root.rglob("04_应用场景素材"):
+            if not path.is_dir() or "石英纤维隔热带" not in path.parent.name:
+                continue
+            resolved = path.resolve()
+            if resolved not in candidates:
+                candidates.append(resolved)
+    populated = [
+        root
+        for root in candidates
+        if any(
+            item.is_file() and item.suffix.lower() in VIDEO_SUFFIXES
+            for item in root.rglob("*")
+        )
+    ]
+    return sorted(populated or candidates)
+
+
+def _is_application_scenario_video_status_request(utterance: str) -> bool:
+    return (
+        "石英纤维隔热带" in utterance
+        and "应用场景" in utterance
+        and "视频" in utterance
+        and any(token in utterance for token in ["状态", "进度", "批次"])
+        and "确认" not in utterance
+    )
+
+
+def _is_application_scenario_video_processing_confirmation(
+    utterance: str,
+) -> bool:
+    return (
+        "确认" in utterance
+        and "石英纤维隔热带" in utterance
+        and "应用场景" in utterance
+        and "视频" in utterance
+        and ("子文件夹" in utterance or "按应用场景" in utterance)
+        and ("开始" in utterance or "处理" in utterance)
+    )
+
+
+def _is_application_scenario_acceptance_sample_request(
+    utterance: str,
+) -> bool:
+    return (
+        "应用场景" in utterance
+        and "风险抽样" in utterance
+        and "验收清单" in utterance
+        and "确认" not in utterance
+    )
+
+
+def _application_scenario_acceptance_confirmation(
+    utterance: str,
+) -> tuple[str, list[str]] | None:
+    if not (
+        "确认应用场景" in utterance
+        and "验收" in utterance
+        and "Asset ID" in utterance
+    ):
+        return None
+    quoted = re.search(r"确认应用场景[“\"]([^”\"]+)[”\"]", utterance)
+    if quoted:
+        scenario = quoted.group(1).strip()
+    else:
+        plain = re.search(r"确认应用场景(.+?)验收", utterance)
+        scenario = plain.group(1).strip(" ：:，,") if plain else ""
+    asset_ids = re.findall(r"\bvideo_asset_[0-9a-f]{32}\b", utterance.lower())
+    if not scenario:
+        return None
+    return scenario, list(dict.fromkeys(asset_ids))
+
+
+def _process_video_tracer_candidates_response(
+    paths: ProjectPaths,
+    *,
+    video_tool_runner: Callable[..., subprocess.CompletedProcess[str]] | None,
+    video_frame_decoder: Callable[[Path], bytes] | None,
+) -> NaturalLanguageResponse:
+    folders = _quartz_product_video_folders(paths)
+    if len(folders) != 1:
+        return _start_video_tracer_inspection_response(paths)
+    folder = folders[0]
+    videos = [
+        path
+        for path in sorted(folder.rglob("*"))
+        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+    ] if folder.is_dir() else []
+    if len(videos) != 8:
+        return _start_video_tracer_inspection_response(paths)
+    kwargs: dict[str, Any] = {}
+    if video_tool_runner is not None:
+        kwargs["runner"] = video_tool_runner
+    if video_frame_decoder is not None:
+        kwargs["frame_decoder"] = video_frame_decoder
+    try:
+        result = inspect_video_candidate_batch(
+            folder,
+            paths,
+            product_id="product/quartz_fiber_tape",
+            expected_count=8,
+            **kwargs,
+        )
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        return NaturalLanguageResponse(
+            intent="video_tracer_inspection_failed",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                f"8 条产品视频候选处理未完成：{exc}。"
+                "没有发布正式视频知识卡，raw 文件未被修改。"
+            ),
+            copyable_reply="确认，重新检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+            details={"status": "processing_failed", "error": str(exc)},
+        )
+    return NaturalLanguageResponse(
+        intent="video_tracer_candidates_prepared",
+        executed=True,
+        needs_confirmation=False,
+        message=(
+            f"已为 {result.discovered_count} 条产品视频完成登记、媒体事实读取、"
+            "自适应抽帧和代表帧候选准备。下一步由 Codex 逐条完成语义复核；"
+            "当前没有发布正式知识卡。"
+        ),
+        copyable_reply="继续完成这 8 条产品视频的 Codex 语义复核。",
+        details={
+            "status": result.status,
+            "candidate_count": result.discovered_count,
+            "expected_count": result.expected_count,
+            "formal_profile_published": False,
+            "candidates": [
+                {
+                    "asset_id": item.asset.asset_id,
+                    "source_relative_path": item.asset.source_relative_path,
+                    "status": item.status,
+                    "duration_seconds": item.media_facts.duration_seconds,
+                    "representative_frame_count": len(item.representative_candidates),
+                }
+                for item in result.inspections
+            ],
+        },
+    )
+
+
+def _start_video_tracer_inspection_response(
+    paths: ProjectPaths,
+) -> NaturalLanguageResponse:
+    folders = _quartz_product_video_folders(paths)
+    expected_folder = (
+        paths.raw_dir
+        / "01_产品"
+        / "02_石英纤维隔热带"
+        / "03_产品视频"
+    )
+    if not folders:
+        return NaturalLanguageResponse(
+            intent="video_tracer_inspection_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                "当前配置的 fixed raw 目录中找不到石英纤维隔热带产品视频文件夹，"
+                f"预期位置为：{expected_folder}。未执行视频处理。"
+            ),
+            copyable_reply="固定 raw 文件夹绝对路径是：<请填写包含全部 8 条产品视频的路径>",
+            details={
+                "status": "blocked_source_folder_missing",
+                "expected_count": 8,
+                "discovered_count": 0,
+                "expected_folder": str(expected_folder),
+            },
+        )
+    if len(folders) > 1:
+        return NaturalLanguageResponse(
+            intent="video_tracer_inspection_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                "发现多个石英纤维隔热带产品视频文件夹，不能判断哪个是固定来源，"
+                "因此未执行视频处理。"
+            ),
+            copyable_reply="固定 raw 文件夹绝对路径是：<请从候选路径中确认一个>",
+            details={
+                "status": "blocked_source_folder_conflict",
+                "expected_count": 8,
+                "candidate_folders": [str(folder) for folder in folders],
+            },
+        )
+    folder = folders[0]
+    videos = [
+        path
+        for path in sorted(folder.rglob("*"))
+        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+    ]
+    if len(videos) != 8:
+        return NaturalLanguageResponse(
+            intent="video_tracer_inspection_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                f"固定产品视频文件夹当前发现 {len(videos)}/8 条视频，"
+                "数量不完整，因此在 ffprobe、抽帧和 Codex 复核前已停止。"
+            ),
+            copyable_reply="固定 raw 文件夹绝对路径是：<请填写包含全部 8 条产品视频的路径>",
+            details={
+                "status": "blocked_source_count_mismatch",
+                "expected_count": 8,
+                "discovered_count": len(videos),
+                "source_folder": str(folder),
+                "source_files": [path.relative_to(folder).as_posix() for path in videos],
+            },
+        )
+    return NaturalLanguageResponse(
+        intent="video_tracer_inspection_ready",
+        executed=False,
+        needs_confirmation=True,
+        message=(
+            "固定产品视频文件夹已确认包含 8 条视频。"
+            "下一步将读取媒体事实、生成分析帧并由 Codex 逐条复核；不会修改 raw，也不会发布知识卡。"
+        ),
+        copyable_reply="确认，开始处理这 8 条产品视频候选。",
+        details={
+            "status": "awaiting_batch_processing_confirmation",
+            "expected_count": 8,
+            "discovered_count": 8,
+            "source_folder": str(folder),
+            "source_files": [path.relative_to(folder).as_posix() for path in videos],
+        },
+    )
+
+
+def _quartz_product_video_folders(paths: ProjectPaths) -> list[Path]:
+    raw_root = paths.raw_dir.resolve()
+    known = [
+        raw_root / "01_产品" / "02_石英纤维隔热带" / "03_产品视频",
+        raw_root / "04_产品" / "01_石英纤维隔热带" / "03_视频",
+    ]
+    candidates = [path.resolve() for path in known if path.is_dir()]
+    if raw_root.is_dir():
+        for path in raw_root.rglob("*"):
+            if not path.is_dir() or path.name not in {"03_产品视频", "03_视频"}:
+                continue
+            if "石英纤维隔热带" not in path.parent.name:
+                continue
+            resolved = path.resolve()
+            if resolved not in candidates:
+                candidates.append(resolved)
+    populated = [
+        folder
+        for folder in candidates
+        if any(
+            item.is_file() and item.suffix.lower() in VIDEO_SUFFIXES
+            for item in folder.rglob("*")
+        )
+    ]
+    return sorted(populated or candidates)
+
+
+def _confirm_video_tracer_response(
+    paths: ProjectPaths,
+    confirmed_asset_id: str,
+) -> NaturalLanguageResponse:
+    batch_report_path = (
+        paths.generated_dir
+        / "cache"
+        / "video-tracer-inspection"
+        / "batches"
+        / "quartz_fiber_tape"
+        / "candidate-batch.json"
+    )
+    if not batch_report_path.is_file():
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message="当前没有可确认的产品视频候选批次，请先完成全部候选检查和推荐。",
+            copyable_reply="查看石英纤维隔热带产品视频候选状态。",
+        )
+    try:
+        batch = json.loads(batch_report_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message="产品视频候选批次回执损坏，不能确认 tracer。",
+            copyable_reply="确认，重新检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+        )
+    recommendation = batch.get("tracer_recommendation", {})
+    recommended_asset_id = str(recommendation.get("recommended_asset_id") or "")
+    if (
+        batch.get("status") != "awaiting_tracer_confirmation"
+        or not batch.get("recommendation_allowed")
+        or not recommended_asset_id
+    ):
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message="当前候选批次尚未完成全部 Codex 复核和 tracer 推荐，不能确认文件。",
+            copyable_reply="查看石英纤维隔热带产品视频候选状态。",
+        )
+    if confirmed_asset_id != recommended_asset_id:
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=(
+                f"你确认的 Asset ID 是 {confirmed_asset_id}，"
+                f"当前推荐的是 {recommended_asset_id}，两者不一致，未执行确认。"
+            ),
+            copyable_reply=f"确认 tracer Asset ID：{recommended_asset_id}",
+        )
+    candidate = next(
+        (
+            item
+            for item in batch.get("candidates", [])
+            if item.get("asset_id") == confirmed_asset_id
+        ),
+        None,
+    )
+    if candidate is None or not candidate.get("inspection_report"):
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message="推荐视频缺少可验证的候选检查回执，不能执行确认。",
+            copyable_reply="确认，重新检查固定 raw 文件夹中的石英纤维隔热带产品视频。",
+        )
+    try:
+        result = confirm_video_tracer_candidate(
+            Path(str(candidate["inspection_report"])),
+            paths,
+            confirmed_asset_id=confirmed_asset_id,
+        )
+    except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+        return NaturalLanguageResponse(
+            intent="video_tracer_confirmation_blocked",
+            executed=False,
+            needs_confirmation=True,
+            message=f"tracer 确认未完成：{exc}",
+            copyable_reply="查看石英纤维隔热带产品视频候选状态。",
+        )
+    return NaturalLanguageResponse(
+        intent="video_tracer_confirmed",
+        executed=True,
+        needs_confirmation=False,
+        message=(
+            f"已确认 tracer Asset ID：{result.asset_id}。"
+            "当前只完成候选文件确认，尚未发布正式视频知识卡。"
+        ),
+        copyable_reply="继续生成这个 tracer 的视频档案暂存稿。",
+        details={
+            "status": result.status,
+            "asset_id": result.asset_id,
+            "confirmed_at": result.confirmed_at,
+            "formal_profile_published": False,
+        },
+    )
+
+
+def _video_tracer_confirmation_asset_id(utterance: str) -> str | None:
+    lower = utterance.lower()
+    if "确认" not in utterance or "tracer" not in lower:
+        return None
+    match = re.search(r"\bvideo_asset_[0-9a-f]{32}\b", lower)
+    return match.group(0) if match else None
+
+
+def _is_video_tracer_inspection_request(utterance: str) -> bool:
+    lower = utterance.lower()
+    return (
+        "确认" in utterance
+        and "石英纤维隔热带" in utterance
+        and "视频" in utterance
+        and ("检查" in utterance or "处理" in utterance)
+        and ("raw" in lower or "固定" in utterance or "候选" in utterance)
+    )
+
+
+def _is_video_tracer_processing_confirmation(utterance: str) -> bool:
+    return (
+        "确认" in utterance
+        and "石英纤维隔热带" in utterance
+        and "视频" in utterance
+        and "候选" in utterance
+        and ("开始处理" in utterance or "处理这 8 条" in utterance or "处理这8条" in utterance)
+    )
+
+
+def _is_video_tracer_status_request(utterance: str) -> bool:
+    lower = utterance.lower()
+    mentions_product_video = (
+        "石英纤维隔热带" in utterance
+        and "视频" in utterance
+    )
+    mentions_tracer = "tracer" in lower or "候选" in utterance or "抽帧" in utterance
+    asks_status = any(token in utterance for token in ["状态", "进度", "怎么样", "到哪"])
+    return mentions_product_video and mentions_tracer and asks_status
 
 
 def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:

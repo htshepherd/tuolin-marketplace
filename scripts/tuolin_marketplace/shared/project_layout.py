@@ -18,6 +18,7 @@ KNOWLEDGE_DIRS = [
     "内容素材",
     "证据",
     "复核项",
+    "视频档案",
 ]
 
 GENERATED_DIRS = [
@@ -213,6 +214,7 @@ def inspect_project(paths: ProjectPaths) -> dict[str, Any]:
                     "content_asset",
                     "evidence",
                     "review_item",
+                    "video_profile",
                 ]
             },
         },

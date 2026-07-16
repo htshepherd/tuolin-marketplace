@@ -356,7 +356,7 @@ def _processing_counts(paths: ProjectPaths, primary_files: list[Path]) -> dict[s
     pdf_files = [path for path in primary_files if path.suffix.lower() in PDF_SUFFIXES]
     video_files = [path for path in primary_files if path.suffix.lower() in VIDEO_SUFFIXES]
     pdf_processed = sum(1 for path in pdf_files if _pdf_text_available(paths, path))
-    video_processed = sum(1 for path in video_files if _video_frames_available(paths, path))
+    video_processed = sum(1 for path in video_files if _valid_video_profile_available(paths, path))
     pdf_pending = len(pdf_files) - pdf_processed
     video_pending = len(video_files) - video_processed
     return {
@@ -451,13 +451,57 @@ def _pdf_text_available(paths: ProjectPaths, pdf_path: Path) -> bool:
     return cache_dir.exists() and any(path.is_file() and path.suffix.lower() == ".md" for path in cache_dir.rglob("*"))
 
 
-def _video_frames_available(paths: ProjectPaths, video_path: Path) -> bool:
+def _valid_video_profile_available(paths: ProjectPaths, video_path: Path) -> bool:
     try:
-        relative = video_path.resolve().relative_to(paths.raw_dir).with_suffix("")
+        relative = video_path.resolve().relative_to(paths.raw_dir).as_posix()
     except ValueError:
         return False
-    cache_dir = paths.generated_dir / "cache" / "video-frames" / relative
-    return cache_dir.exists() and any(path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"} for path in cache_dir.rglob("*"))
+    registry_path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
+    if not registry_path.is_file():
+        return False
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    source_fingerprint = _file_sha256(video_path)
+    asset = next(
+        (
+            item
+            for item in registry.get("assets", [])
+            if item.get("source_relative_path") == relative
+            and item.get("source_fingerprint") == source_fingerprint
+        ),
+        None,
+    )
+    if asset is None:
+        return False
+    product_id = str(asset.get("product_id", ""))
+    if "/" not in product_id:
+        return False
+    product_slug = product_id.split("/", 1)[1]
+    asset_id = str(asset.get("asset_id", ""))
+    profile_dir = paths.knowledge_dir / "视频档案" / product_slug
+    markdown_path = profile_dir / f"{asset_id}.md"
+    structured_path = profile_dir / f"{asset_id}.json"
+    if not markdown_path.is_file() or not structured_path.is_file():
+        return False
+    try:
+        profile = json.loads(structured_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return (
+        profile.get("video_asset_id") == asset_id
+        and profile.get("source_revision") == source_fingerprint
+        and profile.get("processing_state") == "valid"
+    )
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _count_json_files(directory: Path) -> int:
