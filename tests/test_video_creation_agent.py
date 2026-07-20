@@ -59,6 +59,7 @@ from scripts.tuolin_marketplace.video_creation_agent import (
     shorten_video_plan_duration,
     validate_video_creation_project,
 )
+from scripts.tuolin_marketplace.video_creation.agent import _parse_dreamina_json_output
 
 
 def _material_assessments(run_dir: Path, *, usable_limit: int | None = None) -> list[dict[str, object]]:
@@ -1603,6 +1604,138 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertEqual(state["files"]["dreamina_submission_json"], str(submission_json))
             self.assertEqual(state["files"]["dreamina_manual_submit_ps1"], str(manual_ps1))
 
+    def test_image2video_manual_submission_prepares_verified_vertical_first_frames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_generation_confirmed_run(Path(tmp))
+            jobs = json.loads(
+                (run_dir / "dreamina_generation" / "dreamina_jobs.json").read_text(encoding="utf-8")
+            )
+            image_job = next(job for job in jobs["jobs"] if job["job_type"] == "image2video")
+
+            preparation = image_job["first_frame_preparation"]
+            self.assertEqual(preparation["status"], "planned")
+            self.assertEqual(preparation["expected_width"], 1080)
+            self.assertEqual(preparation["expected_height"], 1920)
+            self.assertEqual(preparation["aspect_ratio"], "9:16")
+            self.assertTrue(preparation["preserve_source_image"])
+            self.assertTrue(preparation["output_path"].endswith(f"shot_{image_job['shot_id']}_9x16.png"))
+
+            submit_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 40, 0))
+
+            manual_ps1 = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
+            ps1_text = manual_ps1.read_text(encoding="utf-8-sig")
+            self.assertIn("function Prepare-DreaminaFirstFrame", ps1_text)
+            self.assertIn("1080", ps1_text)
+            self.assertIn("1920", ps1_text)
+            self.assertIn("force_original_aspect_ratio=decrease", ps1_text)
+            self.assertIn("System.Drawing.Image", ps1_text)
+            self.assertIn("All pending 9:16 first frames passed preflight", ps1_text)
+            self.assertIn(preparation["source_path"], ps1_text)
+            self.assertIn(preparation["output_path"], ps1_text)
+            self.assertIn("Prepare-DreaminaFirstFrame", ps1_text)
+
+            command = next(
+                item["command"]
+                for item in json.loads(
+                    (run_dir / "dreamina_generation" / "dreamina_submission.json").read_text(encoding="utf-8")
+                )["submissions"]
+                if item["shot_id"] == image_job["shot_id"]
+            )
+            image_index = command.index("--image")
+            self.assertEqual(command[image_index + 1], preparation["output_path"])
+
+    def test_dreamina_json_parser_uses_final_valid_object_after_noisy_cli_log(self) -> None:
+        noisy_output = "\n".join(
+            [
+                'UPDATE tasks SET benefit_detail = {"credit_count":264}, gen_status="querying";',
+                '{',
+                '  "submit_id": "9a65e180-9599-45c7-928c-3b6097461015",',
+                '  "gen_status": "success",',
+                '  "credit_count": 264',
+                '}',
+            ]
+        )
+
+        parsed = _parse_dreamina_json_output(noisy_output)
+
+        self.assertEqual(parsed["submit_id"], "9a65e180-9599-45c7-928c-3b6097461015")
+        self.assertEqual(parsed["gen_status"], "success")
+
+    def test_manual_submission_marks_unparsed_provider_response_as_uncertain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_generation_confirmed_run(Path(tmp))
+
+            submit_dreamina_jobs(run_dir, now=datetime(2026, 6, 25, 15, 40, 0))
+
+            ps1_text = (
+                run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
+            ).read_text(encoding="utf-8-sig")
+            self.assertIn('status = "submitting"', ps1_text)
+            self.assertIn('status = "submission_uncertain"', ps1_text)
+            self.assertIn("raw_response", ps1_text)
+            self.assertIn("Refusing to resubmit", ps1_text)
+
+    def test_real_submission_blocks_before_dreamina_when_vertical_first_frame_preparation_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_generation_confirmed_run(Path(tmp))
+            calls = []
+
+            def failing_ffmpeg_runner(command, capture_output, text, check):
+                calls.append(command)
+                self.assertEqual(command[0], "ffmpeg")
+                return subprocess.CompletedProcess(command, 1, stdout="", stderr="invalid source image")
+
+            result = submit_dreamina_jobs(
+                run_dir,
+                execute=True,
+                runner=failing_ffmpeg_runner,
+                now=datetime(2026, 6, 25, 15, 40, 0),
+            )
+
+            self.assertEqual(result.status, "dreamina_submission_failed")
+            self.assertTrue(calls)
+            self.assertTrue(all(call[0] == "ffmpeg" for call in calls))
+            submission = json.loads(
+                (run_dir / "dreamina_generation" / "dreamina_submission.json").read_text(encoding="utf-8")
+            )
+            self.assertTrue(all(item["status"] == "submission_blocked" for item in submission["submissions"]))
+            self.assertTrue(all("9:16 首帧" in item["error"] for item in submission["submissions"]))
+
+    def test_real_submission_preflights_every_vertical_frame_before_any_dreamina_call(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_generation_confirmed_run(Path(tmp))
+            calls = []
+            ffmpeg_count = 0
+
+            def partially_failing_preflight(command, capture_output, text, check):
+                nonlocal ffmpeg_count
+                calls.append(command)
+                if command[0] != "ffmpeg":
+                    self.fail("Dreamina must not be called until every first frame passes preflight")
+                ffmpeg_count += 1
+                if ffmpeg_count == 2:
+                    return subprocess.CompletedProcess(command, 1, stdout="", stderr="second frame failed")
+                output_path = Path(command[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(
+                    b"\x89PNG\r\n\x1a\n"
+                    + b"\x00\x00\x00\x0dIHDR"
+                    + (1080).to_bytes(4, "big")
+                    + (1920).to_bytes(4, "big")
+                )
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            result = submit_dreamina_jobs(
+                run_dir,
+                execute=True,
+                runner=partially_failing_preflight,
+                now=datetime(2026, 6, 25, 15, 40, 0),
+            )
+
+            self.assertEqual(result.status, "dreamina_submission_failed")
+            self.assertGreater(ffmpeg_count, 2)
+            self.assertTrue(all(call[0] == "ffmpeg" for call in calls))
+
     def test_dreamina_submission_uses_content_asset_local_path_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = _create_dreamina_jobs_ready_run(Path(tmp))
@@ -1612,6 +1745,10 @@ class VideoCreationAgentTests(unittest.TestCase):
                 selected = job["selected_material"]
                 selected.pop("files", None)
                 selected["local_path"] = "raw/01_产品/02_石英纤维隔热带/02_产品图片/local-product.png"
+                if job.get("first_frame_preparation"):
+                    job["first_frame_preparation"]["source_path"] = str(
+                        (Path(tmp) / "raw/01_产品/02_石英纤维隔热带/02_产品图片/local-product.png").resolve()
+                    )
                 job["validation"] = {"status": "ok", "messages": ["ok"]}
             jobs_path.write_text(json.dumps(jobs, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1765,6 +1902,54 @@ class VideoCreationAgentTests(unittest.TestCase):
             results = json.loads((run_dir / "dreamina_generation" / "dreamina_results.json").read_text(encoding="utf-8"))
             self.assertEqual(results["mode"], "execute")
             self.assertTrue(all(item["provider_task_id"].startswith("real_submit_") for item in results["results"]))
+
+    def test_query_rejects_successful_provider_result_with_wrong_aspect_ratio(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = _create_dreamina_submitted_run(Path(tmp))
+            submission = json.loads(
+                (run_dir / "dreamina_generation" / "dreamina_submission.json").read_text(encoding="utf-8")
+            )
+            manual = deepcopy(submission)
+            manual["mode"] = "manual_execute"
+            manual["submissions"] = manual["submissions"][:1]
+            manual["submissions"][0]["status"] = "submitted"
+            manual["submissions"][0]["provider_task_id"] = "wrong_ratio_submit"
+            (run_dir / "dreamina_generation" / "manual_submission.json").write_text(
+                json.dumps(manual, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            def wrong_ratio_runner(command, capture_output, text, check):
+                payload = {
+                    "submit_id": "wrong_ratio_submit",
+                    "gen_status": "success",
+                    "result_json": {
+                        "videos": [
+                            {
+                                "path": str(run_dir / "dreamina_generation" / "generated_shots" / "shot_01.mp4"),
+                                "width": 1664,
+                                "height": 1248,
+                            }
+                        ]
+                    },
+                }
+                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+
+            result = query_dreamina_results(
+                run_dir,
+                runner=wrong_ratio_runner,
+                now=datetime(2026, 6, 25, 15, 45, 0),
+            )
+
+            self.assertEqual(result.status, "dreamina_results_pending")
+            results = json.loads(
+                (run_dir / "dreamina_generation" / "dreamina_results.json").read_text(encoding="utf-8")
+            )
+            item = results["results"][0]
+            self.assertEqual(item["status"], "result_invalid")
+            self.assertEqual(item["expected_aspect_ratio"], "9:16")
+            self.assertEqual((item["provider_width"], item["provider_height"]), (1664, 1248))
+            self.assertIn("镜头不能确认或进入合并", item["error"])
 
     def test_operator_completion_triggers_one_shot_download_and_validation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

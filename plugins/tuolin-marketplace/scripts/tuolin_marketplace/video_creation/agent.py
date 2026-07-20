@@ -38,6 +38,12 @@ DEFAULT_VIDEO_DURATION_SECONDS = 60
 DEFAULT_DREAMINA_MODEL = "seedance2.0_vip"
 DEFAULT_RESOLUTION = "1080P"
 DEFAULT_ASPECT_RATIO = "9:16"
+DREAMINA_VERTICAL_FIRST_FRAME_WIDTH = 1080
+DREAMINA_VERTICAL_FIRST_FRAME_HEIGHT = 1920
+DREAMINA_VERTICAL_FIRST_FRAME_FILTER = (
+    "scale=1080:1920:force_original_aspect_ratio=decrease,"
+    "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0xF2F2F2,setsar=1"
+)
 DEFAULT_DREAMINA_CAPABILITY_PROFILE = {
     "model": DEFAULT_DREAMINA_MODEL,
     "resolution": DEFAULT_RESOLUTION,
@@ -1257,7 +1263,15 @@ def submit_dreamina_jobs(
         raise ValueError("存在 blocked 即梦任务，不能提交即梦生成。")
 
     command = dreamina_command or _state_adapter_command(state, "dreamina_command", "dreamina")
-    submission = _submit_dreamina_jobs_payload(jobs_payload, execute, command, runner, now or datetime.now())
+    ffmpeg_command = _state_adapter_command(state, "ffmpeg_command", "ffmpeg")
+    submission = _submit_dreamina_jobs_payload(
+        jobs_payload,
+        execute,
+        command,
+        ffmpeg_command,
+        runner,
+        now or datetime.now(),
+    )
     submission_json_path = run_dir / "dreamina_generation" / "dreamina_submission.json"
     submission_md_path = run_dir / "dreamina_generation" / "dreamina_submission.md"
     manual_script_path = run_dir / "dreamina_generation" / "submit_real_dreamina_jobs.ps1"
@@ -1267,7 +1281,11 @@ def submit_dreamina_jobs(
     submission_md_path.write_text(_render_dreamina_submission(submission), encoding="utf-8")
 
     timestamp = _timestamp(now)
-    failed = [item for item in submission["submissions"] if item["status"] == "submission_failed"]
+    failed = [
+        item
+        for item in submission["submissions"]
+        if item["status"] in {"submission_failed", "submission_blocked", "submission_uncertain"}
+    ]
     if failed:
         state["status"] = "dreamina_submission_failed"
         state["phase"] = "ready_for_dreamina_submission"
@@ -1822,7 +1840,15 @@ def submit_shot_retry(
         },
     }
     command = dreamina_command or _state_adapter_command(state, "dreamina_command", "dreamina")
-    submission = _submit_dreamina_jobs_payload(jobs_payload, execute, command, runner, now or datetime.now())
+    ffmpeg_command = _state_adapter_command(state, "ffmpeg_command", "ffmpeg")
+    submission = _submit_dreamina_jobs_payload(
+        jobs_payload,
+        execute,
+        command,
+        ffmpeg_command,
+        runner,
+        now or datetime.now(),
+    )
 
     retry_dir = run_dir / "dreamina_generation" / "retry_submissions"
     retry_dir.mkdir(parents=True, exist_ok=True)
@@ -1831,7 +1857,11 @@ def submit_shot_retry(
     submission_json_path.write_text(json.dumps(submission, ensure_ascii=False, indent=2), encoding="utf-8")
     submission_md_path.write_text(_render_dreamina_submission(submission), encoding="utf-8")
 
-    failed = [item for item in submission["submissions"] if item["status"] == "submission_failed"]
+    failed = [
+        item
+        for item in submission["submissions"]
+        if item["status"] in {"submission_failed", "submission_blocked", "submission_uncertain"}
+    ]
     state["status"] = "shot_retry_submission_failed" if failed else "shot_retry_submitted"
     state["phase"] = "ready_for_shot_retry_submission" if failed else "awaiting_shot_retry_results"
     state["current_pending_confirmation"] = f"修复重做镜头 {shot_id} 提交失败" if failed else f"查询重做镜头 {shot_id}"
@@ -4902,6 +4932,8 @@ def _build_dreamina_jobs_payload(
                 "blocked_reason": blocked_reason,
                 "validation": validation,
             }
+        if job_type == "image2video":
+            job["first_frame_preparation"] = _dreamina_first_frame_preparation(job, state)
         jobs.append(job)
     _apply_dreamina_material_diversity_gate(jobs)
     estimated_total = sum(int(job["estimated_credits"]) for job in jobs)
@@ -4955,6 +4987,7 @@ def _render_dreamina_jobs(jobs_payload: dict[str, Any]) -> str:
         lines.append("- 工作流模式：生成基础视频镜头；SRT 作为锁定的后续旁白/字幕合同保留")
     lines.extend(["", "## 任务列表", ""])
     for job in jobs_payload["jobs"]:
+        first_frame = job.get("first_frame_preparation") or {}
         lines.extend(
             [
                 f"### 镜头 {job['shot_id']}｜{job['job_type']}",
@@ -4976,6 +5009,14 @@ def _render_dreamina_jobs(jobs_payload: dict[str, Any]) -> str:
                 f"- 任务验证：{job['validation']['status']}｜{'; '.join(job['validation']['messages'])}",
             ]
         )
+        if first_frame:
+            lines.extend(
+                [
+                    f"- 竖屏首帧准备：{first_frame.get('status')}｜{first_frame.get('aspect_ratio')}｜{first_frame.get('method')}",
+                    f"- 竖屏首帧输出：{first_frame.get('output_path')}",
+                    "- 原始素材策略：保留原图不变；真实提交前在中性画布完整适配并校验 1080×1920",
+                ]
+            )
         if job["blocked_reason"]:
             lines.append(f"- 阻塞原因：{job['blocked_reason']}")
         lines.extend(["", "Prompt:", "", job["prompt"] or "无", ""])
@@ -5023,11 +5064,20 @@ def _submit_dreamina_jobs_payload(
     jobs_payload: dict[str, Any],
     execute: bool,
     dreamina_command: str,
+    ffmpeg_command: str,
     runner: Runner,
     now: datetime,
 ) -> dict[str, Any]:
     generated_dir = Path(jobs_payload["run_dir"]) / "dreamina_generation" / "generated_shots"
     generated_dir.mkdir(parents=True, exist_ok=True)
+    preparation_errors: dict[str, str] = {}
+    if execute:
+        for job in jobs_payload.get("jobs", []):
+            if job.get("job_type") != "image2video":
+                continue
+            prepared, preparation_error = _prepare_dreamina_first_frame(job, ffmpeg_command, runner)
+            if not prepared:
+                preparation_errors[str(job["shot_id"])] = str(preparation_error or "9:16 首帧准备失败。")
     submissions = []
     for job in jobs_payload.get("jobs", []):
         output_path = generated_dir / f"shot_{job['shot_id']}.mp4"
@@ -5041,8 +5091,27 @@ def _submit_dreamina_jobs_payload(
                     "status": "reused",
                     "provider_task_id": None,
                     "command": command,
+                    "first_frame_preparation": job.get("first_frame_preparation"),
                     "expected_output_path": str(output_path),
                     "error": None,
+                }
+            )
+            continue
+        if preparation_errors:
+            error = preparation_errors.get(str(job["shot_id"]))
+            if not error:
+                error = "同批次存在未通过校验的 9:16 首帧；为避免部分付费提交，本镜头也已阻止。"
+            submissions.append(
+                {
+                    "job_id": job["job_id"],
+                    "shot_id": job["shot_id"],
+                    "job_type": job["job_type"],
+                    "status": "submission_blocked",
+                    "provider_task_id": None,
+                    "command": command,
+                    "first_frame_preparation": job.get("first_frame_preparation"),
+                    "expected_output_path": str(output_path),
+                    "error": error,
                 }
             )
             continue
@@ -5055,6 +5124,7 @@ def _submit_dreamina_jobs_payload(
                     "status": "submission_blocked",
                     "provider_task_id": None,
                     "command": command,
+                    "first_frame_preparation": job.get("first_frame_preparation"),
                     "expected_output_path": str(output_path),
                     "error": "缺少可执行即梦命令；请检查素材文件路径和任务验证结果。",
                 }
@@ -5069,6 +5139,7 @@ def _submit_dreamina_jobs_payload(
                     "status": "dry_run_submitted",
                     "provider_task_id": f"dryrun_{job['job_id']}",
                     "command": command,
+                    "first_frame_preparation": job.get("first_frame_preparation"),
                     "expected_output_path": str(output_path),
                     "error": None,
                 }
@@ -5077,26 +5148,39 @@ def _submit_dreamina_jobs_payload(
         completed = runner(command, capture_output=True, text=True, check=False)
         parsed = _parse_dreamina_json_output(completed.stdout)
         provider_task_id = parsed.get("submit_id") or parsed.get("task_id") or parsed.get("id") or parsed.get("job_id")
+        status = "submitted" if completed.returncode == 0 and provider_task_id else "submission_failed"
+        error = None if status == "submitted" else _completed_error(completed)
+        if completed.returncode == 0 and not provider_task_id:
+            status = "submission_uncertain"
+            error = "Dreamina command returned success but no task ID could be parsed; refusing automatic resubmission."
         submissions.append(
             {
                 "job_id": job["job_id"],
                 "shot_id": job["shot_id"],
                 "job_type": job["job_type"],
-                "status": "submitted" if completed.returncode == 0 else "submission_failed",
+                "status": status,
                 "provider_task_id": provider_task_id,
                 "command": command,
+                "first_frame_preparation": job.get("first_frame_preparation"),
                 "expected_output_path": str(output_path),
                 "stdout": completed.stdout,
                 "stderr": completed.stderr,
-                "error": None if completed.returncode == 0 else _completed_error(completed),
+                "error": error,
             }
         )
+    expected_aspect_by_shot = {
+        str(job.get("shot_id") or ""): str(job.get("aspect_ratio") or "")
+        for job in jobs_payload.get("jobs", [])
+    }
+    for item in submissions:
+        item["expected_aspect_ratio"] = expected_aspect_by_shot.get(str(item.get("shot_id") or ""), "")
     return {
         "schema_version": "dreamina-submission-v1",
         "submitted_at": now.isoformat(),
         "mode": "execute" if execute else "dry_run",
-        "status": "submitted" if all(item["status"] not in {"submission_failed", "submission_blocked"} for item in submissions) else "partial_failure",
+        "status": "submitted" if all(item["status"] not in {"submission_failed", "submission_blocked", "submission_uncertain"} for item in submissions) else "partial_failure",
         "run_dir": jobs_payload["run_dir"],
+        "ffmpeg_command": ffmpeg_command,
         "estimated_total_credits": jobs_payload["estimated_total_credits"],
         "submissions": submissions,
         "manual_execution": {
@@ -5164,18 +5248,37 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
         f"$manualSubmissionPath = {_ps_quote(str(output_json))}",
         f"$runDir = {_ps_quote(submission['run_dir'])}",
         f"$estimatedTotalCredits = {int(submission.get('estimated_total_credits') or 0)}",
+        f"$ffmpegCommand = {_ps_quote(str(submission.get('ffmpeg_command') or 'ffmpeg'))}",
+        "$rawResponseDir = Join-Path $runDir \"dreamina_generation\\raw_responses\"",
         "",
         "function Convert-DreaminaOutputJson {",
         "  param([string[]]$OutputLines)",
         "  $raw = ($OutputLines | Out-String).Trim()",
-        "  $start = $raw.IndexOf(\"{\")",
-        "  $end = $raw.LastIndexOf(\"}\")",
-        "  if ($start -lt 0 -or $end -lt $start) {",
-        "    Write-Host \"Dreamina raw output:\"",
-        "    Write-Host $raw",
-        "    throw \"Dreamina did not return parseable JSON.\"",
+        "  for ($index = $OutputLines.Count - 1; $index -ge 0; $index--) {",
+        "    if (-not $OutputLines[$index].TrimStart().StartsWith(\"{\")) { continue }",
+        "    for ($end = $OutputLines.Count - 1; $end -ge $index; $end--) {",
+        "      $candidate = (($OutputLines[$index..$end] | Out-String).Trim())",
+        "      try { return $candidate | ConvertFrom-Json -ErrorAction Stop } catch { continue }",
+        "    }",
         "  }",
-        "  return $raw.Substring($start, $end - $start + 1) | ConvertFrom-Json",
+        "  Write-Host \"Dreamina raw output:\"",
+        "  Write-Host $raw",
+        "  throw \"Dreamina did not return parseable JSON.\"",
+        "}",
+        "",
+        "function Prepare-DreaminaFirstFrame {",
+        "  param([string]$SourcePath, [string]$TargetPath)",
+        "  if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) { throw \"Missing first-frame source: $SourcePath\" }",
+        "  $targetDir = Split-Path -Parent $TargetPath",
+        "  New-Item -ItemType Directory -Force -Path $targetDir | Out-Null",
+        "  & $ffmpegCommand -y -i $SourcePath -vf \"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0xF2F2F2,setsar=1\" -frames:v 1 $TargetPath",
+        "  if ($LASTEXITCODE -ne 0) { throw \"ffmpeg failed while preparing the 9:16 first frame.\" }",
+        "  if (-not (Test-Path -LiteralPath $TargetPath -PathType Leaf)) { throw \"Prepared first frame was not created: $TargetPath\" }",
+        "  Add-Type -AssemblyName System.Drawing",
+        "  $image = [System.Drawing.Image]::FromFile($TargetPath)",
+        "  try {",
+        "    if ($image.Width -ne 1080 -or $image.Height -ne 1920) { throw \"Prepared first frame must be 1080x1920; actual size is $($image.Width)x$($image.Height).\" }",
+        "  } finally { $image.Dispose() }",
         "}",
         "",
         "function New-ManualEnvelope {",
@@ -5216,6 +5319,32 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
         "$script:manual = New-ManualEnvelope $script:submissions",
         "",
     ]
+    for item in submission.get("submissions", []):
+        if item.get("job_type") != "image2video" or item.get("status") in {"reused", "submission_blocked"}:
+            continue
+        shot_id = item["shot_id"]
+        preparation = item.get("first_frame_preparation") or {}
+        lines.extend(
+            [
+                f"$preflightUncertain = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -in @(\"submitting\", \"submission_uncertain\") }} | Select-Object -First 1)",
+                f"if ($preflightUncertain) {{ throw \"Refusing to resubmit shot {shot_id}: reconcile its uncertain task ID first.\" }}",
+                f"$preflightSubmitted = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -eq \"submitted\" -and $_.provider_task_id }} | Select-Object -First 1)",
+                "if (-not $preflightSubmitted) {",
+                f"  Write-Host \"Preparing and verifying 9:16 first frame for shot {shot_id}\"",
+                "  Prepare-DreaminaFirstFrame -SourcePath "
+                + _ps_quote(str(preparation.get("source_path") or ""))
+                + " -TargetPath "
+                + _ps_quote(str(preparation.get("output_path") or "")),
+                "}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "Write-Host \"All pending 9:16 first frames passed preflight; provider submission may now begin.\"",
+            "",
+        ]
+    )
     for item in submission.get("submissions", []):
         if item.get("status") == "reused":
             shot_id = item["shot_id"]
@@ -5274,20 +5403,45 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
         command_line = " ".join(_ps_quote(str(part)) for part in command)
         shot_id = item["shot_id"]
         job_type = item["job_type"]
+        raw_response_name = f"shot_{shot_id}_raw_response.txt"
         lines.extend(
             [
+                f"$uncertainItem = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -in @(\"submitting\", \"submission_uncertain\") }} | Select-Object -First 1)",
+                "if ($uncertainItem) {",
+                f"throw \"Refusing to resubmit shot {shot_id}: a previous provider submission has an uncertain local outcome. Reconcile its raw response and task ID first.\"",
+                "}",
                 f"$existingItem = @($script:submissions | Where-Object {{ $_.shot_id -eq {_ps_quote(shot_id)} -and $_.status -eq \"submitted\" -and $_.provider_task_id }} | Select-Object -First 1)",
                 "if ($existingItem) {",
                 f"Write-Host \"Skipping shot {shot_id} ({job_type}): already submitted as $($existingItem.provider_task_id)\"",
                 "} else {",
                 f"Write-Host \"Submitting shot {shot_id} ({job_type})\"",
-                f"$stdout = & {command_line}",
-                "$parsed = Convert-DreaminaOutputJson $stdout",
-                "$submitId = $parsed.submit_id",
-                "if (-not $submitId) { $submitId = $parsed.task_id }",
-                "if (-not $submitId) { $submitId = $parsed.id }",
-                "if (-not $submitId) { $submitId = $parsed.job_id }",
-                "if (-not $submitId) { Write-Host \"Dreamina raw output:\"; Write-Host ($stdout | Out-String); throw \"Dreamina did not return submit_id.\" }",
+                "$script:submissions = @($script:submissions | Where-Object { $_.shot_id -ne " + _ps_quote(item["shot_id"]) + " })",
+                "$script:submissions += [ordered]@{",
+                f"  job_id = {_ps_quote(item['job_id'])}",
+                f"  shot_id = {_ps_quote(item['shot_id'])}",
+                f"  job_type = {_ps_quote(item['job_type'])}",
+                "  status = \"submitting\"",
+                "  provider_task_id = \"\"",
+                f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
+                "  stdout = \"\"",
+                "  stderr = \"\"",
+                "  error = $null",
+                "}",
+                "Save-ManualSubmission",
+                "$stdout = @()",
+                f"$rawResponsePath = Join-Path $rawResponseDir {_ps_quote(raw_response_name)}",
+                "try {",
+                "  New-Item -ItemType Directory -Force -Path $rawResponseDir | Out-Null",
+                f"  $stdout = & {command_line}",
+                "  $rawText = ($stdout | Out-String)",
+                "  $rawText | Set-Content -Encoding UTF8 $rawResponsePath",
+                "  if ($LASTEXITCODE -ne 0) { throw \"Dreamina command failed with exit code $LASTEXITCODE.\" }",
+                "  $parsed = Convert-DreaminaOutputJson $stdout",
+                "  $submitId = $parsed.submit_id",
+                "  if (-not $submitId) { $submitId = $parsed.task_id }",
+                "  if (-not $submitId) { $submitId = $parsed.id }",
+                "  if (-not $submitId) { $submitId = $parsed.job_id }",
+                "  if (-not $submitId) { throw \"Dreamina did not return submit_id.\" }",
                 "$script:submissions = @($script:submissions | Where-Object { $_.shot_id -ne " + _ps_quote(item["shot_id"]) + " })",
                 "$script:submissions += [ordered]@{",
                 f"  job_id = {_ps_quote(item['job_id'])}",
@@ -5296,11 +5450,31 @@ def _render_manual_dreamina_submit_ps1(submission: dict[str, Any]) -> str:
                 "  status = \"submitted\"",
                 "  provider_task_id = $submitId",
                 f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
-                "  stdout = ($stdout | Out-String)",
+                "  stdout = $rawText",
                 "  stderr = \"\"",
                 "  error = $null",
+                "  raw_response_path = $rawResponsePath",
                 "}",
                 "Save-ManualSubmission",
+                "} catch {",
+                "  $rawText = ($stdout | Out-String)",
+                "  if (-not (Test-Path -LiteralPath $rawResponsePath)) { $rawText | Set-Content -Encoding UTF8 $rawResponsePath }",
+                "$script:submissions = @($script:submissions | Where-Object { $_.shot_id -ne " + _ps_quote(item["shot_id"]) + " })",
+                "$script:submissions += [ordered]@{",
+                f"  job_id = {_ps_quote(item['job_id'])}",
+                f"  shot_id = {_ps_quote(item['shot_id'])}",
+                f"  job_type = {_ps_quote(item['job_type'])}",
+                "  status = \"submission_uncertain\"",
+                "  provider_task_id = \"\"",
+                f"  expected_output_path = {_ps_quote(item['expected_output_path'])}",
+                "  stdout = $rawText",
+                "  stderr = \"\"",
+                "  error = $_.Exception.Message",
+                "  raw_response_path = $rawResponsePath",
+                "}",
+                "Save-ManualSubmission",
+                f"throw \"Dreamina submission outcome for shot {shot_id} is uncertain. Refusing to resubmit; inspect $rawResponsePath and reconcile the task ID.\"",
+                "}",
                 "}",
                 "",
             ]
@@ -5423,6 +5597,13 @@ def _query_dreamina_results_payload(
             status = "query_failed"
         if completed.returncode != 0:
             status = "query_failed"
+        provider_dimensions = _dreamina_result_dimensions(parsed)
+        aspect_error = _dreamina_result_aspect_error(
+            str(item.get("expected_aspect_ratio") or ""),
+            provider_dimensions,
+        )
+        if status == "succeeded" and aspect_error:
+            status = "result_invalid"
         output_path = _dreamina_result_output_path(parsed) or item["expected_output_path"]
         results.append(
             {
@@ -5431,11 +5612,14 @@ def _query_dreamina_results_payload(
                 "job_type": item["job_type"],
                 "status": status,
                 "provider_task_id": item.get("provider_task_id"),
+                "expected_aspect_ratio": item.get("expected_aspect_ratio"),
+                "provider_width": provider_dimensions[0] if provider_dimensions else None,
+                "provider_height": provider_dimensions[1] if provider_dimensions else None,
                 "output_path": output_path,
                 "command": command,
                 "stdout": completed.stdout,
                 "stderr": completed.stderr,
-                "error": None if completed.returncode == 0 else _completed_error(completed),
+                "error": aspect_error if aspect_error else (None if completed.returncode == 0 else _completed_error(completed)),
             }
         )
     return {
@@ -5766,6 +5950,56 @@ def _dreamina_submit_command(job: dict[str, Any], dreamina_command: str, output_
     return base
 
 
+def _prepare_dreamina_first_frame(
+    job: dict[str, Any],
+    ffmpeg_command: str,
+    runner: Runner,
+) -> tuple[bool, str | None]:
+    preparation = job.get("first_frame_preparation") or {}
+    source_path = Path(str(preparation.get("source_path") or ""))
+    output_path = Path(str(preparation.get("output_path") or ""))
+    expected_width = int(preparation.get("expected_width") or 0)
+    expected_height = int(preparation.get("expected_height") or 0)
+    if not source_path.is_file():
+        return False, f"9:16 首帧准备失败：找不到源图片 {source_path}"
+    if expected_width != DREAMINA_VERTICAL_FIRST_FRAME_WIDTH or expected_height != DREAMINA_VERTICAL_FIRST_FRAME_HEIGHT:
+        return False, "9:16 首帧准备失败：任务尺寸合同不是 1080×1920。"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        ffmpeg_command,
+        "-y",
+        "-i",
+        str(source_path),
+        "-vf",
+        DREAMINA_VERTICAL_FIRST_FRAME_FILTER,
+        "-frames:v",
+        "1",
+        str(output_path),
+    ]
+    try:
+        completed = runner(command, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return False, f"9:16 首帧准备失败：找不到 ffmpeg 命令 {ffmpeg_command}"
+    if completed.returncode != 0:
+        return False, "9:16 首帧准备失败：" + _completed_error(completed)
+    dimensions = _png_dimensions(output_path)
+    if dimensions != (expected_width, expected_height):
+        return False, (
+            "9:16 首帧准备失败：输出尺寸校验不通过，"
+            f"期望 {expected_width}×{expected_height}，实际 {dimensions or '无法读取'}。"
+        )
+    return True, None
+
+
+def _png_dimensions(path: Path) -> tuple[int, int] | None:
+    if not path.is_file():
+        return None
+    header = path.read_bytes()[:24]
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
 def _dreamina_status_command(dreamina_command: str, provider_task_id: str | None, download_dir: str | None = None) -> list[str]:
     command = [dreamina_command, "query_result", f"--submit_id={provider_task_id or ''}"]
     if download_dir:
@@ -5784,7 +6018,38 @@ def _dreamina_cli_resolution(value: str) -> str:
     return normalized or "1080p"
 
 
+def _dreamina_first_frame_preparation(job: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    run_dir = Path(str(state["run_dir"])).expanduser().resolve()
+    project_dir = _project_dir_from_run_dir(run_dir)
+    source_path = _source_reference_material_path(job, project_dir)
+    output_path = run_dir / "dreamina_generation" / "first_frames" / f"shot_{job['shot_id']}_9x16.png"
+    return {
+        "status": "planned" if source_path else "blocked",
+        "source_path": source_path or "",
+        "output_path": str(output_path),
+        "expected_width": DREAMINA_VERTICAL_FIRST_FRAME_WIDTH,
+        "expected_height": DREAMINA_VERTICAL_FIRST_FRAME_HEIGHT,
+        "aspect_ratio": DEFAULT_ASPECT_RATIO,
+        "method": "contain_on_neutral_canvas",
+        "background_color": "#F2F2F2",
+        "preserve_source_image": True,
+        "modifies_raw_source": False,
+        "reason": (
+            "Dreamina image2video infers output ratio from the input image; prepare and verify a task-scoped 9:16 first frame before submission."
+        ),
+    }
+
+
 def _reference_material_path(job: dict[str, Any], project_dir: Path | None = None) -> str | None:
+    if str(job.get("job_type") or "") == "image2video":
+        preparation = job.get("first_frame_preparation") or {}
+        prepared_path = str(preparation.get("output_path") or "").strip()
+        if prepared_path:
+            return prepared_path
+    return _source_reference_material_path(job, project_dir)
+
+
+def _source_reference_material_path(job: dict[str, Any], project_dir: Path | None = None) -> str | None:
     selected = job.get("selected_material") or {}
     files = _extract_material_paths(selected)
     preferred = _first_compatible_material_file(files, str(job.get("job_type") or ""))
@@ -5833,8 +6098,22 @@ def _parse_dreamina_json_output(output: str) -> dict[str, Any]:
     try:
         parsed = json.loads(output)
     except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+
+    decoder = json.JSONDecoder()
+    candidates: list[dict[str, Any]] = []
+    for index, character in enumerate(output):
+        if character != "{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict):
+            candidates.append(candidate)
+    return candidates[-1] if candidates else {}
 
 
 def _dreamina_result_output_path(parsed: dict[str, Any]) -> str | None:
@@ -5848,6 +6127,33 @@ def _dreamina_result_output_path(parsed: dict[str, Any]) -> str | None:
             if isinstance(first, dict) and first.get("path"):
                 return str(first["path"])
     return None
+
+
+def _dreamina_result_dimensions(parsed: dict[str, Any]) -> tuple[int, int] | None:
+    result_json = parsed.get("result_json")
+    if not isinstance(result_json, dict):
+        return None
+    videos = result_json.get("videos")
+    if not isinstance(videos, list) or not videos or not isinstance(videos[0], dict):
+        return None
+    try:
+        width = int(videos[0].get("width") or 0)
+        height = int(videos[0].get("height") or 0)
+    except (TypeError, ValueError):
+        return None
+    return (width, height) if width > 0 and height > 0 else None
+
+
+def _dreamina_result_aspect_error(
+    expected_aspect_ratio: str,
+    dimensions: tuple[int, int] | None,
+) -> str | None:
+    if expected_aspect_ratio.strip() != DEFAULT_ASPECT_RATIO or not dimensions:
+        return None
+    width, height = dimensions
+    if abs((width / height) - (9 / 16)) <= 0.01:
+        return None
+    return f"即梦返回画幅不合格：期望 9:16，实际 {width}×{height}。镜头不能确认或进入合并。"
 
 
 def _completed_error(completed: subprocess.CompletedProcess[str]) -> str:
