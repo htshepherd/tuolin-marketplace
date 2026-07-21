@@ -28,13 +28,17 @@ from tuolin_marketplace.linkedin_search.review import (
     remove_candidates_from_batch,
 )
 from tuolin_marketplace.linkedin_search.dispatch import (
-    InvitationDispatchObservation,
+    InvitationPreflightObservation,
+    InvitationResultObservation,
     authorize_interruption_recovery,
-    dispatch_next_candidate,
+    create_platform_restart_run,
+    prepare_dispatch_attempt,
     prepare_interruption_recovery,
     prepare_platform_restart_handoff,
+    record_dispatch_result,
     resolve_note_unavailable,
 )
+from tuolin_marketplace.linkedin_search.evidence import record_browser_evidence
 
 
 def main() -> int:
@@ -43,8 +47,9 @@ def main() -> int:
         "bind-account", "confirm-effective-limit", "record-first-search", "record-next-search", "finish-keyword",
         "record-individual", "record-company", "prepare-review", "remove-candidates",
         "confirm-batch", "prepare-authorization", "authorize-batch",
-        "dispatch-next", "resolve-note-unavailable", "prepare-recovery", "authorize-recovery",
-        "prepare-platform-restart",
+        "prepare-dispatch", "record-dispatch-result", "resolve-note-unavailable",
+        "prepare-recovery", "authorize-recovery", "prepare-platform-restart",
+        "create-platform-restart", "record-evidence",
     ])
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--data-json", default="{}", help="Action payload as a JSON object.")
@@ -103,8 +108,10 @@ def main() -> int:
             observed_member_name=str(data.get("observed_member_name") or ""),
             observed_profile_url=str(data.get("observed_profile_url") or ""),
         )
-    elif args.action == "dispatch-next":
-        result = dispatch_next_candidate(run_dir, InvitationDispatchObservation(**data["observation"]))
+    elif args.action == "prepare-dispatch":
+        result = prepare_dispatch_attempt(run_dir, InvitationPreflightObservation(**data["observation"]))
+    elif args.action == "record-dispatch-result":
+        result = record_dispatch_result(run_dir, InvitationResultObservation(**data["observation"]))
     elif args.action == "resolve-note-unavailable":
         result = resolve_note_unavailable(run_dir, send_without_note=bool(data.get("send_without_note")))
     elif args.action == "prepare-recovery":
@@ -115,9 +122,26 @@ def main() -> int:
             last_candidate_live_state=str(data.get("last_candidate_live_state") or "ambiguous"),
         )
     elif args.action == "authorize-recovery":
-        result = authorize_interruption_recovery(run_dir, confirmed=bool(data.get("confirmed")))
-    else:
+        result = authorize_interruption_recovery(
+            run_dir,
+            confirmed=bool(data.get("confirmed")),
+            observed_member_name=str(data.get("observed_member_name") or ""),
+            observed_profile_url=str(data.get("observed_profile_url") or ""),
+        )
+    elif args.action == "prepare-platform-restart":
         result = prepare_platform_restart_handoff(run_dir)
+    elif args.action == "create-platform-restart":
+        result = create_platform_restart_run(run_dir)
+    else:
+        result = record_browser_evidence(
+            run_dir,
+            Path(str(data.get("screenshot_path") or "")),
+            reason=str(data.get("reason") or ""),
+            candidate_id=str(data.get("candidate_id") or ""),
+            explicitly_authorized=bool(data.get("explicitly_authorized")),
+            disputed_state=bool(data.get("disputed_state")),
+            platform_stop=bool(data.get("platform_stop")),
+        )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 

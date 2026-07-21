@@ -17,6 +17,7 @@ from scripts.tuolin_marketplace.linkedin_search.browser_contract import (
     bind_linkedin_account,
     confirm_effective_limit,
     finish_current_keyword,
+    normalize_linkedin_url,
     record_first_posts_search,
     record_next_posts_search,
 )
@@ -27,7 +28,7 @@ from scripts.tuolin_marketplace.linkedin_search.discovery import (
     record_company_post_evaluation,
     record_individual_post_evaluation,
 )
-from scripts.tuolin_marketplace.linkedin_search.ledger import ledger_path, reserve_candidate
+from scripts.tuolin_marketplace.linkedin_search.ledger import ledger_path, reserve_candidate, rolling_capacity
 from scripts.tuolin_marketplace.linkedin_search.review import (
     authorize_dispatch_batch,
     confirm_candidate_batch,
@@ -36,13 +37,17 @@ from scripts.tuolin_marketplace.linkedin_search.review import (
     remove_candidates_from_batch,
 )
 from scripts.tuolin_marketplace.linkedin_search.dispatch import (
-    InvitationDispatchObservation,
+    InvitationPreflightObservation,
+    InvitationResultObservation,
     authorize_interruption_recovery,
-    dispatch_next_candidate,
+    create_platform_restart_run,
+    prepare_dispatch_attempt,
     prepare_interruption_recovery,
     prepare_platform_restart_handoff,
+    record_dispatch_result,
     resolve_note_unavailable,
 )
+from scripts.tuolin_marketplace.linkedin_search.evidence import record_browser_evidence
 from scripts.tuolin_marketplace.natural_language import route_natural_language
 from scripts.tuolin_marketplace.project_layout import resolve_paths
 from tests.test_downstream_context import _create_fixture
@@ -53,6 +58,18 @@ class LinkedInSearchAgentTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         pairs = [
             (
+                root / "README.md",
+                root / "plugins" / "tuolin-marketplace" / "README.md",
+            ),
+            (
+                root / "pyproject.toml",
+                root / "plugins" / "tuolin-marketplace" / "pyproject.toml",
+            ),
+            (
+                root / "docs" / "operations" / "linkedin-search-install-and-remote-test.md",
+                root / "plugins" / "tuolin-marketplace" / "docs" / "operations" / "linkedin-search-install-and-remote-test.md",
+            ),
+            (
                 root / "skills" / "tuolin-linkedin-search" / "SKILL.md",
                 root / "plugins" / "tuolin-marketplace" / "skills" / "tuolin-linkedin-search" / "SKILL.md",
             ),
@@ -60,13 +77,32 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "agent.py",
                 root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / "agent.py",
             ),
+            *[
+                (
+                    root / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
+                    root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
+                )
+                for filename in ("__init__.py", "browser_contract.py", "discovery.py", "ledger.py", "review.py")
+            ],
             (
                 root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "dispatch.py",
                 root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / "dispatch.py",
             ),
             (
+                root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "cards.py",
+                root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / "cards.py",
+            ),
+            (
+                root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "evidence.py",
+                root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / "evidence.py",
+            ),
+            (
                 root / "scripts" / "update_linkedin_search_run.py",
                 root / "plugins" / "tuolin-marketplace" / "scripts" / "update_linkedin_search_run.py",
+            ),
+            (
+                root / "scripts" / "check_linkedin_search_install.py",
+                root / "plugins" / "tuolin-marketplace" / "scripts" / "check_linkedin_search_install.py",
             ),
         ]
         for source, plugin in pairs:
@@ -78,7 +114,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(root_manifest, plugin_manifest)
-        self.assertEqual(root_manifest["version"], "1.52.0")
+        self.assertEqual(root_manifest["version"], "1.52.1")
 
     def test_request_detection_is_separate_from_linkedin_content_planning(self) -> None:
         self.assertTrue(is_linkedin_search_request("在领英通过贴文搜索石英纤维隔热带潜在客户"))
@@ -302,6 +338,54 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "明确授权"):
                 bind_linkedin_account(Path(result.run_dir), observation, browser_authorized=False)
 
+    def test_same_linkedin_account_cannot_bind_two_active_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            first = _create_complete_search_run(paths)
+            second = _create_complete_search_run(paths)
+            observation = LinkedInAccountObservation(
+                True, "Tuolin Sales", "https://linkedin.com/in/tuolin-sales", True
+            )
+            bind_linkedin_account(Path(first.run_dir), observation, browser_authorized=True)
+            with self.assertRaisesRegex(ValueError, "已有活动 LinkedIn 搜索运行"):
+                bind_linkedin_account(Path(second.run_dir), observation, browser_authorized=True)
+
+    def test_rolling_capacity_uses_an_inclusive_168_hour_cutoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "linkedin-search" / "run"
+            run_dir.mkdir(parents=True)
+            now = datetime(2026, 7, 21, 12, 0, 0).astimezone()
+            cutoff = now.timestamp() - 168 * 60 * 60
+            ledger = ledger_path(run_dir)
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            ledger.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "accounts": {
+                            "https://www.linkedin.com/in/tuolin-sales": {
+                                "contacts": {},
+                                "companies": {},
+                                "posts": {},
+                                "dispatch_successes": [
+                                    {"occurred_at": datetime.fromtimestamp(cutoff).astimezone().isoformat()},
+                                    {"occurred_at": datetime.fromtimestamp(cutoff - 1).astimezone().isoformat()},
+                                ],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            capacity = rolling_capacity(
+                run_dir,
+                account_profile_url="https://linkedin.com/in/tuolin-sales",
+                now=now,
+            )
+            self.assertEqual(capacity["recorded_successes"], 1)
+            self.assertEqual(capacity["remaining_capacity"], 99)
+
     def test_reduced_rolling_capacity_requires_confirmation_before_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -338,6 +422,50 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertIn("有效上限 5", bound.message)
             confirmed = confirm_effective_limit(Path(result.run_dir), confirmed=True, now=current)
             self.assertEqual(confirmed.phase, "awaiting_first_posts_search")
+
+    def test_effective_capacity_stops_candidate_discovery_at_reduced_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_complete_search_run(paths)
+            current = datetime(2026, 7, 21, 11, 30, 0).astimezone()
+            shared_ledger = ledger_path(Path(result.run_dir))
+            shared_ledger.parent.mkdir(parents=True, exist_ok=True)
+            shared_ledger.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "accounts": {
+                            "https://www.linkedin.com/in/tuolin-sales": {
+                                "contacts": {},
+                                "companies": {},
+                                "posts": {},
+                                "dispatch_successes": [
+                                    {"candidate_id": f"old-{index}", "occurred_at": current.isoformat()}
+                                    for index in range(95)
+                                ],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            bind_linkedin_account(
+                Path(result.run_dir),
+                LinkedInAccountObservation(True, "Tuolin Sales", "https://linkedin.com/in/tuolin-sales", True),
+                browser_authorized=True,
+                now=current,
+            )
+            confirm_effective_limit(Path(result.run_dir), confirmed=True, now=current)
+            record_first_posts_search(
+                Path(result.run_dir),
+                LinkedInPostSearchObservation("exhaust wrap", "posts", "latest", "past_month", 20, True, {}),
+                now=current,
+            )
+            for index in range(5):
+                _record_demo_candidate(Path(result.run_dir), suffix=f"capacity-{index}")
+            with self.assertRaisesRegex(ValueError, "有效上限 5"):
+                _record_demo_candidate(Path(result.run_dir), suffix="capacity-overflow")
 
     def test_posts_search_rejects_people_surface_and_geography_filter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -568,21 +696,24 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result, candidate_ids = _create_authorized_run(paths, candidate_count=2)
             first_time = datetime(2026, 7, 21, 12, 0, 0).astimezone()
-            first = dispatch_next_candidate(
+            first = _dispatch_success(
                 Path(result.run_dir),
-                _success_observation(candidate_ids[0], suffix="dispatch-1"),
+                candidate_ids[0],
+                suffix="dispatch-1",
                 now=first_time,
             )
             self.assertEqual(first.phase, "awaiting_dispatch_interval")
             with self.assertRaisesRegex(ValueError, "固定发送间隔尚未结束"):
-                dispatch_next_candidate(
+                _prepare_dispatch(
                     Path(result.run_dir),
-                    _success_observation(candidate_ids[1], suffix="dispatch-2"),
+                    candidate_ids[1],
+                    suffix="dispatch-2",
                     now=first_time,
                 )
-            second = dispatch_next_candidate(
+            second = _dispatch_success(
                 Path(result.run_dir),
-                _success_observation(candidate_ids[1], suffix="dispatch-2"),
+                candidate_ids[1],
+                suffix="dispatch-2",
                 now=first_time.replace(minute=5),
             )
             self.assertEqual(second.phase, "completed")
@@ -590,15 +721,23 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             account = ledger["accounts"]["https://www.linkedin.com/in/tuolin-sales"]
             self.assertEqual(len(account["dispatch_successes"]), 2)
             self.assertEqual(account["contacts"]["https://www.linkedin.com/in/demo-dispatch-1"]["state"], "sent")
+            event = account["dispatch_successes"][0]
+            self.assertEqual(event["account_profile_url"], "https://www.linkedin.com/in/tuolin-sales")
+            self.assertEqual(event["company_url"], "https://www.linkedin.com/company/demo-dispatch-1")
+            self.assertEqual(event["source_post_url"], "https://www.linkedin.com/posts/demo-dispatch-1")
+            self.assertTrue(event["batch_digest"])
+            self.assertEqual(event["result"], "sent")
 
     def test_dispatch_requires_visible_success_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
             result, candidate_ids = _create_authorized_run(paths, candidate_count=1)
-            observation = _success_observation(candidate_ids[0], suffix="dispatch-1")
-            observation = InvitationDispatchObservation(**{**observation.__dict__, "visible_confirmation": ""})
-            stopped = dispatch_next_candidate(Path(result.run_dir), observation)
+            prepared = _prepare_dispatch(Path(result.run_dir), candidate_ids[0], suffix="dispatch-1")
+            stopped = record_dispatch_result(
+                Path(result.run_dir),
+                _result_observation(prepared, candidate_ids[0], suffix="dispatch-1", result="success", confirmation=""),
+            )
             self.assertEqual(stopped.phase, "reconciliation_required")
             self.assertIn("不会自动恢复", stopped.message)
 
@@ -606,10 +745,10 @@ class LinkedInSearchAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
-            result, candidate_ids = _create_authorized_run(paths, candidate_count=2)
-            local = dispatch_next_candidate(
+            result, candidate_ids = _create_authorized_run(paths, candidate_count=3)
+            local = prepare_dispatch_attempt(
                 Path(result.run_dir),
-                InvitationDispatchObservation(
+                InvitationPreflightObservation(
                     "Tuolin Sales",
                     "https://linkedin.com/in/tuolin-sales",
                     candidate_ids[0],
@@ -617,27 +756,20 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     "none",
                     False,
                     True,
-                    "no_connect_button",
                 ),
             )
             self.assertEqual(local.phase, "ready_to_dispatch")
-            stopped = dispatch_next_candidate(
+            prepared = _prepare_dispatch(Path(result.run_dir), candidate_ids[1], suffix="dispatch-2")
+            stopped = record_dispatch_result(
                 Path(result.run_dir),
-                InvitationDispatchObservation(
-                    "Tuolin Sales",
-                    "https://linkedin.com/in/tuolin-sales",
-                    candidate_ids[1],
-                    "https://linkedin.com/in/demo-dispatch-2",
-                    "none",
-                    True,
-                    True,
-                    "captcha",
-                ),
+                _result_observation(prepared, candidate_ids[1], suffix="dispatch-2", result="captcha"),
             )
             self.assertEqual(stopped.phase, "platform_stopped")
             report_path = Path(result.run_dir) / "batch" / "dispatch-report.json"
             report = json.loads(report_path.read_text(encoding="utf-8"))
             self.assertEqual(len(report["categories"]["failed"]), 1)
+            self.assertEqual(len(report["categories"]["ambiguous"]), 1)
+            self.assertEqual(len(report["categories"]["unexecuted"]), 1)
             self.assertFalse(report["stop"]["auto_resume"])
             handoff = prepare_platform_restart_handoff(Path(result.run_dir))
             self.assertIn("必须新建任务", handoff.message)
@@ -645,15 +777,17 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             payload = json.loads(handoff_path.read_text(encoding="utf-8"))
             self.assertTrue(payload["requires_fresh_batch_authorization"])
             self.assertFalse(payload["automatic_resume_allowed"])
+            restart = create_platform_restart_run(Path(result.run_dir))
+            self.assertEqual(restart.phase, "awaiting_browser_account_binding")
 
     def test_unavailable_note_requires_new_no_note_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
             result, candidate_ids = _create_authorized_run(paths, candidate_count=1, note=True)
-            paused = dispatch_next_candidate(
+            paused = prepare_dispatch_attempt(
                 Path(result.run_dir),
-                InvitationDispatchObservation(
+                InvitationPreflightObservation(
                     "Tuolin Sales",
                     "https://linkedin.com/in/tuolin-sales",
                     candidate_ids[0],
@@ -661,7 +795,6 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     "none",
                     True,
                     False,
-                    "no_dispatch_failure",
                 ),
             )
             self.assertEqual(paused.phase, "awaiting_note_unavailable_decision")
@@ -684,8 +817,44 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             )
             self.assertEqual(prepared.phase, "awaiting_dispatch_reauthorization")
             self.assertIn("不会重新搜索或找补", prepared.message)
-            resumed = authorize_interruption_recovery(Path(result.run_dir), confirmed=True)
+            resumed = authorize_interruption_recovery(
+                Path(result.run_dir),
+                confirmed=True,
+                observed_member_name="Tuolin Sales",
+                observed_profile_url="https://linkedin.com/in/tuolin-sales",
+            )
             self.assertEqual(resumed.phase, "ready_to_dispatch")
+
+    def test_recovery_cannot_bypass_remaining_fixed_interval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result, candidate_ids = _create_authorized_run(paths, candidate_count=2)
+            sent_at = datetime(2026, 7, 21, 12, 0, 0).astimezone()
+            _dispatch_success(Path(result.run_dir), candidate_ids[0], suffix="dispatch-1", now=sent_at)
+            recovery_at = sent_at.replace(minute=1)
+            prepare_interruption_recovery(
+                Path(result.run_dir),
+                observed_member_name="Tuolin Sales",
+                observed_profile_url="https://linkedin.com/in/tuolin-sales",
+                last_candidate_live_state="none",
+                now=recovery_at,
+            )
+            resumed = authorize_interruption_recovery(
+                Path(result.run_dir),
+                confirmed=True,
+                observed_member_name="Tuolin Sales",
+                observed_profile_url="https://linkedin.com/in/tuolin-sales",
+                now=recovery_at,
+            )
+            self.assertEqual(resumed.phase, "awaiting_dispatch_interval")
+            with self.assertRaisesRegex(ValueError, "固定发送间隔尚未结束"):
+                _prepare_dispatch(
+                    Path(result.run_dir),
+                    candidate_ids[1],
+                    suffix="dispatch-2",
+                    now=recovery_at,
+                )
 
     def test_ambiguous_recovery_and_platform_stop_cannot_resume(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -706,6 +875,177 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     observed_profile_url="https://linkedin.com/in/tuolin-sales",
                     last_candidate_live_state="none",
                 )
+
+    def test_linkedin_url_rejects_lookalike_domains(self) -> None:
+        with self.assertRaisesRegex(ValueError, "linkedin.com"):
+            normalize_linkedin_url("https://evil-linkedin.com/in/example")
+        with self.assertRaisesRegex(ValueError, "linkedin.com"):
+            normalize_linkedin_url("https://linkedin.com.evil.example/in/example")
+
+    def test_company_and_source_post_are_deduplicated_across_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_discovering_run(paths)
+            first = reserve_candidate(
+                Path(result.run_dir),
+                account_profile_url="https://linkedin.com/in/tuolin-sales",
+                member_profile_url="https://linkedin.com/in/first",
+                company_url="https://linkedin.com/company/shared",
+                source_post_url="https://linkedin.com/posts/first",
+                candidate_id="first",
+            )
+            same_company = reserve_candidate(
+                Path(result.run_dir),
+                account_profile_url="https://linkedin.com/in/tuolin-sales",
+                member_profile_url="https://linkedin.com/in/second",
+                company_url="https://linkedin.com/company/shared",
+                source_post_url="https://linkedin.com/posts/second",
+                candidate_id="second",
+            )
+            same_post = reserve_candidate(
+                Path(result.run_dir),
+                account_profile_url="https://linkedin.com/in/tuolin-sales",
+                member_profile_url="https://linkedin.com/in/third",
+                company_url="https://linkedin.com/company/third",
+                source_post_url="https://linkedin.com/posts/first",
+                candidate_id="third",
+            )
+            self.assertTrue(first["eligible"])
+            self.assertEqual(same_company["reason"], "company_already_reserved_or_contacted")
+            self.assertEqual(same_post["reason"], "source_post_already_reserved_or_used")
+
+    def test_candidate_identity_change_invalidates_closed_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_discovering_run(paths)
+            _record_demo_candidate(Path(result.run_dir), suffix="tamper")
+            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            prepare_candidate_batch_review(Path(result.run_dir))
+            confirm_candidate_batch(Path(result.run_dir))
+            state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
+            candidate_id = state["candidate_ids"][0]
+            card_path = Path(result.run_dir) / "candidates" / f"{candidate_id}.json"
+            card = json.loads(card_path.read_text(encoding="utf-8"))
+            card["selected_member"]["profile_url"] = "https://www.linkedin.com/in/different"
+            card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "候选身份已变化"):
+                prepare_dispatch_authorization(Path(result.run_dir))
+
+    def test_candidate_review_content_change_invalidates_closed_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_discovering_run(paths)
+            _record_demo_candidate(Path(result.run_dir), suffix="content-tamper")
+            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            prepare_candidate_batch_review(Path(result.run_dir))
+            confirm_candidate_batch(Path(result.run_dir))
+            state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
+            candidate_id = state["candidate_ids"][0]
+            card_path = Path(result.run_dir) / "candidates" / f"{candidate_id}.json"
+            card = json.loads(card_path.read_text(encoding="utf-8"))
+            card["post_text"] = "Changed after user review"
+            card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "候选审核内容已变化"):
+                prepare_dispatch_authorization(Path(result.run_dir))
+
+    def test_closed_batch_file_change_invalidates_its_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_discovering_run(paths)
+            _record_demo_candidate(Path(result.run_dir), suffix="batch-tamper")
+            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            prepare_candidate_batch_review(Path(result.run_dir))
+            confirm_candidate_batch(Path(result.run_dir))
+            closed_path = Path(result.run_dir) / "batch" / "closed-candidate-batch.json"
+            closed = json.loads(closed_path.read_text(encoding="utf-8"))
+            closed["candidates"][0]["post_text"] = "Changed inside the closed batch"
+            closed_path.write_text(json.dumps(closed, ensure_ascii=False, indent=2), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Closed Candidate Batch 内容摘要不一致"):
+                prepare_dispatch_authorization(Path(result.run_dir))
+
+    def test_dispatch_result_requires_a_matching_preflight_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result, candidate_ids = _create_authorized_run(paths, candidate_count=1)
+            with self.assertRaisesRegex(ValueError, "等待结果"):
+                record_dispatch_result(
+                    Path(result.run_dir),
+                    InvitationResultObservation(
+                        "made-up-attempt",
+                        "Tuolin Sales",
+                        "https://linkedin.com/in/tuolin-sales",
+                        candidate_ids[0],
+                        "https://linkedin.com/in/demo-dispatch-1",
+                        "success",
+                        "Invitation sent",
+                    ),
+                )
+
+    def test_preflight_rechecks_contact_company_and_source_post_reservations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result, candidate_ids = _create_authorized_run(paths, candidate_count=1)
+            path = ledger_path(Path(result.run_dir))
+            ledger = json.loads(path.read_text(encoding="utf-8"))
+            account = ledger["accounts"]["https://www.linkedin.com/in/tuolin-sales"]
+            del account["companies"]["https://www.linkedin.com/company/demo-dispatch-1"]
+            path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), encoding="utf-8")
+            stopped = _prepare_dispatch(Path(result.run_dir), candidate_ids[0], suffix="dispatch-1")
+            self.assertEqual(stopped.phase, "reconciliation_required")
+            self.assertIn("missing_company_reservation", stopped.message)
+
+    def test_restart_run_rebinds_same_account_and_reuses_only_remaining_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result, candidate_ids = _create_authorized_run(paths, candidate_count=2)
+            prepared = _prepare_dispatch(Path(result.run_dir), candidate_ids[0], suffix="dispatch-1")
+            record_dispatch_result(
+                Path(result.run_dir),
+                _result_observation(prepared, candidate_ids[0], suffix="dispatch-1", result="captcha"),
+            )
+            prepare_platform_restart_handoff(Path(result.run_dir))
+            restart = create_platform_restart_run(Path(result.run_dir))
+            with self.assertRaisesRegex(ValueError, "同一个 LinkedIn 账号"):
+                bind_linkedin_account(
+                    Path(restart.run_dir),
+                    LinkedInAccountObservation(True, "Other", "https://linkedin.com/in/other", True),
+                    browser_authorized=True,
+                )
+            rebound = bind_linkedin_account(
+                Path(restart.run_dir),
+                LinkedInAccountObservation(True, "Tuolin Sales", "https://linkedin.com/in/tuolin-sales", True),
+                browser_authorized=True,
+            )
+            self.assertEqual(rebound.phase, "awaiting_candidate_batch_review")
+            self.assertIn("不会重新搜索", rebound.message)
+            review = prepare_candidate_batch_review(Path(restart.run_dir))
+            self.assertIn("候选人数：1", review.message)
+
+    def test_browser_evidence_is_opt_in_and_reason_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = _create_discovering_run(paths)
+            screenshot = Path(tmp) / "state.png"
+            screenshot.write_bytes(b"\x89PNG\r\n\x1a\n" + b"bounded-test-fixture")
+            with self.assertRaisesRegex(ValueError, "默认不得保存截图"):
+                record_browser_evidence(Path(result.run_dir), screenshot, reason="test")
+            recorded = record_browser_evidence(
+                Path(result.run_dir),
+                screenshot,
+                reason="CAPTCHA state disputed during acceptance test",
+                disputed_state=True,
+            )
+            metadata = json.loads(Path(recorded.output_paths[1]).read_text(encoding="utf-8"))
+            self.assertEqual(metadata["basis"], "disputed_state")
+            self.assertFalse(metadata["authentication_secrets_reviewed"])
 
 
 def _create_complete_search_run(paths, *, keywords="exhaust wrap", note="不使用留言"):
@@ -782,17 +1122,47 @@ def _create_authorized_run(paths, *, candidate_count: int, note: bool = False):
     return result, candidate_ids
 
 
-def _success_observation(candidate_id: str, *, suffix: str) -> InvitationDispatchObservation:
-    return InvitationDispatchObservation(
+def _prepare_dispatch(run_dir: Path, candidate_id: str, *, suffix: str, now=None):
+    return prepare_dispatch_attempt(
+        run_dir,
+        InvitationPreflightObservation(
+            "Tuolin Sales",
+            "https://linkedin.com/in/tuolin-sales",
+            candidate_id,
+            f"https://linkedin.com/in/demo-{suffix}",
+            "none",
+            True,
+            True,
+        ),
+        now=now,
+    )
+
+
+def _result_observation(prepared, candidate_id: str, *, suffix: str, result: str, confirmation: str = ""):
+    state = json.loads(Path(prepared.workflow_state_path).read_text(encoding="utf-8"))
+    return InvitationResultObservation(
+        state["pending_dispatch_attempt"]["attempt_id"],
         "Tuolin Sales",
         "https://linkedin.com/in/tuolin-sales",
         candidate_id,
         f"https://linkedin.com/in/demo-{suffix}",
-        "none",
-        True,
-        True,
-        "success",
-        "Invitation sent",
+        result,
+        confirmation,
+    )
+
+
+def _dispatch_success(run_dir: Path, candidate_id: str, *, suffix: str, now=None):
+    prepared = _prepare_dispatch(run_dir, candidate_id, suffix=suffix, now=now)
+    return record_dispatch_result(
+        run_dir,
+        _result_observation(
+            prepared,
+            candidate_id,
+            suffix=suffix,
+            result="success",
+            confirmation="Invitation sent",
+        ),
+        now=now,
     )
 
 

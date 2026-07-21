@@ -9,7 +9,15 @@ from typing import Any
 
 from .agent import LinkedInSearchStepResult
 from .browser_contract import _append_change, _append_history, _load_run, _timestamp, _write_json_atomic, normalize_linkedin_url
-from .ledger import release_candidate_reservation, rolling_capacity
+from .cards import (
+    candidate_identity_digest,
+    candidate_review_digest,
+    persist_candidate_card,
+    render_candidate_batch,
+    verify_candidate_identity,
+    verify_candidate_review,
+)
+from .ledger import release_account_run_lock, release_candidate_reservation, rolling_capacity
 
 
 def prepare_candidate_batch_review(run_dir: Path, *, now: datetime | None = None) -> LinkedInSearchStepResult:
@@ -33,7 +41,7 @@ def prepare_candidate_batch_review(run_dir: Path, *, now: datetime | None = None
     json_path = review_dir / "candidate-batch-review.json"
     markdown_path = review_dir / "candidate-batch-review.md"
     _write_json_atomic(json_path, payload)
-    markdown_path.write_text(_render_batch(payload, "候选批次审核"), encoding="utf-8")
+    markdown_path.write_text(render_candidate_batch(payload, "候选批次审核"), encoding="utf-8")
     state["candidate_batch_review"] = {"candidate_ids": payload["candidate_ids"], "prepared_at": timestamp}
     state.setdefault("files", {})["candidate_batch_review"] = [str(markdown_path), str(json_path)]
     state["status"] = "candidate_batch_review_ready"
@@ -65,7 +73,7 @@ def remove_candidates_from_batch(
             continue
         card["approval"] = "removed_by_user"
         card["removed_at"] = _timestamp(now)
-        _persist_card(run_dir, card)
+        persist_candidate_card(run_dir, card)
         release_candidate_reservation(
             run_dir,
             account_profile_url=account_url,
@@ -77,7 +85,12 @@ def remove_candidates_from_batch(
         raise ValueError("没有找到与删除标识匹配的候选。")
     state["candidate_ids"] = [item for item in state.get("candidate_ids", []) if item not in removed]
     state["candidate_batch_review"] = None
-    state["status"] = "candidate_discovery_complete"
+    if state["candidate_ids"]:
+        state["status"] = "candidate_discovery_complete"
+    else:
+        state["status"] = "completed_no_candidates_after_review"
+        state["phase"] = "completed"
+        release_account_run_lock(run_dir, account_url)
     state["updated_at"] = _timestamp(now)
     _write_json_atomic(state_path, state)
     _append_change(run_dir, state["updated_at"], f"用户删除候选：{removed}；不自动找补。")
@@ -87,7 +100,11 @@ def remove_candidates_from_batch(
         status=state["status"],
         phase=state["phase"],
         output_paths=(str(state_path),),
-        message=f"已删除 {len(removed)} 名候选，不会自动找补。请重新生成候选批次审核视图。",
+        message=(
+            f"已删除 {len(removed)} 名候选，不会自动找补。请重新生成候选批次审核视图。"
+            if state["candidate_ids"]
+            else "已删除全部候选；任务以零候选结束，账号运行锁已释放。"
+        ),
     )
 
 
@@ -100,13 +117,17 @@ def confirm_candidate_batch(run_dir: Path, *, now: datetime | None = None) -> Li
         raise ValueError("当前没有候选人可封闭为发送批次。")
     timestamp = _timestamp(now)
     candidate_ids = [card["candidate_id"] for card in cards]
-    digest = _digest({"candidate_ids": candidate_ids, "cards": cards})
+    identity_digests = {card["candidate_id"]: candidate_identity_digest(card) for card in cards}
+    review_digests = {card["candidate_id"]: candidate_review_digest(card) for card in cards}
+    digest = _digest({"candidate_ids": candidate_ids, "candidate_identity_digests": identity_digests, "cards": cards})
     payload = {
         "status": "closed_candidate_batch",
         "candidate_ids": candidate_ids,
         "candidate_count": len(cards),
         "candidates": cards,
         "batch_digest": digest,
+        "candidate_identity_digests": identity_digests,
+        "candidate_review_digests": review_digests,
         "closed_at": timestamp,
         "immutable": True,
         "no_backfill": True,
@@ -115,11 +136,13 @@ def confirm_candidate_batch(run_dir: Path, *, now: datetime | None = None) -> Li
     json_path = batch_dir / "closed-candidate-batch.json"
     markdown_path = batch_dir / "closed-candidate-batch.md"
     _write_json_atomic(json_path, payload)
-    markdown_path.write_text(_render_batch(payload, "Closed Candidate Batch"), encoding="utf-8")
+    markdown_path.write_text(render_candidate_batch(payload, "Closed Candidate Batch"), encoding="utf-8")
     state["closed_candidate_batch"] = {
         "candidate_ids": candidate_ids,
         "candidate_count": len(cards),
         "batch_digest": digest,
+        "candidate_identity_digests": identity_digests,
+        "candidate_review_digests": review_digests,
         "closed_at": timestamp,
     }
     state.setdefault("files", {})["closed_candidate_batch"] = [str(markdown_path), str(json_path)]
@@ -150,8 +173,24 @@ def prepare_dispatch_authorization(
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能准备最终发送授权。")
     closed_path = Path(state["files"]["closed_candidate_batch"][1])
     closed = json.loads(closed_path.read_text(encoding="utf-8"))
-    if closed.get("batch_digest") != state["closed_candidate_batch"]["batch_digest"]:
+    recomputed_batch_digest = _digest(
+        {
+            "candidate_ids": closed.get("candidate_ids"),
+            "candidate_identity_digests": closed.get("candidate_identity_digests"),
+            "cards": closed.get("candidates"),
+        }
+    )
+    if (
+        closed.get("batch_digest") != state["closed_candidate_batch"]["batch_digest"]
+        or recomputed_batch_digest != closed.get("batch_digest")
+    ):
         raise ValueError("Closed Candidate Batch 内容摘要不一致，不能准备授权。")
+    current_cards = {card["candidate_id"]: card for card in _load_candidate_cards(run_dir, closed.get("candidate_ids") or [])}
+    for candidate_id, expected in (closed.get("candidate_identity_digests") or {}).items():
+        if candidate_id not in current_cards:
+            raise ValueError(f"Closed Candidate Batch 候选卡缺失：{candidate_id}")
+        verify_candidate_identity(current_cards[candidate_id], expected)
+        verify_candidate_review(current_cards[candidate_id], closed["candidate_review_digests"][candidate_id])
     brief = state.get("confirmed_search_brief") or {}
     note_enabled = bool(brief.get("invitation_note"))
     if note_enabled:
@@ -171,9 +210,10 @@ def prepare_dispatch_authorization(
     if effective_limit <= 0:
         raise ValueError("当前账号在本 Skill 的滚动 168 小时记录中没有剩余发送容量。")
     dispatch_cards = list(closed.get("candidates") or [])[:effective_limit]
+    deferred_cards = list(closed.get("candidates") or [])[effective_limit:]
     for card in dispatch_cards:
         card["note_decision"] = {"mode": note_mode, "text": frozen_note}
-        _persist_card(run_dir, card)
+        persist_candidate_card(run_dir, card)
     timestamp = _timestamp(now)
     payload = {
         "status": "dispatch_authorization_required",
@@ -181,6 +221,13 @@ def prepare_dispatch_authorization(
         "closed_batch_digest": closed["batch_digest"],
         "dispatch_candidates": dispatch_cards,
         "dispatch_candidate_ids": [card["candidate_id"] for card in dispatch_cards],
+        "candidate_identity_digests": {
+            card["candidate_id"]: candidate_identity_digest(card) for card in dispatch_cards
+        },
+        "candidate_review_digests": {
+            card["candidate_id"]: candidate_review_digest(card) for card in dispatch_cards
+        },
+        "deferred_candidate_ids": [card["candidate_id"] for card in deferred_cards],
         "count": len(dispatch_cards),
         "note_mode": note_mode,
         "note_text": frozen_note,
@@ -243,6 +290,17 @@ def authorize_dispatch_batch(
         "account_profile_url": account["profile_url"],
         "confirmed_at": timestamp,
     }
+    deferred_ids = list(payload.get("deferred_candidate_ids") or [])
+    for candidate_id in deferred_ids:
+        card = _load_candidate_cards(run_dir, [candidate_id])[0]
+        release_candidate_reservation(
+            run_dir,
+            account_profile_url=account["profile_url"],
+            member_profile_url=card["selected_member"]["profile_url"],
+            candidate_id=candidate_id,
+        )
+        card["approval"] = "not_authorized_capacity_reduction"
+        persist_candidate_card(run_dir, card)
     state["status"] = "dispatch_batch_authorized"
     state["phase"] = "ready_to_dispatch"
     state["updated_at"] = timestamp
@@ -254,7 +312,10 @@ def authorize_dispatch_batch(
         state_path,
         state,
         (state_path,),
-        f"已授权精确批次 {len(payload['dispatch_candidate_ids'])} 人；可以按固定间隔顺序执行，无需逐人再次确认。",
+        (
+            f"已授权精确批次 {len(payload['dispatch_candidate_ids'])} 人；可以按固定间隔顺序执行，无需逐人再次确认。"
+            + (f"另有 {len(deferred_ids)} 人因最新容量降低未获授权，reservation 已释放。" if deferred_ids else "")
+        ),
     )
 
 
@@ -265,56 +326,21 @@ def _active_candidate_cards(run_dir: Path, state: dict[str, Any]) -> list[dict[s
         if not path.exists():
             raise ValueError(f"候选卡缺失：{candidate_id}")
         card = json.loads(path.read_text(encoding="utf-8"))
+        if card.get("identity_digest"):
+            verify_candidate_identity(card, card["identity_digest"])
         if card.get("approval") == "pending_batch_review":
             cards.append(card)
     return cards
 
 
-def _persist_card(run_dir: Path, card: dict[str, Any]) -> None:
-    json_path = run_dir / "candidates" / f"{card['candidate_id']}.json"
-    _write_json_atomic(json_path, card)
-    markdown_path = run_dir / "candidates" / f"{card['candidate_id']}.md"
-    markdown_path.write_text(_render_card(card), encoding="utf-8")
-
-
-def _render_card(card: dict[str, Any]) -> str:
-    member = card["selected_member"]
-    return "\n".join(
-        [
-            f"## 候选卡：{member['name']}",
-            "",
-            f"- 来源关键词：{card['source_keyword']}",
-            f"- 贴文：{card['post_text']}",
-            f"- 贴文 URL：{card['post_url']}",
-            f"- 相关理由：{card['relevance_reason']}",
-            f"- 公司：{card['company']['name']}",
-            f"- 联系人：{member['name']}",
-            f"- 职位：{member['title']}",
-            f"- Profile：{member['profile_url']}",
-            f"- 审核状态：{card['approval']}",
-            "",
-        ]
-    )
-
-
-def _render_batch(payload: dict[str, Any], title: str) -> str:
-    lines = [f"# {title}", "", f"候选人数：{payload['candidate_count']}", "", "确认前可以删除候选；删除后不会自动找补。", ""]
-    for index, card in enumerate(payload.get("candidates") or [], start=1):
-        member = card["selected_member"]
-        lines.extend(
-            [
-                f"## {index}. {member['name']}",
-                f"- 关键词：{card['source_keyword']}",
-                f"- 贴文：{card['post_text']}",
-                f"- 贴文 URL：{card['post_url']}",
-                f"- 相关理由：{card['relevance_reason']}",
-                f"- 公司：{member['company']}",
-                f"- 职位：{member['title']}",
-                f"- Profile：{member['profile_url']}",
-                "",
-            ]
-        )
-    return "\n".join(lines)
+def _load_candidate_cards(run_dir: Path, candidate_ids: list[str]) -> list[dict[str, Any]]:
+    cards = []
+    for candidate_id in candidate_ids:
+        path = run_dir / "candidates" / f"{candidate_id}.json"
+        if not path.exists():
+            raise ValueError(f"候选卡缺失：{candidate_id}")
+        cards.append(json.loads(path.read_text(encoding="utf-8")))
+    return cards
 
 
 def _render_dispatch_brief(payload: dict[str, Any]) -> str:
@@ -331,6 +357,7 @@ def _render_dispatch_brief(payload: dict[str, Any]) -> str:
         f"- 过去 168 小时本 Skill 记录成功数：{payload['recorded_successes_in_168_hours']}",
         f"- 剩余记录容量：{payload['remaining_recorded_capacity']}",
         f"- 有效上限：{payload['effective_limit']}",
+        f"- 因最新容量未纳入授权：{len(payload.get('deferred_candidate_ids') or [])}",
         "- 手工 LinkedIn 操作：不计入本地统计",
         "",
         "## 将要发送的精确候选",
@@ -339,6 +366,9 @@ def _render_dispatch_brief(payload: dict[str, Any]) -> str:
     for index, card in enumerate(payload["dispatch_candidates"], start=1):
         member = card["selected_member"]
         lines.append(f"{index}. {member['name']} — {member['title']} — {member['company']} — {member['profile_url']}")
+    if payload.get("deferred_candidate_ids"):
+        lines.extend(["", "以下候选因最新滚动容量降低不在本次授权内："])
+        lines.extend(f"- {candidate_id}" for candidate_id in payload["deferred_candidate_ids"])
     lines.extend(["", "确认本简报后才可开始顺序发送。", ""])
     return "\n".join(lines)
 

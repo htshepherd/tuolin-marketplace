@@ -9,6 +9,7 @@ from typing import Any
 
 from .agent import LinkedInSearchStepResult
 from .browser_contract import _append_change, _append_history, _load_run, _timestamp, _write_json_atomic, normalize_linkedin_url
+from .cards import persist_candidate_card, render_candidate_card
 from .ledger import reserve_candidate
 
 
@@ -67,6 +68,7 @@ def record_individual_post_evaluation(
     if post.author_type.casefold() not in {"individual", "person"}:
         raise ValueError("此入口只处理个人作者贴文；公司作者应进入公司联系人解析流程。")
     progress = state.get("search_progress") or {}
+    _ensure_discovery_capacity(state)
     if post.keyword != progress.get("current_keyword"):
         raise ValueError("贴文来源关键词与当前搜索进度不一致。")
     if int(progress.get("opened_post_count") or 0) >= 50:
@@ -112,6 +114,7 @@ def record_individual_post_evaluation(
                 account_profile_url=state["account_binding"]["profile_url"],
                 member_profile_url=profile_url,
                 company_url=company_url,
+                source_post_url=post_url,
                 candidate_id=candidate_id,
                 live_state=candidate.live_connection_state,
                 now=now,
@@ -148,16 +151,11 @@ def record_individual_post_evaluation(
                 "final_outcome": None,
                 "created_at": timestamp,
             }
-            candidate_dir = run_dir / "candidates"
-            candidate_dir.mkdir(parents=True, exist_ok=True)
-            json_path = candidate_dir / f"{candidate_id}.json"
-            markdown_path = candidate_dir / f"{candidate_id}.md"
-            _write_json_atomic(json_path, card)
-            markdown_path.write_text(_render_candidate_card(card), encoding="utf-8")
+            markdown_path, json_path = persist_candidate_card(run_dir, card)
             state.setdefault("candidate_ids", []).append(candidate_id)
             state.setdefault("files", {}).setdefault("candidate_cards", []).extend([str(markdown_path), str(json_path)])
             output_paths.extend([str(markdown_path), str(json_path)])
-            message = _render_candidate_card(card)
+            message = render_candidate_card(card)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(evaluation, ensure_ascii=False) + "\n")
     state["updated_at"] = timestamp
@@ -195,6 +193,7 @@ def record_company_post_evaluation(
     if not reason_text:
         raise ValueError("公司贴文判断必须包含一个理由。")
     progress = state.get("search_progress") or {}
+    _ensure_discovery_capacity(state)
     if post.keyword != progress.get("current_keyword"):
         raise ValueError("贴文来源关键词与当前搜索进度不一致。")
     if int(progress.get("opened_post_count") or 0) >= 50:
@@ -236,6 +235,7 @@ def record_company_post_evaluation(
                 account_profile_url=state["account_binding"]["profile_url"],
                 member_profile_url=profile_url,
                 company_url=company_url,
+                source_post_url=post_url,
                 candidate_id=candidate_id,
                 live_state=selected.live_connection_state,
                 now=now,
@@ -266,13 +266,13 @@ def record_company_post_evaluation(
                     "final_outcome": None,
                     "created_at": timestamp,
                 }
-                markdown_path, json_path = _persist_candidate_card(run_dir, card)
+                markdown_path, json_path = persist_candidate_card(run_dir, card)
                 state.setdefault("candidate_ids", []).append(candidate_id)
                 state.setdefault("files", {}).setdefault("candidate_cards", []).extend([str(markdown_path), str(json_path)])
                 output_paths.extend([str(markdown_path), str(json_path)])
                 evaluation["candidate_outcome"] = "candidate_reserved"
                 evaluation["selected_member"] = card["selected_member"]
-                message = _render_candidate_card(card)
+                message = render_candidate_card(card)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(evaluation, ensure_ascii=False) + "\n")
     state["updated_at"] = timestamp
@@ -303,35 +303,9 @@ def _role_rank(title: str) -> int | None:
     return None
 
 
-def _persist_candidate_card(run_dir: Path, card: dict[str, Any]) -> tuple[Path, Path]:
-    candidate_dir = run_dir / "candidates"
-    candidate_dir.mkdir(parents=True, exist_ok=True)
-    json_path = candidate_dir / f"{card['candidate_id']}.json"
-    markdown_path = candidate_dir / f"{card['candidate_id']}.md"
-    _write_json_atomic(json_path, card)
-    markdown_path.write_text(_render_candidate_card(card), encoding="utf-8")
-    return markdown_path, json_path
-
-
-def _render_candidate_card(card: dict[str, Any]) -> str:
-    member = card["selected_member"]
-    company = card["company"]
-    return "\n".join(
-        [
-            f"## 候选卡：{member['name']}",
-            "",
-            f"- 来源关键词：{card['source_keyword']}",
-            f"- 贴文：{card['post_text']}",
-            f"- 贴文 URL：{card['post_url']}",
-            f"- 相关理由：{card['relevance_reason']}",
-            f"- 作者：{card['author']['name']}（个人）",
-            f"- 公司：{company['name']}",
-            f"- 联系人：{member['name']}",
-            f"- 职位：{member['title']}",
-            f"- Profile：{member['profile_url']}",
-            f"- 审核状态：{card['approval']}",
-            f"- 留言决策：{card['note_decision']}",
-            f"- 最终结果：{card['final_outcome']}",
-            "",
-        ]
-    )
+def _ensure_discovery_capacity(state: dict[str, Any]) -> None:
+    effective_limit = int((state.get("capacity_at_account_binding") or {}).get("effective_limit") or 0)
+    requested_limit = int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
+    limit = effective_limit or requested_limit
+    if len(state.get("candidate_ids") or []) >= limit:
+        raise ValueError(f"候选数量已经达到本次有效上限 {limit}；必须结束发现阶段，不能继续打开贴文。")

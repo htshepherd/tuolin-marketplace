@@ -49,10 +49,24 @@ def bind_linkedin_account(
         raise ValueError("无法读取当前 LinkedIn 会员姓名或 profile URL，不能绑定账号。")
     if not observation.dedicated_tab_group:
         raise ValueError("LinkedIn 搜索必须在专用 Codex Chrome 任务标签组中进行。")
+    restart_source = state.get("restart_source") or {}
+    if restart_source and profile_url != restart_source.get("account_profile_url"):
+        raise ValueError("Authorized Dispatch Restart 必须重新绑定源运行使用的同一个 LinkedIn 账号。")
     timestamp = _timestamp(now)
-    from .ledger import acquire_account_run_lock, release_account_run_lock, rolling_capacity
+    from .ledger import acquire_account_run_lock, release_account_run_lock, rolling_capacity, transfer_run_reservations
 
     lock_path = acquire_account_run_lock(run_dir, profile_url, now=now)
+    if restart_source:
+        try:
+            transfer_run_reservations(
+                Path(restart_source["run_dir"]),
+                run_dir,
+                profile_url,
+                list(restart_source.get("candidate_ids") or []),
+            )
+        except Exception:
+            release_account_run_lock(run_dir, profile_url)
+            raise
     state["account_binding"] = {
         "member_name": name,
         "profile_url": profile_url,
@@ -60,7 +74,7 @@ def bind_linkedin_account(
         "browser_surface": "official_codex_chrome_extension",
     }
     state["browser_authorization"] = {
-        "scope": "readonly_linkedin_post_discovery",
+        "scope": "restart_candidate_review" if restart_source else "readonly_linkedin_post_discovery",
         "confirmed": True,
         "confirmed_at": timestamp,
     }
@@ -73,6 +87,7 @@ def bind_linkedin_account(
         "requested_limit": requested_limit,
         "effective_limit": effective_limit,
         "manual_linkedin_actions_counted": False,
+        "next_phase": "awaiting_candidate_batch_review" if state.get("restart_source") else "awaiting_first_posts_search",
     }
     if effective_limit <= 0:
         state["status"] = "blocked_rolling_capacity"
@@ -83,11 +98,12 @@ def bind_linkedin_account(
         state["phase"] = "awaiting_effective_limit_confirmation"
     else:
         state["status"] = "linkedin_account_bound"
-        state["phase"] = "awaiting_first_posts_search"
+        state["phase"] = state["capacity_at_account_binding"]["next_phase"]
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)
-    _append_change(run_dir, timestamp, f"绑定 LinkedIn 账号：{name} ({profile_url})；授权范围=只读贴文发现。")
+    scope_label = "重启候选审核" if restart_source else "只读贴文发现"
+    _append_change(run_dir, timestamp, f"绑定 LinkedIn 账号：{name} ({profile_url})；授权范围={scope_label}。")
     return LinkedInSearchStepResult(
         run_dir=str(run_dir),
         workflow_state_path=str(state_path),
@@ -102,7 +118,11 @@ def bind_linkedin_account(
                 else (
                     f"请求上限 {requested_limit} 已降为有效上限 {effective_limit}；必须确认后才能搜索。"
                     if effective_limit < requested_limit
-                    else "下一步按已确认的第一个关键词执行 Posts 搜索。"
+                    else (
+                        "下一步重新审核重启任务保留的候选；不会重新搜索。"
+                        if restart_source
+                        else "下一步按已确认的第一个关键词执行 Posts 搜索。"
+                    )
                 )
             )
         ),
@@ -123,7 +143,7 @@ def confirm_effective_limit(
     timestamp = _timestamp(now)
     state["capacity_at_account_binding"]["confirmed_at"] = timestamp
     state["status"] = "linkedin_account_bound"
-    state["phase"] = "awaiting_first_posts_search"
+    state["phase"] = state["capacity_at_account_binding"].get("next_phase") or "awaiting_first_posts_search"
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)
@@ -134,7 +154,11 @@ def confirm_effective_limit(
         state["status"],
         state["phase"],
         (str(state_path),),
-        f"已确认本次有效上限 {effective}；可以开始第一个关键词的 Posts 搜索。",
+        (
+            f"已确认本次有效上限 {effective}；可以审核重启任务中的剩余候选。"
+            if state["phase"] == "awaiting_candidate_batch_review"
+            else f"已确认本次有效上限 {effective}；可以开始第一个关键词的 Posts 搜索。"
+        ),
     )
 
 
@@ -265,7 +289,10 @@ def finish_current_keyword(
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能结束当前关键词。")
     progress = dict(state.get("search_progress") or {})
     opened = int(progress.get("opened_post_count") or 0)
-    if not exhausted and opened < 50:
+    candidate_count = len(state.get("candidate_ids") or [])
+    effective_limit = int((state.get("capacity_at_account_binding") or {}).get("effective_limit") or 0)
+    discovery_limit = effective_limit or int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
+    if not exhausted and opened < 50 and candidate_count < discovery_limit:
         raise ValueError("当前关键词未耗尽且尚未达到 50 条打开贴文上限，不能提前切换关键词。")
     timestamp = _timestamp(now)
     completed = state.setdefault("completed_keywords", [])
@@ -279,13 +306,11 @@ def finish_current_keyword(
     )
     keywords = list(progress.get("ordered_keywords") or [])
     next_index = int(progress.get("current_keyword_index") or 0) + 1
-    candidate_count = len(state.get("candidate_ids") or [])
-    requested_limit = int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
-    if candidate_count >= requested_limit or next_index >= len(keywords):
+    if candidate_count >= discovery_limit or next_index >= len(keywords):
         state["status"] = "completed_no_candidates" if candidate_count == 0 else "candidate_discovery_complete"
         state["phase"] = "completed" if candidate_count == 0 else "awaiting_candidate_batch_review"
         state["pending_keyword"] = None
-        reason = "candidate_limit_reached" if candidate_count >= requested_limit else "all_keywords_exhausted"
+        reason = "candidate_limit_reached" if candidate_count >= discovery_limit else "all_keywords_exhausted"
         state["discovery_stop_reason"] = reason
         message = f"候选发现已结束：{reason}；实际候选 {candidate_count} 人。不会自动扩词或找补。"
         if candidate_count == 0:
@@ -322,7 +347,8 @@ def normalize_linkedin_url(value: str) -> str:
     if not text:
         return ""
     parts = urlsplit(text)
-    if parts.scheme not in {"http", "https"} or not parts.netloc.casefold().endswith("linkedin.com"):
+    hostname = (parts.hostname or "").casefold()
+    if parts.scheme not in {"http", "https"} or not (hostname == "linkedin.com" or hostname.endswith(".linkedin.com")):
         raise ValueError("LinkedIn URL 必须使用 linkedin.com 的 http/https 地址。")
     path = "/" + "/".join(segment for segment in parts.path.split("/") if segment)
     if path == "/":
