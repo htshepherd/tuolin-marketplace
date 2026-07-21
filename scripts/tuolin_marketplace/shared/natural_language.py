@@ -23,6 +23,7 @@ from ..linkedin.agent import (
     prepare_linkedin_image_generation,
     repair_linkedin_manual_package_structure,
 )
+from ..linkedin_search.agent import create_linkedin_search_run, is_linkedin_search_request
 from ..kb.partitions import PARTITIONS, PartitionSummary, find_partition, scan_all_partitions, scan_partition
 from ..kb.partition_organizer import organize_partition
 from .project_layout import ProjectPaths
@@ -105,6 +106,10 @@ def route_natural_language(
     )
     if video_profile_response is not None:
         return video_profile_response
+
+    linkedin_search_response = _linkedin_search_response(paths, utterance)
+    if linkedin_search_response is not None:
+        return linkedin_search_response
 
     linkedin_response = _linkedin_response(paths, utterance)
     if linkedin_response is not None:
@@ -981,6 +986,53 @@ def _recommend_next_response(paths: ProjectPaths) -> NaturalLanguageResponse:
         ),
         copyable_reply=_copyable_for(best),
         details=_summary_detail(best),
+    )
+
+
+def _linkedin_search_response(paths: ProjectPaths, utterance: str) -> NaturalLanguageResponse | None:
+    if not is_linkedin_search_request(utterance):
+        return None
+    try:
+        result = create_linkedin_search_run(paths, utterance)
+    except (RuntimeError, ValueError, FileExistsError, OSError) as exc:
+        return NaturalLanguageResponse(
+            intent="linkedin_search_blocked",
+            executed=False,
+            needs_confirmation=False,
+            message=f"无法创建 LinkedIn 搜索任务：{exc}",
+        )
+    if result.status == "blocked":
+        return NaturalLanguageResponse(
+            intent="linkedin_search_blocked",
+            executed=True,
+            needs_confirmation=False,
+            message=(
+                f"LinkedIn 搜索任务已记录为 blocked：{result.message}"
+                f"运行目录：{result.run_dir}。当前不能进入搜索访谈。"
+            ),
+            copyable_reply="请明确一个已整理的拓霖正式产品后重新开始 LinkedIn 搜索任务。",
+            details=result.to_dict(),
+        )
+    interview_complete = result.phase == "awaiting_browser_account_binding"
+    return NaturalLanguageResponse(
+        intent="linkedin_search_brief_confirmed" if interview_complete else "linkedin_search_interview",
+        executed=True,
+        needs_confirmation=True,
+        message=(
+            f"已创建独立 LinkedIn 搜索任务并绑定正式产品：{result.product_id}。"
+            f"运行目录：{result.run_dir}。"
+            + (
+                "搜索简报已完整；下一步需要授权绑定已登录的 Chrome LinkedIn 账号。"
+                if interview_complete
+                else f"{result.message} 当前尚未操作浏览器或发送邀请。"
+            )
+        ),
+        copyable_reply=(
+            "允许绑定当前 Chrome 中已登录的 LinkedIn 账号。"
+            if interview_complete
+            else "继续 LinkedIn 搜索访谈。"
+        ),
+        details=result.to_dict(),
     )
 
 

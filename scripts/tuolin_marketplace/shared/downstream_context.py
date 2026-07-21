@@ -16,6 +16,13 @@ TASK_TYPES = {
         "audience": "external",
         "card_types": ["product", "application_scenario", "sales_material", "content_asset"],
     },
+    "linkedin_search": {
+        "audience": "external",
+        "card_types": ["product", "application_scenario", "sales_material"],
+        "allowed_external_scopes": ["external_allowed"],
+        "no_keyword_expansion": True,
+        "market_terms_search_only": True,
+    },
     "outreach_email": {"audience": "external", "card_types": ["product", "application_scenario", "sales_material"]},
     "follow_up_email": {"audience": "external", "card_types": ["product", "sales_material", "customer_question"]},
     "video_creation": {
@@ -115,6 +122,7 @@ def build_downstream_context(
             "contexts_are_formal_knowledge": False,
             "content_assets_prove_product_facts": False,
             "no_keyword_expansion": bool(config.get("no_keyword_expansion", False)),
+            "market_terms_search_only": bool(config.get("market_terms_search_only", False)),
             "fixed_product_scope": fixed_product_id,
             "fixed_product_alias_ids": product_alias_ids,
         },

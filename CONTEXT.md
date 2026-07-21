@@ -4,6 +4,242 @@ This context describes the business language for Tuolin's local knowledge agents
 
 ## Language
 
+**Automated LinkedIn Prospecting Run**:
+A user-authorized workflow that applies confirmed targeting criteria to discover LinkedIn members, review their relevance, and send a bounded number of connection invitations.
+_Avoid_: LinkedIn campaign publishing, “adding friends,” claiming the workflow is authorized by LinkedIn
+
+**LinkedIn Discovery Candidate**:
+A LinkedIn member whose visible professional information appears to match the current targeting criteria but whose commercial relevance has not yet been confirmed.
+_Avoid_: customer, qualified lead, confirmed competitor
+
+**Connection Invitation**:
+An outbound LinkedIn request to connect with one discovery candidate, which remains pending until the recipient accepts it.
+_Avoid_: friend addition, confirmed connection, customer acquisition
+
+**Account-Risk Acceptance**:
+The current Codex operator's explicit acknowledgement that automated LinkedIn activity may cause platform restrictions and their decision to proceed despite that risk.
+_Avoid_: LinkedIn authorization, undetectability guarantee, blanket approval for every future run
+
+**Prospecting Run Authorization**:
+The current Codex operator's explicit approval for one prospecting run after reviewing its account, targeting criteria, target type, action limit, and planned external actions.
+_Avoid_: standing authorization, approval inherited by a later run, browser login alone
+
+**Prospecting Target Intent**:
+The single business purpose of a prospecting run, currently either potential-customer discovery or competitor-intelligence discovery.
+_Avoid_: mixing customers and competitors in one run, treating every keyword match as both
+
+**First-Release Evaluation Boundary**:
+The first release is evaluated by whether it can complete the agreed LinkedIn discovery and connection workflow, while candidate-fit accuracy and optimization metrics are deferred.
+_Avoid_: lead-quality KPIs, acceptance-rate optimization, blocking the first release on targeting precision
+
+**Invitation Dispatch Success**:
+The LinkedIn interface has confirmed that one connection invitation was submitted, regardless of whether the recipient later accepts it.
+_Avoid_: profile visit, connect-button click without confirmation, accepted connection
+
+**Post-First Prospect Discovery**:
+A discovery path that searches LinkedIn posts with confirmed content keywords, inspects people surfaced by those posts, and opens their profiles before considering a connection invitation.
+_Avoid_: people-search-first discovery, treating a matching post as proof that its author is a customer
+
+**Same-Category Channel Prospect**:
+A brand, distributor, or retailer that promotes or sells the target product category and may source, resell, or private-label products from an external supplier.
+_Avoid_: automatically excluding every same-category seller as a competitor, assuming external sourcing without profile or company context
+
+**Company Contact Resolution**:
+The conversion of a qualifying company-authored post into at most one connectable member, prioritized by Owner or Founder, Procurement or Sourcing, Managing Director or General Manager, then Product Manager.
+_Avoid_: connecting to a company page, inviting multiple employees from the same company in one run, choosing an arbitrary employee, expanding the role set during a run
+
+**Prospecting Contact Ledger**:
+The persistent cross-run record of discovered post, company, and member identities together with invitation state and retry eligibility.
+_Avoid_: run-local deduplication only, using display names as identity, treating a page-load failure as a sent invitation
+
+**Prospecting Interview**:
+A one-question-at-a-time conversation with the current operator that resolves only the missing business decisions for one prospecting run.
+_Avoid_: a fixed form, asking implementation questions, inheriting unresolved choices from an earlier run
+
+**Confirmed Prospecting Brief**:
+The reviewed output of a prospecting interview containing the run's content keywords, supported post-search criteria, target intent, successful-invitation limit, invitation-note decision, and invitation-dispatch interval.
+_Avoid_: standing campaign configuration, an unconfirmed chat summary, implementation settings
+
+**Invitation Note Decision**:
+The operator's per-run choice to send no note or to use one explicitly confirmed fixed note for the entire approved candidate batch.
+_Avoid_: a permanently hard-coded note policy, unreviewed generated outreach copy, per-candidate variation
+
+**Supported Post Search Criteria**:
+The interview decisions that map to controls exposed by LinkedIn post search, including keywords, sort order, publication date, content type, source member or company, publisher relationship, mentioned member or company, author industry, author company, and author-title keywords.
+_Avoid_: collecting a criterion the post-search interface cannot apply, browser implementation settings
+
+**Core Post Search Criteria**:
+The three post-search decisions always resolved for a run: content keywords, sort order, and publication-date range.
+_Avoid_: forcing every optional LinkedIn filter into every interview
+
+**Ordered Content Keyword List**:
+One or more operator-confirmed post-search terms processed in their stated order, with each discovered candidate retaining its source keyword.
+_Avoid_: an unordered keyword set, merging all terms into an unreviewed query, losing discovery provenance
+
+**Successful Invitation Limit**:
+The maximum number of invitation-dispatch successes authorized across all keywords in one prospecting run.
+_Avoid_: a per-keyword quota, attempted-click count, a target that permits exceeding the authorization
+
+**Default Run Invitation Limit**:
+Ten successful invitation dispatches, presented as the interview recommendation when the operator did not specify a run limit.
+_Avoid_: an official LinkedIn safety limit, a quota that must be filled, overriding an explicit operator limit
+
+**Seven-Day Invitation Ceiling**:
+The local account-scoped rule that the rolling one-hundred-sixty-eight hours before each proposed dispatch may contain no more than one hundred recorded invitation-dispatch successes across prospecting runs.
+_Avoid_: claiming it is a current official LinkedIn limit, resetting it per keyword or per run, claiming manually sent invitations are counted
+
+**Effective Run Invitation Limit**:
+The lesser of the operator-requested or default run limit and the remaining skill-recorded capacity under the seven-day invitation ceiling, shown explicitly in the brief.
+_Avoid_: silent reduction, exceeding remaining capacity, starting discovery when the effective limit is zero
+
+**Search Exhaustion Completion**:
+The normal completion of a run when every confirmed keyword has no remaining eligible candidates, even though the successful-invitation limit was not reached.
+_Avoid_: repeating old results, silently loosening filters, inventing new keywords to fill the limit
+
+**Post Sort Decision**:
+The operator's per-run selection of Latest or Most Relevant, with Latest presented as the interview recommendation.
+_Avoid_: a hidden fixed sort, changing sort during a run without new authorization
+
+**Candidate Review Card**:
+A Codex-visible and run-persisted Markdown-and-JSON pre-dispatch summary containing the source keyword, post content and URL, post-relevance reason, post author or company, selected member name, title, company, profile URL, approval state, invitation-note decision, and final dispatch outcome.
+_Avoid_: an unexplained profile URL, a lead-quality score, sending before the card is shown
+
+**Pre-Dispatch Candidate Review**:
+The human confirmation gate after candidate discovery and before any connection invitation is submitted.
+_Avoid_: treating run authorization as approval of unseen candidates, confirming after dispatch
+
+**Approved Candidate Batch**:
+The operator-confirmed subset of displayed candidate review cards that may proceed to sequential invitation dispatch in the current run.
+_Avoid_: approving undisplayed candidates, adding candidates after confirmation, treating the batch as already contacted
+
+**Invitation Dispatch Interval**:
+The operator-confirmed minimum elapsed time enforced between two consecutive invitation submissions in one run, with five minutes presented as the interview recommendation.
+_Avoid_: simultaneous dispatch, hidden pacing, claiming an interval guarantees freedom from platform restriction
+
+**Closed Candidate Batch**:
+An approved candidate batch whose rejected or skipped members are not replaced by further discovery within the same run.
+_Avoid_: automatic backfilling, silently extending the batch, reopening discovery after dispatch begins
+
+**Final Batch Dispatch Authorization**:
+The operator's confirmation of the exact LinkedIn account, approved member list, invitation-note decision, and dispatch interval immediately before sequential invitation submission begins.
+_Avoid_: per-member repeated prompts, authorization before candidates are known, changing the batch after approval
+
+**Bound LinkedIn Account**:
+The authenticated member identity, represented by displayed name and profile URL, that the operator confirms for exactly one prospecting run.
+_Avoid_: any logged-in account, credentials as identity, silently continuing after an account switch
+
+**Keyword Post Inspection Limit**:
+The fixed first-release ceiling of fifty inspected posts for each content keyword before discovery advances to the next keyword.
+_Avoid_: an interview field, unbounded scrolling, counting unopened search-result placeholders as inspected posts
+
+**Post Relevance Decision**:
+A binary Continue or Skip judgment with one visible-content reason stating whether a keyword-matched post concerns selling, promoting, distributing, or branding the target product category.
+_Avoid_: a lead score, unsupported commercial inference, accepting a post from keyword presence alone
+
+**Individual Post Author Candidate**:
+The member who authored a relevant post and whose profile shows that they represent the related brand, distributor, or retailer.
+_Avoid_: replacing every individual author with a higher-ranking colleague, accepting an unrelated personal account
+
+**Standard Connect Eligibility**:
+The presence of LinkedIn's ordinary connection-invitation path for a member without requiring guessed email addresses, alternate outreach actions, or extra identity data.
+_Avoid_: Follow or Message as a substitute, guessed contact data, bypassing an additional verification step
+
+**Candidate-Local Dispatch Failure**:
+An invitation failure attributable to one member's current page or connection state that is recorded before dispatch continues with the next approved member.
+_Avoid_: treating an account restriction as local, counting the item as a dispatch success
+
+**Platform-Level Dispatch Stop**:
+The immediate termination of the remaining approved batch after an account restriction, security challenge, CAPTCHA, lost authentication, or repeated unexplained dispatch errors.
+_Avoid_: continuing after a platform warning, silently treating unexecuted members as failures
+
+**Authorized Dispatch Restart**:
+A new prospecting run that rechecks the account and preserved unexecuted candidates and obtains a new final batch dispatch authorization after a prior platform-level stop.
+_Avoid_: automatic resume, reusing expired authorization, treating unexecuted members as already approved for a later session
+
+**Prospecting Run Directory**:
+The isolated generated report directory that stores one run's confirmed brief, workflow state, candidate review batch, dispatch outcomes, and completion receipt.
+_Avoid_: formal knowledge storage, a shared mutable folder for multiple runs, chat-only state
+
+**Operational Prospecting Data**:
+LinkedIn discovery and invitation records maintained for run continuity and deduplication without becoming formal market-intelligence knowledge.
+_Avoid_: automatic write-back to `knowledge/okf`, approved customer fact, campaign publishing content
+
+**Tuolin LinkedIn Search Skill**:
+The dedicated application-layer skill named `tuolin-linkedin-search` that interviews operators, discovers post-based prospects, presents candidate batches, and dispatches authorized connection invitations.
+_Avoid_: extending the LinkedIn campaign-publishing skill, formal knowledge maintenance, automatic post publishing
+
+**Hybrid Prospecting Implementation**:
+The implementation boundary in which the skill owns interview and browser orchestration, deterministic scripts own run state and ledgers, and Codex's managed browser capability owns visible website interaction.
+_Avoid_: chat-only state, scripts making unreviewed external actions, a repository-owned stealth browser daemon
+
+**Codex Chrome Prospecting Surface**:
+The official Codex Chrome extension operating a dedicated task tab group inside the operator's existing signed-in Chrome profile.
+_Avoid_: the built-in Browser profile for the first release, a repository-launched headless browser, requiring full CDP for ordinary interaction
+
+**Product-Grounded LinkedIn Search**:
+A keyword-driven prospecting run bound to one existing Tuolin product and intended to discover channel prospects that may support sales of that product.
+_Avoid_: a generic cross-industry people finder, hard-coding exhaust wrap, inventing a product outside the Tuolin knowledge interface
+
+**Bound Prospecting Product**:
+The single official Tuolin product resolved through the verified Agent interface and confirmed before a prospecting interview collects search criteria.
+_Avoid_: free-text product identity, multiple products in one run, guessing when resolution fails
+
+**Product Keyword Recommendation**:
+An ordered set of English post-search terms proposed from the bound product's official name, approved external names, and confirmed application terms and withheld from search until the operator confirms or edits it.
+_Avoid_: unconfirmed query expansion, invented product naming, treating a recommendation as authorization
+
+**Default Keyword Language**:
+English, used for AI-generated product keyword recommendations without adding a separate language question to the first-release interview.
+_Avoid_: an abstract post-language filter, silently translating operator-supplied terms, asking for language by default
+
+**AI Invitation Note Draft**:
+A short English connection-invitation note grounded in the bound product and search purpose, written without exaggeration or aggressive selling and withheld until the operator confirms or edits it.
+_Avoid_: unsupported product claims, per-candidate rewriting, automatic dispatch of draft text
+
+**Invitation Note Availability Conflict**:
+The runtime condition in which an authorized batch requires a note but LinkedIn does not expose or permit the Add a note path.
+_Avoid_: silently dropping the note, substituting a message or InMail, continuing under stale authorization
+
+**Operator-Started Prospecting Run**:
+A prospecting task created by an operator's natural-language request and never by an unattended daily schedule.
+_Avoid_: cron-like daily dispatch, standing browser authorization, interpreting a prior daily limit as permission for a later run
+
+**Interrupted Dispatch Recovery**:
+The resumption of a non-platform-stopped run after account revalidation, last-action reconciliation, remaining-batch redisplay, and renewed final dispatch authorization.
+_Avoid_: blind continuation, new candidate discovery, batch backfilling, reuse after a platform-level stop
+
+**Contact Eligibility Reconciliation**:
+The pre-card and pre-dispatch comparison of a normalized member profile identity against the shared contact ledger and the member's live LinkedIn connection state.
+_Avoid_: trusting only run-local state, display-name identity, showing pending or connected members as new candidates
+
+**Account-Scoped Active Run Lock**:
+The exclusive first-release lock allowing only one active prospecting run for a bound LinkedIn account at a time.
+_Avoid_: same-account parallel discovery, independent interval timers, duplicate candidate reservations
+
+**LinkedIn Search Knowledge Context**:
+The `linkedin_search` downstream Agent-interface context that supplies official product identity, allowed external naming, application scenarios, and sales-use terms to the prospecting skill.
+_Avoid_: reusing `linkedin_post`, reading campaign outputs, scanning raw knowledge files
+
+**Operator-Supplied Market Search Term**:
+A user-confirmed keyword used only for LinkedIn post search and relevance matching even when it is absent from the formal product knowledge interface.
+_Avoid_: promoting the term into an official product name, product fact, or external claim
+
+**Interview Confirmation Reply**:
+The operator's plain-language confirmation of the current recommended answer after the Agent asks whether it is confirmed.
+_Avoid_: requiring “按推荐”, treating confirmation as approval of later unresolved questions, advancing without an explicit answer
+
+**Sequential Interview Confirmation**:
+The rule that every unresolved prospecting decision must be confirmed individually and that no first-release reply can approve all remaining questions at once.
+_Avoid_: “剩下都按推荐”, blanket interview completion, skipping unresolved decisions
+
+**Decision-Relevant Interview Question**:
+A missing business decision whose answer materially changes a supported search control, candidate-selection boundary, or external invitation action in the current run.
+_Avoid_: role verification, effect metrics, fixed internal limits, facts discoverable from code or page state, criteria the LinkedIn interface cannot apply
+
+**Prospecting Interview Question Format**:
+The consistent Chinese pattern of numbered question, one recommended answer with reason, and a final “是否确认？” prompt answered by the current Codex operator.
+_Avoid_: option menus, multiple decisions in one question, special acceptance commands
+
 **LinkedIn Campaign Plan**:
 A Chinese marketing strategy document that defines campaign positioning, audience, claims, content rhythm, and asset direction before daily post copy is produced.
 _Avoid_: treating it as the final 30-day post copy
@@ -514,6 +750,84 @@ A future, out-of-scope post-generation workflow for improving an unsatisfactory 
 _Avoid_: rewinding the initial planning state, silently replacing accepted generation records
 
 ## Relationships
+
+- An **Automated LinkedIn Prospecting Run** evaluates zero or more **LinkedIn Discovery Candidates**
+- An **Automated LinkedIn Prospecting Run** may send a bounded **Connection Invitation** to a selected **LinkedIn Discovery Candidate**
+- **Account-Risk Acceptance** is recorded from the current Codex operator and does not imply authorization from LinkedIn
+- Every **Automated LinkedIn Prospecting Run** requires exactly one **Prospecting Run Authorization**, which expires when that run ends
+- Every **Automated LinkedIn Prospecting Run** has exactly one **Prospecting Target Intent**
+- Potential-customer discovery may produce **Connection Invitations**; competitor-intelligence discovery is a separate workflow and does not send them by default
+- The **First-Release Evaluation Boundary** defers candidate-quality optimization without removing the run's confirmed targeting criteria
+- Only an **Invitation Dispatch Success** counts toward a run's completed connection-invitation total
+- The first release uses **Post-First Prospect Discovery** as its candidate source before profile inspection and invitation dispatch
+- A **Same-Category Channel Prospect** remains eligible for potential-customer discovery even when it already markets a competing product
+- A qualifying company-authored post requires **Company Contact Resolution** before a **Connection Invitation** can be sent
+- **Company Contact Resolution** that finds no member in the confirmed role priority ends with the company skipped, not an arbitrary fallback employee
+- The **Prospecting Contact Ledger** deduplicates post URLs, company-page URLs, and member-profile URLs across all runs
+- A member with a successful or pending invitation is ineligible for another invitation; a failed candidate is retryable only when no invitation was submitted
+- After one member from a company reaches **Invitation Dispatch Success**, other members of that company are ineligible in the first release
+- A **Prospecting Interview** produces exactly one **Confirmed Prospecting Brief**
+- A **Prospecting Run Authorization** may be granted only after the operator reviews the **Confirmed Prospecting Brief**
+- Every **Confirmed Prospecting Brief** includes one **Invitation Note Decision**
+- When a note is enabled, the same confirmed note is shown with and applied to every member of the **Approved Candidate Batch**
+- A **Confirmed Prospecting Brief** may contain only **Supported Post Search Criteria** for the discovery stage
+- Every **Confirmed Prospecting Brief** contains the **Core Post Search Criteria**; other supported filters are included only when the operator requests them or the current goal requires them
+- The content-keyword portion of the **Core Post Search Criteria** is an **Ordered Content Keyword List**
+- One run processes the **Ordered Content Keyword List** sequentially while the **Prospecting Contact Ledger** deduplicates candidates across keywords
+- The **Successful Invitation Limit** applies once to the whole run and stops further external invitation actions immediately when reached
+- The **Default Run Invitation Limit** supplies the recommendation only when the operator omitted a limit
+- Every run's **Successful Invitation Limit** is additionally bounded by the remaining capacity under the **Seven-Day Invitation Ceiling**
+- The **Seven-Day Invitation Ceiling** is recalculated immediately before every invitation submission and never resets on a calendar-week boundary
+- The **Seven-Day Invitation Ceiling** counts only dispatch successes recorded by the **Tuolin LinkedIn Search Skill**; the brief must disclose that manual LinkedIn invitations are untracked
+- The **Effective Run Invitation Limit** controls candidate-batch capacity and dispatch; an effective limit of zero blocks the run before browser discovery
+- A run may finish through **Search Exhaustion Completion** with fewer dispatches than its **Successful Invitation Limit**
+- Expanding criteria after **Search Exhaustion Completion** requires a new brief and a new run authorization
+- The **Core Post Search Criteria** contains exactly one **Post Sort Decision** shared by all keywords in the run
+- Every candidate proposed for invitation must have a **Candidate Review Card** shown during **Pre-Dispatch Candidate Review**
+- A **Connection Invitation** cannot be submitted until its candidate passes **Pre-Dispatch Candidate Review**
+- **Pre-Dispatch Candidate Review** produces exactly one **Approved Candidate Batch** for the run
+- Members of an **Approved Candidate Batch** are processed sequentially and every consecutive submission must respect the **Invitation Dispatch Interval**
+- Every **Confirmed Prospecting Brief** includes exactly one **Invitation Dispatch Interval** shared by the approved batch
+- The displayed candidate batch contains no more members than the **Successful Invitation Limit**
+- Once reviewed, the batch becomes a **Closed Candidate Batch**; its approved subset is dispatched and any further discovery requires a new run
+- **Pre-Dispatch Candidate Review** ends only when the operator grants **Final Batch Dispatch Authorization** or rejects the batch
+- After **Final Batch Dispatch Authorization**, the approved batch is dispatched sequentially without additional per-member confirmation
+- Every **Automated LinkedIn Prospecting Run** has exactly one **Bound LinkedIn Account**, shown before discovery and again at final batch authorization
+- Missing authentication, unresolvable identity, or a change to the **Bound LinkedIn Account** blocks the run; credentials and verification codes remain user-entered
+- **Post-First Prospect Discovery** inspects no more than the **Keyword Post Inspection Limit** for each keyword and then advances in list order
+- Reaching every keyword's inspection limit without filling the candidate batch leads to the existing actual-size batch, not broader automatic discovery
+- Each inspected post receives one **Post Relevance Decision** before its author or company can become a discovery candidate
+- News reposts, unrelated homonyms, ordinary consumer sharing, and obvious spam receive a Skip decision in the first release
+- An **Individual Post Author Candidate** proceeds directly to candidate review; **Company Contact Resolution** applies only to company-authored posts
+- Only a member with **Standard Connect Eligibility** may enter an **Approved Candidate Batch**
+- A member without **Standard Connect Eligibility** is skipped with a recorded reason and is not converted to another outreach action
+- A **Candidate-Local Dispatch Failure** records the member outcome and allows sequential dispatch to continue
+- A **Platform-Level Dispatch Stop** preserves separate lists of successful, skipped, failed, and unexecuted members and prevents all further invitation submissions in the run
+- Members left unexecuted by a **Platform-Level Dispatch Stop** may proceed only through an **Authorized Dispatch Restart**
+- Every run owns one **Prospecting Run Directory** under generated reports, while the **Prospecting Contact Ledger** is shared across run directories
+- **Operational Prospecting Data** remains outside formal knowledge; promotion into market intelligence requires a separate knowledge-base workflow
+- The **Tuolin LinkedIn Search Skill** owns prospecting runs and consumes browser and operational-ledger capabilities without changing the existing LinkedIn campaign-publishing boundary
+- The **Tuolin LinkedIn Search Skill** uses a **Hybrid Prospecting Implementation** rather than a prompt-only workflow
+- The first release performs website interaction through the **Codex Chrome Prospecting Surface** and requires its extension, website access, Chrome session, and bound LinkedIn identity to pass preflight
+- Every **Automated LinkedIn Prospecting Run** is a **Product-Grounded LinkedIn Search** that consumes one product from the verified Agent interface and uses operator-confirmed keywords around that product
+- Every **Product-Grounded LinkedIn Search** has exactly one **Bound Prospecting Product**; failed product resolution blocks the run and routes knowledge work to the knowledge-base agent
+- A **Product Keyword Recommendation** may seed the **Ordered Content Keyword List**, but only operator-confirmed terms enter the run brief
+- A **Product Keyword Recommendation** uses the **Default Keyword Language** unless the operator directly edits or supplies the final terms
+- When the **Invitation Note Decision** enables a note, an **AI Invitation Note Draft** must become fixed operator-confirmed text before it enters the brief
+- Dispatch uses the confirmed note byte-for-byte across the approved batch and cannot rewrite it during execution
+- An **Invitation Note Availability Conflict** pauses dispatch and requires the operator to authorize no-note dispatch or end the run
+- Every first-release run is an **Operator-Started Prospecting Run** and requires its own interview and authorizations
+- A non-platform interruption may use **Interrupted Dispatch Recovery**; the same run directory and closed candidate batch remain authoritative
+- **Contact Eligibility Reconciliation** runs before a **Candidate Review Card** is created and again immediately before dispatch
+- Sent, pending, first-degree-connected, reserved by another unfinished batch, or unresolved-ambiguous members are excluded; only confirmed no-dispatch failures remain retryable
+- Candidate cards persist as Markdown and JSON in the run directory; screenshots are retained only for explicit requests or disputed interface state, and browser secrets are never stored
+- The **Account-Scoped Active Run Lock** protects candidate reservation, contact-ledger updates, and dispatch pacing until the run completes or terminates
+- The **Tuolin LinkedIn Search Skill** consumes product knowledge only through the **LinkedIn Search Knowledge Context**
+- An **Ordered Content Keyword List** may contain an **Operator-Supplied Market Search Term**, with provenance retained and downstream claim use prohibited
+- Each unresolved **Prospecting Interview** question presents one recommendation and reason, ends by asking whether it is confirmed, and accepts one **Interview Confirmation Reply** for the current question only
+- **Sequential Interview Confirmation** applies until the brief is decision-sufficient; information already explicit in the initial request is not asked again
+- A **Prospecting Interview** may ask only a **Decision-Relevant Interview Question** and must render it in the **Prospecting Interview Question Format**
+- The system does not determine the operator's organizational role; an explicit confirmation in the current Codex conversation is sufficient
 
 - A **LinkedIn Campaign Plan** may receive zero or one **Marketing Plan Review** before daily post copy is generated.
 - A **LinkedIn Marketing Review Skill** performs the **Marketing Plan Review** for a LinkedIn campaign.
@@ -1056,6 +1370,171 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 
 ## Example Dialogue
 
+> **Dev:** "When the search finds someone whose profile mentions exhaust wrap, have we found a customer?"
+> **Domain expert:** "No. We have a **LinkedIn Discovery Candidate**; the workflow still needs evidence-based relevance checks before considering a **Connection Invitation**."
+
+> **Dev:** "Does the owner's **Account-Risk Acceptance** mean LinkedIn has authorized the automation?"
+> **Domain expert:** "No. It records the owner's business decision and account risk only; it is not platform permission or a guarantee against restriction."
+
+> **Dev:** "Can yesterday's browser approval authorize today's prospecting run?"
+> **Domain expert:** "No. Each **Automated LinkedIn Prospecting Run** needs a new **Prospecting Run Authorization** tied to its reviewed scope and action limit."
+
+> **Dev:** "Can one run search for customers and competitors with the same rules?"
+> **Domain expert:** "No. Choose one **Prospecting Target Intent**; the first release supports potential-customer discovery and keeps competitor intelligence separate."
+
+> **Dev:** "Must the first release prove lead quality with acceptance and error-rate metrics?"
+> **Domain expert:** "No. Under the **First-Release Evaluation Boundary**, first make the agreed connection workflow work; optimize candidate fit in a later version."
+
+> **Dev:** "Does a run wait until the recipient accepts the invitation?"
+> **Domain expert:** "No. The first release completes that item at **Invitation Dispatch Success**, when LinkedIn confirms the invitation was submitted."
+
+> **Dev:** "Does the first release search member profiles directly with product keywords?"
+> **Domain expert:** "No. Use **Post-First Prospect Discovery**: search relevant content first, then inspect the people surfaced by those posts."
+
+> **Dev:** "Should a brand promoting its own exhaust wrap be excluded as a competitor?"
+> **Domain expert:** "Not automatically. Treat it as a **Same-Category Channel Prospect** when it may buy, resell, or private-label externally supplied products."
+
+> **Dev:** "Can the workflow connect directly to a company page or invite several of its employees?"
+> **Domain expert:** "No. Use **Company Contact Resolution** to select at most one prioritized member from that company in the current run."
+
+> **Dev:** "May the workflow pick any employee when none of the prioritized roles exist?"
+> **Domain expert:** "No. Skip that company; changing the eligible role set belongs to a later version or newly scoped run."
+
+> **Dev:** "Can tomorrow's run process the same profile under a different keyword?"
+> **Domain expert:** "No. Consult the **Prospecting Contact Ledger**; skip successful and pending invitations across runs, and retry only when no invitation was actually submitted."
+
+> **Dev:** "Does the first release always send invitations without a note?"
+> **Domain expert:** "No. The current operator makes an **Invitation Note Decision** during the **Prospecting Interview**, and reviews it in the **Confirmed Prospecting Brief** before authorizing the run."
+
+> **Dev:** "May the workflow rewrite the invitation note for each candidate?"
+> **Domain expert:** "No. The first release uses either no note or one fixed, operator-confirmed note for the whole **Approved Candidate Batch**."
+
+> **Dev:** "Should the interview ask which customer region to search?"
+> **Domain expert:** "Not in the first release. Geography does not map to the post-search controls, so collect only **Supported Post Search Criteria**."
+
+> **Dev:** "Must the operator answer every filter shown by LinkedIn before a run can start?"
+> **Domain expert:** "No. Resolve the **Core Post Search Criteria** every time and ask about other supported filters only when they are relevant."
+
+> **Dev:** "Can one run search exhaust wrap and silencer wrap?"
+> **Domain expert:** "Yes. Put them in an **Ordered Content Keyword List**, search them sequentially, and retain the source keyword on every discovered candidate."
+
+> **Dev:** "If a run has three keywords and a limit of ten, may it send thirty invitations?"
+> **Domain expert:** "No. The **Successful Invitation Limit** is global; stop after ten confirmed dispatches across all keywords."
+
+> **Dev:** "What invitation limit should the interview recommend when the operator gives none?"
+> **Domain expert:** "Recommend the **Default Run Invitation Limit** of ten, while still enforcing the separate **Seven-Day Invitation Ceiling**."
+
+> **Dev:** "Does the one-hundred-invitation ceiling reset every Monday?"
+> **Domain expert:** "No. Recalculate the **Seven-Day Invitation Ceiling** over the rolling one-hundred-sixty-eight hours before each dispatch."
+
+> **Dev:** "Does the local seven-day count include invitations an employee sent manually?"
+> **Domain expert:** "No. The first release counts only skill-recorded dispatch successes and discloses that manual invitations remain outside the count."
+
+> **Dev:** "May a requested ten-person run proceed when only four local seven-day slots remain?"
+> **Domain expert:** "Only after the brief shows an **Effective Run Invitation Limit** of four and the operator confirms that explicit reduction."
+
+> **Dev:** "Must the workflow loosen filters until it fills the invitation limit?"
+> **Domain expert:** "No. Use **Search Exhaustion Completion** and report the actual dispatch count; broader criteria require a newly authorized run."
+
+> **Dev:** "Which post ordering should the interview recommend?"
+> **Domain expert:** "Recommend Latest in the **Post Sort Decision** to favor active same-category sellers, while allowing the operator to choose Most Relevant."
+
+> **Dev:** "May the workflow send invitations immediately after it finds a matching post?"
+> **Domain expert:** "No. Print a **Candidate Review Card** in Codex and wait at the **Pre-Dispatch Candidate Review** gate before any invitation is submitted."
+
+> **Dev:** "Does approving ten candidates mean ten invitations may be submitted at once?"
+> **Domain expert:** "No. The **Approved Candidate Batch** is dispatched sequentially, with the confirmed **Invitation Dispatch Interval** between submissions."
+
+> **Dev:** "Is the invitation interval hidden or permanently fixed by the program?"
+> **Domain expert:** "No. The operator confirms it for every run, with five minutes shown as the recommendation in the **Prospecting Interview**."
+
+> **Dev:** "If the operator rejects three of ten candidates, should the run find three replacements?"
+> **Domain expert:** "No. Use a **Closed Candidate Batch**, dispatch only the approved remainder, and create a new run for further discovery."
+
+> **Dev:** "Must the operator confirm again before every approved member is contacted?"
+> **Domain expert:** "No. **Final Batch Dispatch Authorization** covers the exact displayed batch, account, note decision, and interval; then dispatch proceeds sequentially."
+
+> **Dev:** "Can the run use whichever LinkedIn account happens to be logged in?"
+> **Domain expert:** "No. Confirm one **Bound LinkedIn Account** by name and profile URL, and block if authentication is missing or the account changes."
+
+> **Dev:** "Should the workflow scroll indefinitely until it fills the candidate batch?"
+> **Domain expert:** "No. Apply the **Keyword Post Inspection Limit** of fifty opened posts, then advance to the next keyword or finish with the candidates found."
+
+> **Dev:** "Does a matching hashtag automatically make the post a prospect source?"
+> **Domain expert:** "No. Record a **Post Relevance Decision** from the visible content and continue only when the post concerns commercial activity around the target category."
+
+> **Dev:** "Should a relevant individual author be replaced by a higher-ranking employee from the same company?"
+> **Domain expert:** "No. Use the verified **Individual Post Author Candidate** directly; search employees only when the post author is a company page."
+
+> **Dev:** "May the workflow guess an email when LinkedIn requires one before connecting?"
+> **Domain expert:** "No. That member lacks **Standard Connect Eligibility** for the first release; record the reason and skip."
+
+> **Dev:** "Should one missing Connect button terminate the whole batch?"
+> **Domain expert:** "No. Record a **Candidate-Local Dispatch Failure** and continue; terminate only for a **Platform-Level Dispatch Stop** signal."
+
+> **Dev:** "May dispatch resume automatically after the operator completes a security check?"
+> **Domain expert:** "No. End the current run as incomplete and require an **Authorized Dispatch Restart** with fresh account and batch confirmation."
+
+> **Dev:** "Should a discovered LinkedIn profile be written directly into the formal potential-customer knowledge folder?"
+> **Domain expert:** "No. Keep it as **Operational Prospecting Data** in generated reports; formal market-intelligence write-back belongs to the knowledge-base workflow."
+
+> **Dev:** "Should post-based prospect discovery be added to the existing LinkedIn campaign skill?"
+> **Domain expert:** "No. Keep publishing manual and create the dedicated **Tuolin LinkedIn Search Skill** for browser-based discovery and authorized invitations."
+
+> **Dev:** "Should the skill keep its workflow state only in chat or launch its own hidden browser daemon?"
+> **Domain expert:** "Neither. Use the **Hybrid Prospecting Implementation**: scripts persist deterministic state while Codex's managed browser performs visible, authorized page interaction."
+
+> **Dev:** "Should the first release sign in again inside the built-in Browser profile?"
+> **Domain expert:** "No. Use the **Codex Chrome Prospecting Surface** to operate a dedicated task tab group in the already signed-in Chrome profile."
+
+> **Dev:** "Is `tuolin-linkedin-search` a generic LinkedIn search tool for any industry?"
+> **Domain expert:** "No. It is generic across Tuolin products: every run is a **Product-Grounded LinkedIn Search** whose keywords support that product's sales goal."
+
+> **Dev:** "May the search start from an unrecognized free-text product name?"
+> **Domain expert:** "No. Resolve and confirm one **Bound Prospecting Product** through the verified Agent interface or stop for knowledge-base work."
+
+> **Dev:** "May AI search every synonym it can think of for the product?"
+> **Domain expert:** "No. Present a **Product Keyword Recommendation** and search only the terms the operator confirms into the ordered list."
+
+> **Dev:** "Must the interview ask which language to use for keyword recommendations?"
+> **Domain expert:** "No. Use the English **Default Keyword Language** and let the operator edit the concrete ordered terms if needed."
+
+> **Dev:** "May the Agent personalize the invitation note while dispatching each candidate?"
+> **Domain expert:** "No. Confirm or edit one **AI Invitation Note Draft** before the brief is finalized, then use that fixed text for the whole approved batch."
+
+> **Dev:** "May dispatch silently omit the note when LinkedIn no longer offers Add a note?"
+> **Domain expert:** "No. Treat it as an **Invitation Note Availability Conflict** and obtain a new explicit decision before further dispatch."
+
+> **Dev:** "Should yesterday's task automatically start again today?"
+> **Domain expert:** "No. The first release uses an **Operator-Started Prospecting Run** created through a new natural-language request each time."
+
+> **Dev:** "Can a disconnected Chrome session blindly continue with the next invitation?"
+> **Domain expert:** "No. Use **Interrupted Dispatch Recovery** to reconcile the last action and reauthorize the exact remaining batch first."
+
+> **Dev:** "Can a profile found under a new keyword appear again after an invitation was sent yesterday?"
+> **Domain expert:** "No. **Contact Eligibility Reconciliation** excludes it through the shared ledger and the live Pending or connected state before any candidate card is created."
+
+> **Dev:** "Can two tasks dispatch for the same LinkedIn account at the same time?"
+> **Domain expert:** "No. The first release uses an **Account-Scoped Active Run Lock** so one account has at most one active run."
+
+> **Dev:** "Should prospect keyword generation reuse the LinkedIn posting context?"
+> **Domain expert:** "No. Use the dedicated **LinkedIn Search Knowledge Context** so campaign content and prospect discovery remain separate."
+
+> **Dev:** "Must exhaust wrap already be an official knowledge-card term before it can be searched?"
+> **Domain expert:** "No. It may be an **Operator-Supplied Market Search Term**, but search provenance does not make it an official product name or claim."
+
+> **Dev:** "Must an operator type 按推荐 to accept the current interview answer?"
+> **Domain expert:** "No. Ask whether the recommendation is confirmed and accept a plain **Interview Confirmation Reply** for that question only."
+
+> **Dev:** "May the operator approve every unresolved interview question with one reply?"
+> **Domain expert:** "No. The first release requires **Sequential Interview Confirmation** for every missing decision."
+
+> **Dev:** "Should the interview ask whether the person using Codex is the boss or an employee?"
+> **Domain expert:** "No. That is not a **Decision-Relevant Interview Question**; accept the current Codex operator's explicit confirmation."
+
+> **Dev:** "How should each unresolved question be presented?"
+> **Domain expert:** "Use the **Prospecting Interview Question Format**: one numbered question, one recommendation with reason, then ask 是否确认？"
+
 > **Dev:** "Should the LinkedIn plan call the knowledge-base review workflow?"
 > **Domain expert:** "No. This is a **Marketing Plan Review**. It should check the campaign plan and give suggestions, not change formal knowledge."
 >
@@ -1468,6 +1947,64 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "Yes, but cap **Candidate Video Previews** at three per planned use and create delivery-quality output only for the selected segment."
 
 ## Flagged Ambiguities
+
+- “加好友” was used for sending a request and establishing a relationship. Resolved: use **Connection Invitation** for the outbound request; a connection exists only after acceptance.
+- “找到客户” could mean a keyword match, a commercially relevant lead, or an existing buyer. Resolved for discovery: use **LinkedIn Discovery Candidate** until later qualification evidence supports a stronger classification.
+- “用户授权浏览器操作” could be read as platform authorization. Resolved: **Account-Risk Acceptance** records the account owner's decision only and does not imply LinkedIn authorization.
+- “授权后继续重复” could mean one approval covers recurring daily automation. Resolved: **Prospecting Run Authorization** applies to exactly one reviewed run and cannot be reused by later runs.
+- “同行或者客户” was treated as one interchangeable target group. Resolved: they are different **Prospecting Target Intents**; one run cannot mix them, and the first release prioritizes potential customers.
+- “有效” was expanded into lead-quality and conversion metrics. Resolved for the first release: apply the **First-Release Evaluation Boundary** and defer those metrics until after the connection workflow works.
+- “能加上人” could mean either submitting an invitation or becoming a first-degree connection. Resolved for the first release: completion means **Invitation Dispatch Success** and does not wait for recipient acceptance.
+- “关键词搜索” could mean searching posts, people, or companies. Resolved for the first release: use **Post-First Prospect Discovery** with content keywords; direct people search is not the primary discovery entrypoint.
+- “同行”和“潜在客户” were treated as mutually exclusive. Resolved: a same-category brand, distributor, or retailer may be a **Same-Category Channel Prospect** even though it publicly sells a competing product.
+- “贴文作者” could be either a member or a company page. Resolved: a company-authored match must use **Company Contact Resolution** to find one prioritized personal account before invitation dispatch.
+- Company contact fallback was undefined. Resolved: if **Company Contact Resolution** finds none of the confirmed priority roles, skip the company instead of choosing another employee.
+- “重复处理” could mean only duplicates inside the current search page. Resolved: the **Prospecting Contact Ledger** provides cross-run deduplication for posts, companies, members, invitation state, and retry eligibility.
+- Invitation-note behavior was considered a fixed first-release rule. Resolved: it is an **Invitation Note Decision** made by the actual operator for each run together with supported search criteria and the invitation limit.
+- Invitation-note personalization was unspecified. Resolved: one run uses no note or one fixed confirmed note for every approved candidate; per-candidate generation is out of scope.
+- “目标地区” was proposed as an interview field even though standard post search cannot apply it. Resolved for the first release: remove it and restrict discovery decisions to **Supported Post Search Criteria**.
+- “基于搜索条件访谈” could mean forcing every visible filter into a fixed form. Resolved: always collect the three **Core Post Search Criteria** and add other supported filters only when relevant.
+- “关键词” could mean exactly one term or an unstructured batch. Resolved: use an **Ordered Content Keyword List** and preserve per-candidate keyword provenance.
+- “每天加多少个” could mean a quota per keyword or one authorization ceiling. Resolved: use one run-wide **Successful Invitation Limit** counted only by confirmed invitation dispatches.
+- The default run size and weekly pacing policy were unspecified. Resolved: recommend the **Default Run Invitation Limit** of ten and enforce a local **Seven-Day Invitation Ceiling** of one hundred per bound account.
+- “7 天” could mean a calendar week or a rolling duration. Resolved: use the rolling one-hundred-sixty-eight hours before each dispatch.
+- The seven-day ceiling could imply complete account-wide activity tracking. Resolved: count only skill-recorded successes and disclose that manual invitations are not included.
+- A requested run limit could exceed remaining seven-day capacity. Resolved: compute and confirm the **Effective Run Invitation Limit**, and block before discovery when it is zero.
+- An invitation limit could be mistaken for a quota the system must fill. Resolved: it is a ceiling, and **Search Exhaustion Completion** is a valid result below that ceiling.
+- Post ordering was unspecified. Resolved: make it a per-run **Post Sort Decision**, recommend Latest, and preserve the operator's ability to choose Most Relevant.
+- Run authorization could be interpreted as approval to contact candidates the operator has never seen. Resolved: require a **Candidate Review Card** and **Pre-Dispatch Candidate Review** before invitation submission.
+- Candidate review mode was briefly considered one-at-a-time. Resolved: review an **Approved Candidate Batch** in Codex, then dispatch its invitations sequentially with an **Invitation Dispatch Interval**.
+- Invitation pacing was unspecified. Resolved: include one operator-confirmed **Invitation Dispatch Interval** in every run brief and recommend five minutes without claiming it prevents platform restrictions.
+- Batch approval could trigger automatic replacement discovery for rejected candidates. Resolved: the reviewed list is a **Closed Candidate Batch** and further discovery requires a new task.
+- Candidate approval and final send permission were treated as separate possible prompts. Resolved: the explicit batch confirmation is the **Final Batch Dispatch Authorization**, after which no per-member prompt is required.
+- “账号必须已登录” did not identify which member account was authorized. Resolved: bind each run to one displayed **Bound LinkedIn Account** and block on missing, unknown, or changed identity.
+- Search exhaustion had no finite inspection boundary. Resolved: inspect at most fifty posts per keyword through the fixed **Keyword Post Inspection Limit**, which is not an interview question.
+- A keyword match could be mistaken for sufficient candidate evidence. Resolved: require a binary **Post Relevance Decision** with one reason before inspecting the author or company.
+- Candidate resolution for personal and company-authored posts was conflated. Resolved: keep a verified **Individual Post Author Candidate** directly, and use **Company Contact Resolution** only for company-authored posts.
+- A missing ordinary Connect action could trigger alternate outreach or guessed data. Resolved: require **Standard Connect Eligibility** and skip rather than substitute Follow, Message, email guesses, or bypass attempts.
+- Dispatch failure handling was undifferentiated. Resolved: continue after a **Candidate-Local Dispatch Failure**, but stop the entire run immediately on a **Platform-Level Dispatch Stop**.
+- A stopped batch could silently resume after a platform challenge cleared. Resolved: automatic resume is forbidden; remaining members require an **Authorized Dispatch Restart**.
+- Prospecting records could be confused with formal market intelligence. Resolved: each task uses a **Prospecting Run Directory**, shares only the operational ledger, and does not write directly to `knowledge/okf`.
+- LinkedIn publishing and prospecting were considered one skill. Resolved: create the independent **Tuolin LinkedIn Search Skill** named `tuolin-linkedin-search` and preserve the existing publishing skill's manual boundary.
+- Skill implementation could be prompt-only or a repository-owned browser bot. Resolved: use the **Hybrid Prospecting Implementation** with persisted scripts and Codex-managed browser interaction.
+- The managed browser surface was undecided. Resolved: the first release requires the official **Codex Chrome Prospecting Surface** and does not use the built-in Browser profile.
+- “完全由关键词驱动的通用 skill” could imply arbitrary industries or products. Resolved: it is generic only across existing Tuolin products, and every run binds product-grounded keywords to a sales purpose.
+- Product selection could be treated as unrestricted free text. Resolved: every run requires one **Bound Prospecting Product** from the verified Agent interface before keyword interview begins.
+- AI-generated search expansion could run without review. Resolved: AI may propose a **Product Keyword Recommendation**, but the operator controls the final ordered keyword list.
+- Keyword recommendation language was considered another interview field. Resolved: use English as the **Default Keyword Language** and collect only the concrete keyword list.
+- Invitation-note drafting was undefined. Resolved: when notes are enabled, AI proposes one restrained English **AI Invitation Note Draft** that the operator must confirm or edit before the brief is complete.
+- Note availability can change between brief confirmation and dispatch. Resolved: an **Invitation Note Availability Conflict** pauses the batch and forbids silently downgrading to no-note invitations.
+- “每天加多少个” could imply unattended daily scheduling. Resolved: the first release has no scheduler; every task is an **Operator-Started Prospecting Run** with a run-wide invitation limit.
+- Session interruption and platform restriction were conflated. Resolved: ordinary disconnection uses **Interrupted Dispatch Recovery**, while a **Platform-Level Dispatch Stop** requires a new task.
+- Candidate review data could remain chat-only or include browser secrets. Resolved: persist review cards as Markdown and JSON, keep screenshots exceptional, and never store cookies, passwords, or browser session data.
+- Cross-task deduplication could rely only on a stale local URL list. Resolved: use **Contact Eligibility Reconciliation** against both the shared ledger and the live LinkedIn profile state before review and dispatch.
+- Same-account parallel tasks could race on deduplication and pacing. Resolved: enforce an **Account-Scoped Active Run Lock** in the first release.
+- Product-grounded search could reuse the campaign-publishing knowledge context. Resolved: add the dedicated **LinkedIn Search Knowledge Context** and prohibit campaign-output and raw-file reads.
+- Search keywords were at risk of being treated as formal product language. Resolved: allow an **Operator-Supplied Market Search Term** for discovery while forbidding automatic knowledge or claim promotion.
+- Interview acceptance was proposed as the command “按推荐”. Resolved: ask “是否确认？” and accept plain confirmation for the current question only.
+- Bulk acceptance of all remaining interview recommendations was considered. Resolved: the first release requires **Sequential Interview Confirmation** and does not support a blanket reply.
+- Authorization-role verification was considered. Resolved: do not infer or validate boss-versus-employee roles; explicit confirmation by the current Codex operator is sufficient.
+- Interview depth could be measured by question count. Resolved: ask only a **Decision-Relevant Interview Question** and use the consistent **Prospecting Interview Question Format**.
 
 - "审阅" was used for both marketing campaign quality review and knowledge-base fact review. Resolved: use **Marketing Plan Review** for LinkedIn campaign planning and **Knowledge Review** for formal knowledge-base review items.
 - “母版” previously referred inconsistently to silent and narrated outputs. Resolved: remove the term and use **Video Language Version**.

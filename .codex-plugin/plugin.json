@@ -1,7 +1,7 @@
 {
   "name": "tuolin-marketplace",
-  "version": "1.51.0+codex.20260720140900",
-  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, controlled LinkedIn workflows, and evidence-driven YouTube Shorts video creation.",
+  "version": "1.52.0",
+  "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, confirmation-gated LinkedIn content and prospect-search workflows, and evidence-driven YouTube Shorts video creation.",
   "author": {
     "name": "Tianjin Tuolin"
   },
@@ -13,6 +13,7 @@
     "knowledge-base",
     "agents",
     "linkedin",
+    "prospecting",
     "publishing-image",
     "video",
     "dreamina"
@@ -20,8 +21,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Tuolin Agent 2.0",
-    "shortDescription": "Tuolin business agents for knowledge base, LinkedIn, and video creation workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, and an evidence-driven YouTube Shorts video workflow. The knowledge Agent can build persistent, time-coded video content profiles with representative frames, audio and test-evidence safeguards, and authorized task-scoped frame or clip extraction without exposing or modifying raw source video. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
+    "shortDescription": "Tuolin business agents for knowledge, LinkedIn content and prospecting, and video workflows.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, a product-grounded LinkedIn Posts prospect-search workflow with candidate review and explicit connection-invitation authorization, and an evidence-driven YouTube Shorts video workflow. LinkedIn prospecting uses the verified Agent interface, the official Codex Chrome extension, account-scoped deduplication, closed candidate batches, fixed intervals, and durable stop/recovery state. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [

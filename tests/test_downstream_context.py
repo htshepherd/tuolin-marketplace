@@ -134,6 +134,30 @@ class DownstreamContextTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unsupported downstream task type: video_script"):
                 build_downstream_context(paths, "video_script", product_id="product/quartz_fiber_tape")
 
+    def test_linkedin_search_context_is_product_grounded_without_campaign_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+
+            context = build_downstream_context(
+                paths,
+                "linkedin_search",
+                product_id="product/quartz_fiber_tape",
+                query="exhaust wrap",
+            )
+
+            self.assertEqual(context["task_type"], "linkedin_search")
+            self.assertEqual(context["product_id"], "product/quartz_fiber_tape")
+            self.assertFalse(context["raw_access"])
+            self.assertTrue(context["policy"]["market_terms_search_only"])
+            self.assertTrue(context["policy"]["no_keyword_expansion"])
+            self.assertEqual(
+                {card["id"] for card in context["cards_by_type"]["product"]},
+                {"product/quartz_fiber_tape"},
+            )
+            self.assertIn("sales_material", context["cards_by_type"])
+            self.assertNotIn("content_asset", context["cards_by_type"])
+
 
 def _create_fixture(paths, leave_open_review: bool = False) -> None:
     initialize_project(paths)
