@@ -1,4 +1,4 @@
-"""Product-grounded LinkedIn prospect-search workflow."""
+"""Operator-keyword-driven LinkedIn prospect-search workflow."""
 
 from .agent import (  # noqa: F401
     LinkedInSearchRunResult,
@@ -15,12 +15,14 @@ from .browser_contract import (  # noqa: F401
     confirm_effective_limit,
     finish_current_keyword,
     record_first_posts_search,
+    record_infinite_scroll_cycle,
     record_next_posts_search,
 )
 from .discovery import (  # noqa: F401
     CompanyContactObservation,
     IndividualCandidateObservation,
     LinkedInPostObservation,
+    ProspectClassificationObservation,
     record_company_post_evaluation,
     record_individual_post_evaluation,
 )

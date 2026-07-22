@@ -203,6 +203,10 @@ def record_first_posts_search(
         "applied_filters": observation.applied_filters,
         "visible_result_count": observation.visible_result_count,
         "opened_post_count": 0,
+        "evaluated_post_urls": [],
+        "seen_result_urls": [],
+        "scroll_cycles": [],
+        "consecutive_bottom_no_growth_cycles": 0,
         "recorded_at": timestamp,
         "browser_surface": "official_codex_chrome_extension",
     }
@@ -254,6 +258,10 @@ def record_next_posts_search(
             "current_keyword": observation.keyword,
             "visible_result_count": observation.visible_result_count,
             "opened_post_count": 0,
+            "evaluated_post_urls": [],
+            "seen_result_urls": [],
+            "scroll_cycles": [],
+            "consecutive_bottom_no_growth_cycles": 0,
             "applied_filters": observation.applied_filters,
             "recorded_at": timestamp,
         }
@@ -278,10 +286,61 @@ def record_next_posts_search(
     )
 
 
+def record_infinite_scroll_cycle(
+    run_dir: Path,
+    *,
+    visible_post_urls: list[str],
+    reached_bottom: bool,
+    waited_for_load: bool,
+    now: datetime | None = None,
+) -> LinkedInSearchStepResult:
+    """Record one scroll-to-bottom observation without trusting page/footer heuristics."""
+    run_dir, state_path, state = _load_run(run_dir)
+    if state.get("phase") != "discovering_posts":
+        raise ValueError("只有发现贴文阶段可以记录无限滚动循环。")
+    progress = dict(state.get("search_progress") or {})
+    normalized = []
+    for value in visible_post_urls:
+        url = normalize_linkedin_url(value)
+        path = urlsplit(url).path.casefold()
+        if "/posts/" not in path and "/feed/update/" not in path:
+            raise ValueError("滚动证据只能记录可识别的 LinkedIn 贴文 URL/URN；广告、profile 和 placeholder 不得计数。")
+        if url not in normalized:
+            normalized.append(url)
+    previous = list(progress.get("seen_result_urls") or [])
+    previous_set = set(previous)
+    new_urls = [url for url in normalized if url not in previous_set]
+    seen = previous + new_urls
+    no_growth = bool(reached_bottom and waited_for_load and not new_urls)
+    consecutive = int(progress.get("consecutive_bottom_no_growth_cycles") or 0) + 1 if no_growth else 0
+    timestamp = _timestamp(now)
+    cycle = {
+        "at": timestamp,
+        "reached_bottom": bool(reached_bottom),
+        "waited_for_load": bool(waited_for_load),
+        "visible_unique_count": len(normalized),
+        "new_unique_count": len(new_urls),
+        "consecutive_bottom_no_growth_cycles": consecutive,
+    }
+    progress["seen_result_urls"] = seen
+    progress["consecutive_bottom_no_growth_cycles"] = consecutive
+    progress.setdefault("scroll_cycles", []).append(cycle)
+    state["search_progress"] = progress
+    state["updated_at"] = timestamp
+    _write_json_atomic(Path(state["files"]["search_progress"]), progress)
+    _write_json_atomic(state_path, state)
+    _append_change(run_dir, timestamp, f"记录滚动循环：新增唯一贴文={len(new_urls)}；连续无新增={consecutive}。")
+    return LinkedInSearchStepResult(
+        str(run_dir), str(state_path), state["status"], state["phase"],
+        (str(state["files"]["search_progress"]), str(state_path)),
+        f"本轮发现 {len(new_urls)} 条新唯一贴文；连续到底等待无新增 {consecutive}/3 次。",
+    )
+
+
 def finish_current_keyword(
     run_dir: Path,
     *,
-    exhausted: bool,
+    exhausted: bool | None = None,
     now: datetime | None = None,
 ) -> LinkedInSearchStepResult:
     run_dir, state_path, state = _load_run(run_dir)
@@ -292,15 +351,23 @@ def finish_current_keyword(
     candidate_count = len(state.get("candidate_ids") or [])
     effective_limit = int((state.get("capacity_at_account_binding") or {}).get("effective_limit") or 0)
     discovery_limit = effective_limit or int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
-    if not exhausted and opened < 50 and candidate_count < discovery_limit:
-        raise ValueError("当前关键词未耗尽且尚未达到 50 条打开贴文上限，不能提前切换关键词。")
+    verified_exhausted = int(progress.get("consecutive_bottom_no_growth_cycles") or 0) >= 3
+    candidate_limit_reached = candidate_count >= discovery_limit
+    opened_limit_reached = opened >= 50
+    if not (verified_exhausted or candidate_limit_reached or opened_limit_reached):
+        raise ValueError("当前关键词尚未满足停止条件：需候选达上限、打开 50 条唯一贴文，或连续 3 次到底等待无新增。")
     timestamp = _timestamp(now)
     completed = state.setdefault("completed_keywords", [])
     completed.append(
         {
             "keyword": progress.get("current_keyword"),
             "opened_post_count": opened,
-            "stop_reason": "exhausted" if exhausted else "opened_post_limit_reached",
+            "stop_reason": (
+                "candidate_limit_reached" if candidate_limit_reached
+                else "opened_post_limit_reached" if opened_limit_reached
+                else "verified_infinite_scroll_exhaustion"
+            ),
+            "verified_exhaustion_cycles": int(progress.get("consecutive_bottom_no_growth_cycles") or 0),
             "completed_at": timestamp,
         }
     )

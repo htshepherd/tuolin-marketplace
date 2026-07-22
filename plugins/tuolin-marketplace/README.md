@@ -25,9 +25,9 @@ codex plugin list
 
 ## LinkedIn prospect search
 
-Version 1.52.2 includes `$tuolin-linkedin-search`, a product-grounded LinkedIn Posts workflow. It requires:
+Version 1.53.0 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts workflow. It requires:
 
-- the real Tuolin knowledge project with a refreshed and verified `generated/agent-interface/`;
+- a writable Tuolin operational workspace; no product knowledge base is required;
 - the official `chrome@openai-bundled` plugin;
 - the account owner's existing Chrome profile with LinkedIn already signed in;
 - explicit confirmation before read-only browser work and again before the exact invitation batch.
@@ -35,10 +35,10 @@ Version 1.52.2 includes `$tuolin-linkedin-search`, a product-grounded LinkedIn P
 Recommended first request on the business computer:
 
 ```text
-$tuolin-linkedin-search 请基于正式产品知识，通过 LinkedIn 贴文搜索潜在客户。先访谈并做只读候选测试，不发送连接邀请。
+$tuolin-linkedin-search 关键词：Exhaust Wrap, Exhaust Heat Wrap。通过 LinkedIn Posts 搜索潜在客户，先做只读候选测试，不发送连接邀请。
 ```
 
-The workflow prints and persists the source post, author, company, selected contact, and selection reason before authorization. Real invitation tests use a preflight-before-click contract, a fixed interval, account-scoped cross-task deduplication, and a local maximum of 100 recorded successes in a rolling 168-hour window. The local limit is a product rule, not an official LinkedIn limit, and it does not count manual activity.
+The workflow keeps scrolling until a proven stop condition, then prints and persists the complete visible source post, author, company, selected contact, AI evidence, and material doubts before human review. Real invitation tests use a preflight-before-click contract, a fixed interval, account-scoped cross-task deduplication, and a local maximum of 100 recorded successes in a rolling 168-hour window. The local limit is a workflow rule, not an official LinkedIn limit, and it does not count manual activity.
 
 Remote installation and acceptance details: `docs/operations/linkedin-search-install-and-remote-test.md`.
 

@@ -573,7 +573,7 @@ def prepare_platform_restart_handoff(
     payload = {
         "source_run_id": run_dir.name,
         "source_run_dir": str(run_dir),
-        "product": state.get("product"),
+        "keywords": list((state.get("confirmed_search_brief") or {}).get("keywords") or []),
         "account": state.get("account_binding"),
         "remaining_candidate_ids": remaining_ids,
         "remaining_candidates": cards,
@@ -622,8 +622,8 @@ def create_platform_restart_run(
     if not candidate_ids:
         raise ValueError("restart handoff 没有未执行候选。")
     current = _aware(now)
-    product_id = str((source.get("product") or {}).get("id") or "product").split("/", 1)[-1]
-    slug = "".join(character if character.isalnum() or character in "-_" else "-" for character in product_id).strip("-") or "product"
+    first_keyword = str(((source.get("confirmed_search_brief") or {}).get("keywords") or ["keywords"])[0])
+    slug = "".join(character if character.isalnum() or character in "-_" else "-" for character in first_keyword).strip("-") or "keywords"
     base = source_run.parent / f"{current.strftime('%Y%m%d_%H%M%S')}_{slug}-restart"
     run_dir = base
     suffix = 2
@@ -646,15 +646,13 @@ def create_platform_restart_run(
     change_log_path = run_dir / "change_log.md"
     state = {
         "workflow": "tuolin-linkedin-search",
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": run_dir.name,
         "status": "restart_account_binding_required",
         "phase": "awaiting_browser_account_binding",
         "created_at": timestamp,
         "updated_at": timestamp,
         "request_text": f"Authorized Dispatch Restart from {source_run.name}",
-        "product": source.get("product"),
-        "knowledge_context": source.get("knowledge_context"),
         "account_binding": None,
         "confirmed_search_brief": source.get("confirmed_search_brief"),
         "candidate_ids": candidate_ids,
@@ -685,7 +683,7 @@ def create_platform_restart_run(
                 "# LinkedIn Authorized Dispatch Restart",
                 "",
                 f"- 源运行：{source_run}",
-                f"- 正式产品：{(source.get('product') or {}).get('title') or (source.get('product') or {}).get('id')}",
+                f"- 搜索关键词：{'、'.join((source.get('confirmed_search_brief') or {}).get('keywords') or [])}",
                 f"- 保留候选：{len(candidate_ids)}",
                 "- 必须重新绑定相同 LinkedIn 账号、审核候选并完成新的最终授权。",
                 "- 不允许重新搜索、增加候选或自动找补。",

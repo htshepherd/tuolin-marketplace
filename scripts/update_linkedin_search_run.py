@@ -12,12 +12,14 @@ from tuolin_marketplace.linkedin_search.browser_contract import (
     confirm_effective_limit,
     finish_current_keyword,
     record_first_posts_search,
+    record_infinite_scroll_cycle,
     record_next_posts_search,
 )
 from tuolin_marketplace.linkedin_search.discovery import (
     CompanyContactObservation,
     IndividualCandidateObservation,
     LinkedInPostObservation,
+    ProspectClassificationObservation,
     record_company_post_evaluation,
     record_individual_post_evaluation,
 )
@@ -46,7 +48,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Apply a deterministic state transition to a LinkedIn search run.")
     parser.add_argument("action", choices=[
         "answer-interview",
-        "bind-account", "confirm-effective-limit", "record-first-search", "record-next-search", "finish-keyword",
+        "bind-account", "confirm-effective-limit", "record-first-search", "record-next-search", "record-scroll-cycle", "finish-keyword",
         "record-individual", "record-company", "prepare-review", "remove-candidates",
         "confirm-batch", "prepare-authorization", "authorize-batch",
         "prepare-dispatch", "record-dispatch-result", "resolve-note-unavailable",
@@ -74,8 +76,15 @@ def main() -> int:
     elif args.action in {"record-first-search", "record-next-search"}:
         observation = LinkedInPostSearchObservation(**data["observation"])
         result = record_first_posts_search(run_dir, observation) if args.action == "record-first-search" else record_next_posts_search(run_dir, observation)
+    elif args.action == "record-scroll-cycle":
+        result = record_infinite_scroll_cycle(
+            run_dir,
+            visible_post_urls=list(data.get("visible_post_urls") or []),
+            reached_bottom=bool(data.get("reached_bottom")),
+            waited_for_load=bool(data.get("waited_for_load")),
+        )
     elif args.action == "finish-keyword":
-        result = finish_current_keyword(run_dir, exhausted=bool(data.get("exhausted")))
+        result = finish_current_keyword(run_dir)
     elif args.action == "record-individual":
         candidate_data = data.get("candidate")
         result = record_individual_post_evaluation(
@@ -84,6 +93,7 @@ def main() -> int:
             decision=data["decision"],
             reason=data["reason"],
             candidate=IndividualCandidateObservation(**candidate_data) if candidate_data else None,
+            classification=ProspectClassificationObservation(**data["classification"]) if data.get("classification") else None,
         )
     elif args.action == "record-company":
         result = record_company_post_evaluation(
@@ -92,6 +102,7 @@ def main() -> int:
             decision=data["decision"],
             reason=data["reason"],
             contacts=[CompanyContactObservation(**item) for item in data.get("contacts", [])],
+            classification=ProspectClassificationObservation(**data["classification"]) if data.get("classification") else None,
         )
     elif args.action == "prepare-review":
         result = prepare_candidate_batch_review(run_dir)

@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "1.52.2",
+  "version": "1.53.0",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, confirmation-gated LinkedIn content and prospect-search workflows, and evidence-driven YouTube Shorts video creation.",
   "author": {
     "name": "Tianjin Tuolin"
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Tuolin Agent 2.0",
     "shortDescription": "Tuolin business agents for knowledge, LinkedIn content and prospecting, and video workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, a product-grounded LinkedIn Posts prospect-search workflow with candidate review and explicit connection-invitation authorization, and an evidence-driven YouTube Shorts video workflow. LinkedIn prospecting uses the verified Agent interface, the official Codex Chrome extension, account-scoped deduplication, closed candidate batches, fixed intervals, and durable stop/recovery state. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, a keyword-driven LinkedIn Posts prospect-search workflow with full-post candidate review and explicit connection-invitation authorization, and an evidence-driven YouTube Shorts video workflow. LinkedIn prospecting uses operator-supplied keyword phrases without requiring a product knowledge base, the official Codex Chrome extension, verified infinite scrolling, account-scoped deduplication, closed candidate batches, fixed intervals, and durable stop/recovery state. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [
@@ -33,7 +33,7 @@
       "\u6574\u7406\u4e00\u4e0b\u62d3\u9716\u77e5\u8bc6\u5e93\u3002",
       "\u67e5\u770b\u5f53\u524d\u8fd8\u6709\u54ea\u4e9b\u8d44\u6599\u9700\u8981\u7ee7\u7eed\u6574\u7406\u3002",
       "\u6709\u54ea\u4e9b\u5185\u5bb9\u9700\u8981\u6211\u786e\u8ba4\uff1f",
-      "$tuolin-linkedin-search \u8bf7\u57fa\u4e8e\u6b63\u5f0f\u4ea7\u54c1\u77e5\u8bc6\uff0c\u901a\u8fc7 LinkedIn \u8d34\u6587\u641c\u7d22\u6f5c\u5728\u5ba2\u6237\uff0c\u5148\u5b8c\u6210\u8bbf\u8c08\u548c\u53ea\u8bfb\u5019\u9009\u6d4b\u8bd5\u3002",
+      "$tuolin-linkedin-search \u5173\u952e\u8bcd\uff1aExhaust Wrap, Exhaust Heat Wrap\u3002\u901a\u8fc7 LinkedIn Posts \u641c\u7d22\u6f5c\u5728\u5ba2\u6237\uff0c\u5148\u5b8c\u6210\u8bbf\u8c08\u548c\u53ea\u8bfb\u5019\u9009\u5ba1\u6838\u3002",
       "\u751f\u6210 LinkedIn Day 01 \u53d1\u5e03\u56fe",
       "\u505a\u4e00\u4e2a15\u79d2\u82f1\u6587\u7248\u77f3\u82f1\u7ea4\u7ef4\u9694\u70ed\u5e26\u4ea7\u54c1\u89c6\u9891\uff0c\u9762\u5411\u6b27\u7f8e\u5de5\u4e1a\u91c7\u8d2d\u5546\uff0c\u7528\u5728 YouTube Shorts\u3002"
     ],

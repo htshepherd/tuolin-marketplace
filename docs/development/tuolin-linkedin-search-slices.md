@@ -1,5 +1,7 @@
 # `tuolin-linkedin-search`：纵向切片开发文档
 
+> **Status:** Superseded for new development by [Keyword-Driven LinkedIn Search Slices](./tuolin-linkedin-search-keyword-driven-slices.md). This file is retained as the completed product-bound 1.52.x implementation history.
+
 **日期：** 2026-07-21
 **来源 PRD：** `docs/prd/tuolin-linkedin-search.md`
 **文档状态：** 自动化开发完成，等待真实 LinkedIn HITL 验收

@@ -1,4 +1,4 @@
 interface:
   display_name: "Tuolin LinkedIn Search"
   short_description: "Search LinkedIn posts and review Tuolin sales prospects"
-  default_prompt: "Use $tuolin-linkedin-search to find product-related LinkedIn prospects through a confirmation-gated workflow."
+  default_prompt: "Use $tuolin-linkedin-search to find LinkedIn prospects from operator-supplied keyword phrases through a confirmation-gated workflow."

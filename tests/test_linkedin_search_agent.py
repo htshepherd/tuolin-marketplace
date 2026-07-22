@@ -21,12 +21,14 @@ from scripts.tuolin_marketplace.linkedin_search.browser_contract import (
     finish_current_keyword,
     normalize_linkedin_url,
     record_first_posts_search,
+    record_infinite_scroll_cycle,
     record_next_posts_search,
 )
 from scripts.tuolin_marketplace.linkedin_search.discovery import (
     CompanyContactObservation,
     IndividualCandidateObservation,
     LinkedInPostObservation,
+    ProspectClassificationObservation,
     record_company_post_evaluation,
     record_individual_post_evaluation,
 )
@@ -116,7 +118,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(root_manifest, plugin_manifest)
-        self.assertEqual(root_manifest["version"], "1.52.2")
+        self.assertEqual(root_manifest["version"], "1.53.0")
 
     def test_request_detection_is_separate_from_linkedin_content_planning(self) -> None:
         self.assertTrue(is_linkedin_search_request("在领英通过贴文搜索石英纤维隔热带潜在客户"))
@@ -124,51 +126,46 @@ class LinkedInSearchAgentTests(unittest.TestCase):
         self.assertFalse(is_linkedin_search_request("生成下周 LinkedIn 发帖计划"))
         self.assertFalse(is_linkedin_search_request("生成 LinkedIn Day 01 发布图"))
 
-    def test_create_run_binds_one_official_product_and_verified_context(self) -> None:
+    def test_create_run_needs_only_a_writable_workspace_and_operator_keywords(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
-            _create_fixture(paths)
-
             result = create_linkedin_search_run(
                 paths,
-                "在领英通过贴文搜索石英纤维隔热带潜在客户",
+                "在领英通过贴文搜索潜在客户",
                 now=datetime(2026, 7, 21, 9, 30, 0),
             )
 
             self.assertEqual(result.status, "search_interview_required")
             self.assertEqual(result.phase, "awaiting_search_interview")
-            self.assertEqual(result.product_id, "product/quartz_fiber_tape")
             run_dir = Path(result.run_dir)
-            self.assertEqual(run_dir.name, "20260721_093000_quartz_fiber_tape")
+            self.assertEqual(run_dir.name, "20260721_093000_keywords")
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
             self.assertEqual(state["workflow"], "tuolin-linkedin-search")
-            self.assertEqual(state["product"]["id"], "product/quartz_fiber_tape")
-            self.assertFalse(state["knowledge_context"]["raw_access"])
-            self.assertTrue(state["knowledge_context"]["policy"]["market_terms_search_only"])
+            self.assertEqual(state["schema_version"], 2)
+            self.assertNotIn("product", state)
+            self.assertNotIn("knowledge_context", state)
             self.assertIsNone(state["account_binding"])
             self.assertFalse(state["interview"]["completed"])
-            self.assertTrue(Path(state["files"]["knowledge_context"]).exists())
             self.assertTrue((run_dir / "requirements.md").exists())
             self.assertTrue((run_dir / "change_log.md").exists())
 
-    def test_missing_agent_interface_creates_a_blocked_auditable_run(self) -> None:
+    def test_missing_agent_interface_does_not_block_a_search_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
 
             result = create_linkedin_search_run(
                 paths,
                 "在领英搜索石英纤维隔热带潜在客户",
-                product_id="product/quartz_fiber_tape",
                 now=datetime(2026, 7, 21, 9, 31, 0),
             )
 
-            self.assertEqual(result.status, "blocked")
-            self.assertEqual(result.phase, "blocked_before_interview")
+            self.assertEqual(result.status, "search_interview_required")
+            self.assertEqual(result.phase, "awaiting_search_interview")
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
-            self.assertEqual(state["blockers"][0]["code"], "agent_interface_unavailable")
-            self.assertIsNone(state["interview"])
+            self.assertEqual(state["blockers"], [])
+            self.assertIsNotNone(state["interview"])
 
-    def test_unresolved_product_blocks_without_guessing(self) -> None:
+    def test_request_without_product_starts_keyword_question(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
@@ -179,10 +176,10 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 now=datetime(2026, 7, 21, 9, 32, 0),
             )
 
-            self.assertEqual(result.status, "blocked")
+            self.assertEqual(result.status, "search_interview_required")
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
-            self.assertEqual(state["blockers"][0]["code"], "product_resolution_failed")
-            self.assertIn("没有可唯一解析", result.message)
+            self.assertEqual(state["interview"]["pending_question"]["field"], "keywords")
+            self.assertIn("完整关键词短语", result.message)
 
     def test_natural_language_routes_search_before_linkedin_campaign(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -194,7 +191,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertEqual(response.intent, "linkedin_search_interview")
             self.assertTrue(response.executed)
             self.assertTrue(response.needs_confirmation)
-            self.assertEqual(response.details["product_id"], "product/quartz_fiber_tape")
+            self.assertNotIn("product_id", response.details)
             self.assertIn("尚未操作浏览器", response.message)
 
     def test_interview_asks_one_recommended_question_and_confirms_only_current_field(self) -> None:
@@ -211,18 +208,20 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             pending = state["interview"]["pending_question"]
             self.assertEqual(pending["field"], "keywords")
             self.assertIn("第一问", result.message)
-            self.assertIn("我的推荐答案：", result.message)
-            self.assertIn("推荐理由：", result.message)
-            self.assertTrue(result.message.rstrip().endswith("是否确认？"))
+            self.assertNotIn("我的推荐答案：", result.message)
+            self.assertIn("完整关键词短语", result.message)
+
+            with self.assertRaisesRegex(ValueError, "关键词没有推荐答案"):
+                continue_linkedin_search_interview(Path(result.run_dir), "确认")
 
             step = continue_linkedin_search_interview(
                 Path(result.run_dir),
-                "确认",
+                "Exhaust Wrap, Exhaust Heat Wrap, exhaust wrap",
                 now=datetime(2026, 7, 21, 10, 1, 0),
             )
 
             updated = json.loads(Path(step.workflow_state_path).read_text(encoding="utf-8"))
-            self.assertIn("keywords", updated["interview"]["answers"])
+            self.assertEqual(updated["interview"]["answers"]["keywords"], ["Exhaust Wrap", "Exhaust Heat Wrap"])
             self.assertNotIn("sort_order", updated["interview"]["answers"])
             self.assertEqual(updated["interview"]["pending_question"]["field"], "sort_order")
             self.assertIn("第二问", step.message)
@@ -320,7 +319,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
             self.assertEqual(
                 state["confirmed_search_brief"]["search_terms"],
-                [{"term": "exhaust wrap", "source": "user_supplied", "formal_knowledge": False}],
+                [{"term": "exhaust wrap", "source": "operator_supplied", "formal_knowledge": False}],
             )
             self.assertEqual(state["confirmed_search_brief"]["search_surface"], "linkedin_posts")
             self.assertEqual(state["confirmed_search_brief"]["opened_post_limit_per_keyword"], 50)
@@ -602,7 +601,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths, keywords="exhaust wrap，heat wrap")
 
-            first = finish_current_keyword(Path(result.run_dir), exhausted=True)
+            first = _finish_verified(Path(result.run_dir))
             self.assertEqual(first.phase, "awaiting_next_keyword_search")
             self.assertIn("heat wrap", first.message)
             second = record_next_posts_search(
@@ -610,12 +609,84 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 LinkedInPostSearchObservation("heat wrap", "posts", "latest", "past_month", 3, True, {}),
             )
             self.assertEqual(second.phase, "discovering_posts")
-            completed = finish_current_keyword(Path(result.run_dir), exhausted=True)
+            completed = _finish_verified(Path(result.run_dir))
             self.assertEqual(completed.phase, "completed")
             state = json.loads(Path(completed.workflow_state_path).read_text(encoding="utf-8"))
             self.assertEqual([item["keyword"] for item in state["completed_keywords"]], ["exhaust wrap", "heat wrap"])
             self.assertEqual(state["discovery_stop_reason"], "all_keywords_exhausted")
             self.assertEqual(state["status"], "completed_no_candidates")
+
+    def test_infinite_scroll_requires_three_consecutive_bottom_wait_cycles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            result = _create_discovering_run(paths)
+            run_dir = Path(result.run_dir)
+            for index in range(2):
+                record_infinite_scroll_cycle(
+                    run_dir,
+                    visible_post_urls=["https://linkedin.com/posts/visible-1"],
+                    reached_bottom=True,
+                    waited_for_load=True,
+                )
+                with self.assertRaisesRegex(ValueError, "尚未满足停止条件"):
+                    finish_current_keyword(run_dir)
+            growth = record_infinite_scroll_cycle(
+                run_dir,
+                visible_post_urls=["https://linkedin.com/posts/visible-1", "https://linkedin.com/posts/visible-2"],
+                reached_bottom=True,
+                waited_for_load=True,
+            )
+            self.assertIn("连续到底等待无新增 0/3", growth.message)
+            for _ in range(3):
+                record_infinite_scroll_cycle(
+                    run_dir,
+                    visible_post_urls=["https://linkedin.com/posts/visible-1", "https://linkedin.com/posts/visible-2"],
+                    reached_bottom=True,
+                    waited_for_load=True,
+                )
+            completed = finish_current_keyword(run_dir)
+            state = json.loads(Path(completed.workflow_state_path).read_text(encoding="utf-8"))
+            self.assertEqual(state["completed_keywords"][0]["stop_reason"], "verified_infinite_scroll_exhaustion")
+
+    def test_direct_supplier_is_rejected_and_unresolved_company_does_not_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            result = _create_discovering_run(paths)
+            run_dir = Path(result.run_dir)
+            supplier = LinkedInPostObservation(
+                "exhaust wrap", "https://linkedin.com/posts/supplier", "We manufacture fiberglass exhaust wrap.",
+                "Supplier", "individual", "https://linkedin.com/in/supplier", "Supplier Co", "https://linkedin.com/company/supplier",
+            )
+            with self.assertRaisesRegex(ValueError, "必须 Skip"):
+                record_individual_post_evaluation(
+                    run_dir,
+                    supplier,
+                    decision="Continue",
+                    reason="同类材料供应商。",
+                    candidate=IndividualCandidateObservation("Supplier", "Owner", "Supplier Co", "https://linkedin.com/in/supplier", True),
+                    classification=ProspectClassificationObservation(
+                        "provisional_candidate_fit", "direct_category_manufacturer", "贴文明确写明 manufacture fiberglass exhaust wrap。"
+                    ),
+                )
+
+            company = LinkedInPostObservation(
+                "exhaust wrap", "https://linkedin.com/posts/installer", "We install kitchen duct fire wrap systems.",
+                "Installer Co", "company", "https://linkedin.com/company/installer", "Installer Co", "https://linkedin.com/company/installer",
+            )
+            step = record_company_post_evaluation(
+                run_dir,
+                company,
+                decision="Continue",
+                reason="承接防火包覆安装，可能持续使用高温包覆材料。",
+                contacts=[],
+                classification=ProspectClassificationObservation(
+                    "unresolved_relevant_lead", "downstream_material_user", "贴文明确描述 duct fire wrap 安装业务。", "未找到可验证联系人。"
+                ),
+            )
+            state = json.loads(Path(step.workflow_state_path).read_text(encoding="utf-8"))
+            self.assertEqual(state["candidate_ids"], [])
+            self.assertEqual(len(state["unresolved_lead_ids"]), 1)
+            self.assertTrue(Path(state["files"]["unresolved_relevant_leads"]).exists())
 
     def test_company_post_selects_one_contact_by_confirmed_role_priority(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -679,7 +750,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="one")
             _record_demo_candidate(Path(result.run_dir), suffix="two")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepared = prepare_candidate_batch_review(Path(result.run_dir))
             self.assertIn("候选人数：2", prepared.message)
             state = json.loads(Path(prepared.workflow_state_path).read_text(encoding="utf-8"))
@@ -698,7 +769,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="auth")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             brief = prepare_dispatch_authorization(Path(result.run_dir))
@@ -721,7 +792,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths, note="使用留言")
             _record_demo_candidate(Path(result.run_dir), suffix="note")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             with self.assertRaisesRegex(ValueError, "必须先由用户确认"):
@@ -965,7 +1036,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="tamper")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
@@ -983,7 +1054,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="content-tamper")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
@@ -1001,7 +1072,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _create_fixture(paths)
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="batch-tamper")
-            finish_current_keyword(Path(result.run_dir), exhausted=True)
+            _finish_verified(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             closed_path = Path(result.run_dir) / "batch" / "closed-candidate-batch.json"
@@ -1141,13 +1212,24 @@ def _record_demo_candidate(run_dir: Path, *, suffix: str) -> None:
     )
 
 
+def _finish_verified(run_dir: Path):
+    for _ in range(3):
+        record_infinite_scroll_cycle(
+            run_dir,
+            visible_post_urls=[],
+            reached_bottom=True,
+            waited_for_load=True,
+        )
+    return finish_current_keyword(run_dir)
+
+
 def _create_authorized_run(paths, *, candidate_count: int, note: bool = False):
     result = _create_discovering_run(paths, note="使用留言" if note else "不使用留言")
     candidate_ids = []
     for index in range(1, candidate_count + 1):
         suffix = f"dispatch-{index}"
         _record_demo_candidate(Path(result.run_dir), suffix=suffix)
-    finish_current_keyword(Path(result.run_dir), exhausted=True)
+    _finish_verified(Path(result.run_dir))
     prepare_candidate_batch_review(Path(result.run_dir))
     confirm_candidate_batch(Path(result.run_dir))
     prepare_dispatch_authorization(

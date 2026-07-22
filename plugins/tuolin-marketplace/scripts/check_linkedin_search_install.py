@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any
 
 
-EXPECTED_PLUGIN_VERSION = "1.52.2"
+EXPECTED_PLUGIN_VERSION = "1.53.0"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check Tuolin LinkedIn Search installation readiness.")
-    parser.add_argument("--project-dir", default=".", help="Tuolin knowledge project directory.")
+    parser.add_argument("--project-dir", default=".", help="Writable Tuolin operational workspace.")
     args = parser.parse_args()
     project_dir = Path(args.project_dir).expanduser().resolve()
     plugin_root = Path(__file__).resolve().parents[1]
@@ -34,22 +34,16 @@ def main() -> int:
     missing_runtime = [str(path) for path in required_runtime if not path.is_file()]
     _check(checks, "linkedin_search_runtime", not missing_runtime, "complete" if not missing_runtime else f"missing={missing_runtime}")
 
-    interface_dir = project_dir / "generated" / "agent-interface"
-    agent_manifest = _read_json_or_error(interface_dir / "manifest.json", checks, "agent_interface_manifest")
-    summary = _read_json_or_error(interface_dir / "manifest_summary.json", checks, "agent_interface_summary")
-    cards_dir = interface_dir / "cards"
-    _check(checks, "agent_interface_cards", cards_dir.is_dir(), str(cards_dir))
-    if agent_manifest is not None and summary is not None:
-        manifest_revision = str(agent_manifest.get("interface_revision") or "")
-        summary_revision = str(summary.get("interface_revision") or "")
-        _check(
-            checks,
-            "agent_interface_revision",
-            bool(manifest_revision) and manifest_revision == summary_revision,
-            f"manifest={manifest_revision or 'missing'}, summary={summary_revision or 'missing'}",
-        )
-        validation_errors = int(summary.get("validation_error_count") or 0)
-        _check(checks, "agent_interface_validation", validation_errors == 0, f"validation_error_count={validation_errors}")
+    try:
+        generated_dir = project_dir / "generated"
+        generated_dir.mkdir(parents=True, exist_ok=True)
+        probe = generated_dir / ".linkedin-search-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        _check(checks, "operational_workspace_writable", False, str(exc))
+    else:
+        _check(checks, "operational_workspace_writable", True, str(generated_dir))
 
     automated_ready = all(item["passed"] for item in checks)
     report = {
@@ -66,7 +60,7 @@ def main() -> int:
         "next_instruction": (
             "在新 Codex 会话中发起一个只读 LinkedIn 搜索测试。"
             if automated_ready
-            else "先修复 failed 检查；知识接口缺失时使用 $tuolin-kb 刷新并验证。"
+            else "先修复 failed 检查；此工作流不要求安装产品知识库。"
         ),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))

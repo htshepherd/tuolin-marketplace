@@ -47,6 +47,14 @@ class CompanyContactObservation:
     live_connection_state: str = "none"
 
 
+@dataclass(frozen=True)
+class ProspectClassificationObservation:
+    outcome: str
+    business_role: str
+    supporting_evidence: str
+    material_doubts: str = ""
+
+
 def record_individual_post_evaluation(
     run_dir: Path,
     post: LinkedInPostObservation,
@@ -54,6 +62,7 @@ def record_individual_post_evaluation(
     decision: str,
     reason: str,
     candidate: IndividualCandidateObservation | None = None,
+    classification: ProspectClassificationObservation | None = None,
     now: datetime | None = None,
 ) -> LinkedInSearchStepResult:
     run_dir, state_path, state = _load_run(run_dir)
@@ -74,6 +83,7 @@ def record_individual_post_evaluation(
     if int(progress.get("opened_post_count") or 0) >= 50:
         raise ValueError("当前关键词已经达到 50 条打开贴文上限，必须结束或进入下一关键词。")
     post_url = normalize_linkedin_url(post.post_url)
+    _register_unique_opened_post(progress, post_url)
     author_profile_url = normalize_linkedin_url(post.author_profile_url)
     company_url = normalize_linkedin_url(post.company_url) if post.company_url else ""
     timestamp = _timestamp(now)
@@ -89,8 +99,9 @@ def record_individual_post_evaluation(
     discovery_dir = run_dir / "discovery"
     discovery_dir.mkdir(parents=True, exist_ok=True)
     log_path = discovery_dir / "post-evaluations.jsonl"
-    progress["opened_post_count"] = int(progress.get("opened_post_count") or 0) + 1
     state["search_progress"] = progress
+    classification_data = _validated_classification(classification, normalized_decision, reason_text)
+    evaluation["classification"] = classification_data
 
     output_paths = [str(log_path)]
     if normalized_decision == "skip":
@@ -133,6 +144,10 @@ def record_individual_post_evaluation(
                 "post_url": post_url,
                 "relevance_decision": "continue",
                 "relevance_reason": reason_text,
+                "fit_status": classification_data["outcome"],
+                "business_role": classification_data["business_role"],
+                "supporting_evidence": classification_data["supporting_evidence"],
+                "material_doubts": classification_data["material_doubts"],
                 "author": {
                     "name": post.author_name,
                     "type": "individual",
@@ -159,6 +174,7 @@ def record_individual_post_evaluation(
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(evaluation, ensure_ascii=False) + "\n")
     state["updated_at"] = timestamp
+    _write_json_atomic(Path(state["files"]["search_progress"]), progress)
     _write_json_atomic(state_path, state)
     _append_change(run_dir, timestamp, f"记录贴文判断：{normalized_decision}；{reason_text}")
     output_paths.append(str(state_path))
@@ -179,6 +195,7 @@ def record_company_post_evaluation(
     decision: str,
     reason: str,
     contacts: list[CompanyContactObservation],
+    classification: ProspectClassificationObservation | None = None,
     now: datetime | None = None,
 ) -> LinkedInSearchStepResult:
     run_dir, state_path, state = _load_run(run_dir)
@@ -200,6 +217,7 @@ def record_company_post_evaluation(
         raise ValueError("当前关键词已经达到 50 条打开贴文上限。")
     timestamp = _timestamp(now)
     post_url = normalize_linkedin_url(post.post_url)
+    _register_unique_opened_post(progress, post_url)
     company_url = normalize_linkedin_url(post.company_url or post.author_profile_url)
     evaluation = {
         **asdict(post),
@@ -209,8 +227,9 @@ def record_company_post_evaluation(
         "reason": reason_text,
         "recorded_at": timestamp,
     }
-    progress["opened_post_count"] = int(progress.get("opened_post_count") or 0) + 1
     state["search_progress"] = progress
+    classification_data = _validated_classification(classification, normalized_decision, reason_text)
+    evaluation["classification"] = classification_data
     discovery_dir = run_dir / "discovery"
     discovery_dir.mkdir(parents=True, exist_ok=True)
     log_path = discovery_dir / "post-evaluations.jsonl"
@@ -225,8 +244,27 @@ def record_company_post_evaluation(
         eligible_contacts.sort(key=lambda item: (_role_rank(item.title), item.member_name.casefold()))
         selected = eligible_contacts[0] if eligible_contacts else None
         if selected is None:
-            evaluation["candidate_outcome"] = "skipped_no_eligible_company_contact"
-            message = "Skip：公司内没有符合优先角色且具备标准 Connect 路径的联系人。"
+            unresolved_id = "lead_" + hashlib.sha256(company_url.encode("utf-8")).hexdigest()[:16]
+            unresolved = {
+                "lead_id": unresolved_id,
+                "source_keyword": post.keyword,
+                "post_text": post.post_text,
+                "post_url": post_url,
+                "author": {"name": post.author_name, "type": "company", "profile_url": company_url},
+                "company": {"name": post.company_name, "url": company_url},
+                "relevance_reason": reason_text,
+                "classification": {**classification_data, "outcome": "unresolved_relevant_lead"},
+                "reason": "没有可验证的优先角色标准 Connect 联系人",
+                "created_at": timestamp,
+            }
+            unresolved_path = discovery_dir / "unresolved-relevant-leads.jsonl"
+            with unresolved_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(unresolved, ensure_ascii=False) + "\n")
+            state.setdefault("unresolved_lead_ids", []).append(unresolved_id)
+            state.setdefault("files", {})["unresolved_relevant_leads"] = str(unresolved_path)
+            output_paths.append(str(unresolved_path))
+            evaluation["candidate_outcome"] = "unresolved_relevant_lead"
+            message = "已记录未解析相关线索：业务相关，但没有可验证的标准 Connect 联系人；不计入候选人数。"
         else:
             profile_url = normalize_linkedin_url(selected.profile_url)
             candidate_id = "candidate_" + hashlib.sha256(profile_url.encode("utf-8")).hexdigest()[:16]
@@ -251,6 +289,10 @@ def record_company_post_evaluation(
                     "post_url": post_url,
                     "relevance_decision": "continue",
                     "relevance_reason": reason_text,
+                    "fit_status": classification_data["outcome"],
+                    "business_role": classification_data["business_role"],
+                    "supporting_evidence": classification_data["supporting_evidence"],
+                    "material_doubts": classification_data["material_doubts"],
                     "author": {"name": post.author_name, "type": "company", "profile_url": company_url},
                     "company": {"name": selected.company_name or post.company_name, "url": company_url},
                     "selected_member": {
@@ -276,6 +318,7 @@ def record_company_post_evaluation(
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(evaluation, ensure_ascii=False) + "\n")
     state["updated_at"] = timestamp
+    _write_json_atomic(Path(state["files"]["search_progress"]), progress)
     _write_json_atomic(state_path, state)
     _append_change(run_dir, timestamp, f"记录公司贴文判断：{normalized_decision}；{reason_text}")
     output_paths.append(str(state_path))
@@ -309,3 +352,39 @@ def _ensure_discovery_capacity(state: dict[str, Any]) -> None:
     limit = effective_limit or requested_limit
     if len(state.get("candidate_ids") or []) >= limit:
         raise ValueError(f"候选数量已经达到本次有效上限 {limit}；必须结束发现阶段，不能继续打开贴文。")
+
+
+def _register_unique_opened_post(progress: dict[str, Any], post_url: str) -> None:
+    evaluated = list(progress.get("evaluated_post_urls") or [])
+    if post_url in evaluated:
+        raise ValueError("该 LinkedIn 贴文已经打开并判断过；重复结果不能计入 50 条上限。")
+    evaluated.append(post_url)
+    progress["evaluated_post_urls"] = evaluated
+    progress["opened_post_count"] = len(evaluated)
+
+
+def _validated_classification(
+    classification: ProspectClassificationObservation | None,
+    decision: str,
+    fallback_reason: str,
+) -> dict[str, str]:
+    if classification is None:
+        classification = ProspectClassificationObservation(
+            outcome="provisional_candidate_fit" if decision == "continue" else "obvious_skip",
+            business_role="ambiguous" if decision == "continue" else "unrelated",
+            supporting_evidence=fallback_reason,
+            material_doubts="需要人工依据完整贴文和作者信息复核。" if decision == "continue" else "",
+        )
+    allowed_outcomes = {"obvious_skip", "provisional_candidate_fit", "unresolved_relevant_lead"}
+    allowed_roles = {"direct_category_manufacturer", "downstream_material_user", "same_category_channel_prospect", "unrelated", "ambiguous"}
+    if classification.outcome not in allowed_outcomes or classification.business_role not in allowed_roles:
+        raise ValueError("候选分类字段不在允许范围内。")
+    if not classification.supporting_evidence.strip():
+        raise ValueError("候选分类必须包含基于可见 LinkedIn 内容的支持证据。")
+    if classification.business_role == "direct_category_manufacturer" and decision != "skip":
+        raise ValueError("直接制造或供应同类/基础材料的主体必须 Skip，不能形成候选。")
+    if classification.business_role == "unrelated" and decision != "skip":
+        raise ValueError("与业务无关的贴文必须 Skip。")
+    if decision == "continue" and classification.outcome == "obvious_skip":
+        raise ValueError("Continue 不能同时标记为 obvious_skip。")
+    return asdict(classification)

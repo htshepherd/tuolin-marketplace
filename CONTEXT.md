@@ -9,7 +9,7 @@ A user-authorized workflow that applies confirmed targeting criteria to discover
 _Avoid_: LinkedIn campaign publishing, “adding friends,” claiming the workflow is authorized by LinkedIn
 
 **LinkedIn Discovery Candidate**:
-A LinkedIn member whose visible professional information appears to match the current targeting criteria but whose commercial relevance has not yet been confirmed.
+A LinkedIn member whose source post and visible professional information appear plausibly relevant but whose commercial fit remains unconfirmed until human candidate review.
 _Avoid_: customer, qualified lead, confirmed competitor
 
 **Connection Invitation**:
@@ -40,9 +40,17 @@ _Avoid_: profile visit, connect-button click without confirmation, accepted conn
 A discovery path that searches LinkedIn posts with confirmed content keywords, inspects people surfaced by those posts, and opens their profiles before considering a connection invitation.
 _Avoid_: people-search-first discovery, treating a matching post as proof that its author is a customer
 
+**Direct Category Manufacturer**:
+A company visibly manufacturing or directly supplying the same or substitutable base material category expressed by the source keyword phrase.
+_Avoid_: treating its promotional post as buyer intent, assuming a manufacturer will source the same material externally
+
 **Same-Category Channel Prospect**:
-A brand, distributor, or retailer that promotes or sells the target product category and may source, resell, or private-label products from an external supplier.
-_Avoid_: automatically excluding every same-category seller as a competitor, assuming external sourcing without profile or company context
+A brand, distributor, retailer, or private-label seller of a finished category whose visible business may rely on externally sourced products or materials.
+_Avoid_: classifying every seller as a manufacturer, asserting external sourcing as fact, excluding an ambiguous channel prospect before human review
+
+**Downstream Material User**:
+An installer, contractor, system integrator, fabricator, equipment maker, or project operator that visibly uses the referenced material category in services or finished products.
+_Avoid_: requiring a public RFQ, treating direct material suppliers as downstream users, accepting a usage inference without visible business evidence
 
 **Company Contact Resolution**:
 The conversion of a qualifying company-authored post into at most one connectable member, prioritized by Owner or Founder, Procurement or Sourcing, Managing Director or General Manager, then Product Manager.
@@ -54,7 +62,7 @@ _Avoid_: run-local deduplication only, using display names as identity, treating
 
 **Prospecting Interview**:
 A one-question-at-a-time conversation with the current operator that resolves only the missing business decisions for one prospecting run.
-_Avoid_: a fixed form, asking implementation questions, inheriting unresolved choices from an earlier run
+_Avoid_: a fixed form, product or knowledge-base questions, geography unsupported by Posts search, asking implementation questions, inheriting unresolved choices from an earlier run
 
 **Confirmed Prospecting Brief**:
 The reviewed output of a prospecting interview containing the run's content keywords, supported post-search criteria, target intent, successful-invitation limit, invitation-note decision, and invitation-dispatch interval.
@@ -72,9 +80,21 @@ _Avoid_: collecting a criterion the post-search interface cannot apply, browser 
 The three post-search decisions always resolved for a run: content keywords, sort order, and publication-date range.
 _Avoid_: forcing every optional LinkedIn filter into every interview
 
+**Keyword-Driven Interview Scope**:
+The six executable run decisions covering the ordered keyword list, Posts sort, publication range, invitation-note choice, fixed dispatch interval, and maximum invitation count.
+_Avoid_: product selection, product category, knowledge-base state, geography, AI keyword recommendations, repeating answers already present in the request
+
 **Ordered Content Keyword List**:
-One or more operator-confirmed post-search terms processed in their stated order, with each discovered candidate retaining its source keyword.
-_Avoid_: an unordered keyword set, merging all terms into an unreviewed query, losing discovery provenance
+One or more operator-supplied exact post-search phrases processed separately in their stated order, with each discovered candidate retaining its source phrase.
+_Avoid_: an unordered keyword set, an arbitrary phrase-count cap or whitelist, AI-generated expansion, merging all phrases into one unreviewed query, losing discovery provenance
+
+**Search Keyword Phrase**:
+An exact operator-supplied LinkedIn Posts query that may contain one or more words, such as `Exhaust Wrap` or `Special Fiberglass Exhaust Wrap`.
+_Avoid_: assuming every phrase is one word, silently splitting a multi-word phrase, treating comma-separated phrases as one query
+
+**Primary Search Keyword**:
+The first phrase in the ordered keyword list, carrying search priority but no distinct LinkedIn filter or execution behavior.
+_Avoid_: a separate interview field, a product identity, automatically generating related phrases from it
 
 **Successful Invitation Limit**:
 The maximum number of invitation-dispatch successes authorized across all keywords in one prospecting run.
@@ -96,17 +116,29 @@ _Avoid_: silent reduction, exceeding remaining capacity, starting discovery when
 The normal completion of a run when every confirmed keyword has no remaining eligible candidates, even though the successful-invitation limit was not reached.
 _Avoid_: repeating old results, silently loosening filters, inventing new keywords to fill the limit
 
+**Keyword Fallback Progression**:
+The ordered discovery rule that advances to the next search keyword phrase only while the current candidate pool remains below the effective run invitation limit.
+_Avoid_: searching every phrase after the candidate pool is full, per-keyword quotas, redistributing a full batch across later phrases
+
 **Post Sort Decision**:
 The operator's per-run selection of Latest or Most Relevant, with Latest presented as the interview recommendation.
 _Avoid_: a hidden fixed sort, changing sort during a run without new authorization
 
 **Candidate Review Card**:
-A Codex-visible and run-persisted Markdown-and-JSON pre-dispatch summary containing the source keyword, post content and URL, post-relevance reason, post author or company, selected member name, title, company, profile URL, approval state, invitation-note decision, and final dispatch outcome.
-_Avoid_: an unexplained profile URL, a lead-quality score, sending before the card is shown
+A Codex-visible and run-persisted Markdown-and-JSON pre-dispatch record containing the complete visible source-post text and URL, source keyword phrase, provisional AI relevance reason, post author or company, selected member name, title, company, profile URL, approval state, invitation-note decision, and final dispatch outcome.
+_Avoid_: a post summary that hides material context, an unexplained profile URL, presenting AI judgment as confirmed fit, a lead-quality score, sending before the card is shown
 
 **Pre-Dispatch Candidate Review**:
-The human confirmation gate after candidate discovery and before any connection invitation is submitted.
+The human confirmation gate in which the operator reads each candidate's complete visible source post and identity evidence before approving or removing the candidate.
 _Avoid_: treating run authorization as approval of unseen candidates, confirming after dispatch
+
+**Provisional Candidate Fit**:
+The AI's non-final visible-evidence judgment that a post and member are plausible enough to show for human candidate review.
+_Avoid_: qualified lead, verified buyer, final customer judgment, hiding uncertainty from the operator
+
+**Unresolved Relevant Lead**:
+A plausibly relevant post or company for which no verifiable personal LinkedIn profile with a standard Connect path can be resolved.
+_Avoid_: counting it toward the candidate limit, fabricating a contact, presenting it as an actionable candidate
 
 **Approved Candidate Batch**:
 The operator-confirmed subset of displayed candidate review cards that may proceed to sequential invitation dispatch in the current run.
@@ -132,9 +164,13 @@ _Avoid_: any logged-in account, credentials as identity, silently continuing aft
 The fixed first-release ceiling of fifty inspected posts for each content keyword before discovery advances to the next keyword.
 _Avoid_: an interview field, unbounded scrolling, counting unopened search-result placeholders as inspected posts
 
+**Verified Infinite-Scroll Exhaustion**:
+Evidence that the current LinkedIn Posts result stream produced no new unique post identities across three consecutive bottom-scroll-and-load-wait cycles, rather than a conclusion drawn from a visible footer, advertisement, one stalled load, or a discarded page parameter.
+_Avoid_: treating `page=2` as supported pagination, stopping after one scroll, equating currently rendered results with the full result set
+
 **Post Relevance Decision**:
-A binary Continue or Skip judgment with one visible-content reason stating whether a keyword-matched post concerns selling, promoting, distributing, or branding the target product category.
-_Avoid_: a lead score, unsupported commercial inference, accepting a post from keyword presence alone
+A binary Continue or Skip judgment, based only on the source keyword phrase and visible LinkedIn content, stating whether the post substantively concerns selling, promoting, manufacturing, sourcing, distributing, or commercially applying the referenced category.
+_Avoid_: a lead score, unsupported commercial inference, accepting a post from keyword presence alone, continuing a direct same-category manufacturer as a prospective buyer
 
 **Individual Post Author Candidate**:
 The member who authored a relevant post and whose profile shows that they represent the related brand, distributor, or retailer.
@@ -176,25 +212,13 @@ _Avoid_: chat-only state, scripts making unreviewed external actions, a reposito
 The official Codex Chrome extension operating a dedicated task tab group inside the operator's existing signed-in Chrome profile.
 _Avoid_: the built-in Browser profile for the first release, a repository-launched headless browser, requiring full CDP for ordinary interaction
 
-**Product-Grounded LinkedIn Search**:
-A keyword-driven prospecting run bound to one existing Tuolin product and intended to discover channel prospects that may support sales of that product.
-_Avoid_: a generic cross-industry people finder, hard-coding exhaust wrap, inventing a product outside the Tuolin knowledge interface
-
-**Bound Prospecting Product**:
-The single official Tuolin product resolved through the verified Agent interface and confirmed before a prospecting interview collects search criteria.
-_Avoid_: free-text product identity, multiple products in one run, guessing when resolution fails
-
-**Product Keyword Recommendation**:
-An ordered set of English post-search terms proposed from the bound product's official name, approved external names, and confirmed application terms and withheld from search until the operator confirms or edits it.
-_Avoid_: unconfirmed query expansion, invented product naming, treating a recommendation as authorization
-
-**Default Keyword Language**:
-English, used for AI-generated product keyword recommendations without adding a separate language question to the first-release interview.
-_Avoid_: an abstract post-language filter, silently translating operator-supplied terms, asking for language by default
+**Keyword-Driven LinkedIn Search**:
+A prospecting run whose discovery scope is defined by an operator-supplied ordered list of exact search keyword phrases and does not require selecting a formal Tuolin product.
+_Avoid_: mandatory product binding, knowledge-interface preflight, AI-generated keyword expansion, hard-coding one product category, treating keywords as verified product facts
 
 **AI Invitation Note Draft**:
-A short English connection-invitation note grounded in the bound product and search purpose, written without exaggeration or aggressive selling and withheld until the operator confirms or edits it.
-_Avoid_: unsupported product claims, per-candidate rewriting, automatic dispatch of draft text
+A short English connection-invitation note grounded in the confirmed keyword scope and search purpose, written without exaggeration or aggressive selling and withheld until the operator confirms or edits it.
+_Avoid_: product parameters, certifications, company-capability claims, unsupported facts, per-candidate rewriting, automatic dispatch of draft text
 
 **Invitation Note Availability Conflict**:
 The runtime condition in which an authorized batch requires a note but LinkedIn does not expose or permit the Add a note path.
@@ -216,12 +240,8 @@ _Avoid_: trusting only run-local state, display-name identity, showing pending o
 The exclusive first-release lock allowing only one active prospecting run for a bound LinkedIn account at a time.
 _Avoid_: same-account parallel discovery, independent interval timers, duplicate candidate reservations
 
-**LinkedIn Search Knowledge Context**:
-The `linkedin_search` downstream Agent-interface context that supplies official product identity, allowed external naming, application scenarios, and sales-use terms to the prospecting skill.
-_Avoid_: reusing `linkedin_post`, reading campaign outputs, scanning raw knowledge files
-
 **Operator-Supplied Market Search Term**:
-A user-confirmed keyword used only for LinkedIn post search and relevance matching even when it is absent from the formal product knowledge interface.
+A user-confirmed keyword phrase used only for LinkedIn post search and relevance matching.
 _Avoid_: promoting the term into an official product name, product fact, or external claim
 
 **Interview Confirmation Reply**:
@@ -237,8 +257,12 @@ A missing business decision whose answer materially changes a supported search c
 _Avoid_: role verification, effect metrics, fixed internal limits, facts discoverable from code or page state, criteria the LinkedIn interface cannot apply
 
 **Prospecting Interview Question Format**:
-The consistent Chinese pattern of numbered question, one recommended answer with reason, and a final “是否确认？” prompt answered by the current Codex operator.
-_Avoid_: option menus, multiple decisions in one question, special acceptance commands
+The consistent Chinese pattern of a numbered question, with one recommended answer and reason when a concrete recommendation is possible, followed by “是否确认？”.
+_Avoid_: option menus, multiple decisions in one question, invented keyword recommendations, special acceptance commands
+
+**Required Keyword Input Question**:
+The sole interview question that requests operator-authored search phrases with format guidance but no AI-proposed keyword content.
+_Avoid_: guessing the business target, reading product knowledge, asking the operator to confirm an answer they just supplied, auto-expanding the list
 
 **LinkedIn Campaign Plan**:
 A Chinese marketing strategy document that defines campaign positioning, audience, claims, content rhythm, and asset direction before daily post copy is produced.
@@ -760,7 +784,9 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - The **First-Release Evaluation Boundary** defers candidate-quality optimization without removing the run's confirmed targeting criteria
 - Only an **Invitation Dispatch Success** counts toward a run's completed connection-invitation total
 - The first release uses **Post-First Prospect Discovery** as its candidate source before profile inspection and invitation dispatch
-- A **Same-Category Channel Prospect** remains eligible for potential-customer discovery even when it already markets a competing product
+- A **Direct Category Manufacturer** is skipped as a competitor rather than inferred to be a buyer
+- A **Same-Category Channel Prospect** may continue as provisional when visible evidence supports branding, distribution, retail, or private-label activity; an unclear make-versus-source model remains a human-review uncertainty
+- A **Downstream Material User** may continue without an explicit RFQ when visible evidence shows installation, integration, fabrication, equipment, or project use of the referenced category
 - A qualifying company-authored post requires **Company Contact Resolution** before a **Connection Invitation** can be sent
 - **Company Contact Resolution** that finds no member in the confirmed role priority ends with the company skipped, not an arbitrary fallback employee
 - The **Prospecting Contact Ledger** deduplicates post URLs, company-page URLs, and member-profile URLs across all runs
@@ -784,19 +810,26 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Expanding criteria after **Search Exhaustion Completion** requires a new brief and a new run authorization
 - The **Core Post Search Criteria** contains exactly one **Post Sort Decision** shared by all keywords in the run
 - Every candidate proposed for invitation must have a **Candidate Review Card** shown during **Pre-Dispatch Candidate Review**
+- Every **Candidate Review Card** prints the complete visible source-post text in Codex so the operator can independently judge **Provisional Candidate Fit**
+- Plausible but uncertain downstream users with verified personal identity and **Standard Connect Eligibility** enter review as **Provisional Candidate Fit**, with visible supporting evidence and doubts
+- An **Unresolved Relevant Lead** is recorded for traceability but does not enter the candidate batch or count toward its effective limit
 - A **Connection Invitation** cannot be submitted until its candidate passes **Pre-Dispatch Candidate Review**
 - **Pre-Dispatch Candidate Review** produces exactly one **Approved Candidate Batch** for the run
 - Members of an **Approved Candidate Batch** are processed sequentially and every consecutive submission must respect the **Invitation Dispatch Interval**
 - Every **Confirmed Prospecting Brief** includes exactly one **Invitation Dispatch Interval** shared by the approved batch
 - The displayed candidate batch contains no more members than the **Successful Invitation Limit**
 - Once reviewed, the batch becomes a **Closed Candidate Batch**; its approved subset is dispatched and any further discovery requires a new run
+- Discovery continues only until the provisional candidate-card pool reaches the effective run limit, the current search space reaches a valid stop condition, or all phrases finish; operator removals during review never reopen discovery or trigger backfill
 - **Pre-Dispatch Candidate Review** ends only when the operator grants **Final Batch Dispatch Authorization** or rejects the batch
 - After **Final Batch Dispatch Authorization**, the approved batch is dispatched sequentially without additional per-member confirmation
 - Every **Automated LinkedIn Prospecting Run** has exactly one **Bound LinkedIn Account**, shown before discovery and again at final batch authorization
 - Missing authentication, unresolvable identity, or a change to the **Bound LinkedIn Account** blocks the run; credentials and verification codes remain user-entered
 - **Post-First Prospect Discovery** inspects no more than the **Keyword Post Inspection Limit** for each keyword and then advances in list order
+- Before the effective candidate limit or **Keyword Post Inspection Limit** is reached, a keyword may end as exhausted only with **Verified Infinite-Scroll Exhaustion**
+- Advertisements and duplicate post identities do not count toward the **Keyword Post Inspection Limit**
 - Reaching every keyword's inspection limit without filling the candidate batch leads to the existing actual-size batch, not broader automatic discovery
 - Each inspected post receives one **Post Relevance Decision** before its author or company can become a discovery candidate
+- Each **Post Relevance Decision** uses only the source **Search Keyword Phrase** plus visible post, author, and company evidence; product knowledge and a verified knowledge interface are not prerequisites
 - News reposts, unrelated homonyms, ordinary consumer sharing, and obvious spam receive a Skip decision in the first release
 - An **Individual Post Author Candidate** proceeds directly to candidate review; **Company Contact Resolution** applies only to company-authored posts
 - Only a member with **Standard Connect Eligibility** may enter an **Approved Candidate Batch**
@@ -809,11 +842,14 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - The **Tuolin LinkedIn Search Skill** owns prospecting runs and consumes browser and operational-ledger capabilities without changing the existing LinkedIn campaign-publishing boundary
 - The **Tuolin LinkedIn Search Skill** uses a **Hybrid Prospecting Implementation** rather than a prompt-only workflow
 - The first release performs website interaction through the **Codex Chrome Prospecting Surface** and requires its extension, website access, Chrome session, and bound LinkedIn identity to pass preflight
-- Every **Automated LinkedIn Prospecting Run** is a **Product-Grounded LinkedIn Search** that consumes one product from the verified Agent interface and uses operator-confirmed keywords around that product
-- Every **Product-Grounded LinkedIn Search** has exactly one **Bound Prospecting Product**; failed product resolution blocks the run and routes knowledge work to the knowledge-base agent
-- A **Product Keyword Recommendation** may seed the **Ordered Content Keyword List**, but only operator-confirmed terms enter the run brief
-- A **Product Keyword Recommendation** uses the **Default Keyword Language** unless the operator directly edits or supplies the final terms
+- Every **Automated LinkedIn Prospecting Run** is a **Keyword-Driven LinkedIn Search** whose search scope comes from an operator-supplied **Ordered Content Keyword List** without requiring formal product selection
+- Every item in the **Ordered Content Keyword List** is one exact **Search Keyword Phrase** and is searched separately in the confirmed order
+- The **Ordered Content Keyword List** has no business whitelist or fixed phrase-count ceiling; its deduplicated count and complete execution order are shown in the run brief
+- A **Primary Search Keyword** is simply the first list item; exact duplicates are removed case-insensitively while the first occurrence keeps its position
+- **Keyword Fallback Progression** stops discovery as soon as the candidate pool reaches the effective run invitation limit; later phrases are searched only when earlier phrases do not supply enough eligible candidates
+- A **Keyword-Driven LinkedIn Search** requires a writable task workspace for durable run state, candidate cards, the shared contact ledger, and rolling invitation counts, but it does not require or read a knowledge-base Agent interface
 - When the **Invitation Note Decision** enables a note, an **AI Invitation Note Draft** must become fixed operator-confirmed text before it enters the brief
+- An **AI Invitation Note Draft** may summarize a clear common topic across the confirmed keyword phrases; when no reliable common topic exists, it uses generic industry-connection language instead of inventing a product description
 - Dispatch uses the confirmed note byte-for-byte across the approved batch and cannot rewrite it during execution
 - An **Invitation Note Availability Conflict** pauses dispatch and requires the operator to authorize no-note dispatch or end the run
 - Every first-release run is an **Operator-Started Prospecting Run** and requires its own interview and authorizations
@@ -822,9 +858,9 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Sent, pending, first-degree-connected, reserved by another unfinished batch, or unresolved-ambiguous members are excluded; only confirmed no-dispatch failures remain retryable
 - Candidate cards persist as Markdown and JSON in the run directory; screenshots are retained only for explicit requests or disputed interface state, and browser secrets are never stored
 - The **Account-Scoped Active Run Lock** protects candidate reservation, contact-ledger updates, and dispatch pacing until the run completes or terminates
-- The **Tuolin LinkedIn Search Skill** consumes product knowledge only through the **LinkedIn Search Knowledge Context**
 - An **Ordered Content Keyword List** may contain an **Operator-Supplied Market Search Term**, with provenance retained and downstream claim use prohibited
-- Each unresolved **Prospecting Interview** question presents one recommendation and reason, ends by asking whether it is confirmed, and accepts one **Interview Confirmation Reply** for the current question only
+- Each unresolved **Prospecting Interview** question presents one recommendation and reason when the system has a supported default; the **Required Keyword Input Question** instead waits for operator-authored phrases and advances immediately after valid input
+- The **Keyword-Driven Interview Scope** limits a new run to six executable decisions and omits any decision already explicit in the initial request
 - **Sequential Interview Confirmation** applies until the brief is decision-sufficient; information already explicit in the initial request is not asked again
 - A **Prospecting Interview** may ask only a **Decision-Relevant Interview Question** and must render it in the **Prospecting Interview Question Format**
 - The system does not determine the operator's organizational role; an explicit confirmation in the current Codex conversation is sufficient
@@ -1391,8 +1427,14 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "Does the first release search member profiles directly with product keywords?"
 > **Domain expert:** "No. Use **Post-First Prospect Discovery**: search relevant content first, then inspect the people surfaced by those posts."
 
-> **Dev:** "Should a brand promoting its own exhaust wrap be excluded as a competitor?"
-> **Domain expert:** "Not automatically. Treat it as a **Same-Category Channel Prospect** when it may buy, resell, or private-label externally supplied products."
+> **Dev:** "Should a company visibly manufacturing the same insulation material be inferred to be a buyer?"
+> **Domain expert:** "No. Treat it as a **Direct Category Manufacturer** and skip it unless visible evidence establishes a distinct downstream-use role."
+
+> **Dev:** "Should a brand selling a finished exhaust wrap be excluded merely because it sells the same category?"
+> **Domain expert:** "No. Treat it as a provisional **Same-Category Channel Prospect** when it may brand, distribute, retail, or private-label externally sourced goods, and expose uncertainty for human review."
+
+> **Dev:** "Must an installer or fabricator publish an RFQ before it can continue?"
+> **Domain expert:** "No. A **Downstream Material User** may continue when its visible services or finished products plausibly consume the referenced material category."
 
 > **Dev:** "Can the workflow connect directly to a company page or invite several of its employees?"
 > **Domain expert:** "No. Use **Company Contact Resolution** to select at most one prioritized member from that company in the current run."
@@ -1442,6 +1484,12 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "May the workflow send invitations immediately after it finds a matching post?"
 > **Domain expert:** "No. Print a **Candidate Review Card** in Codex and wait at the **Pre-Dispatch Candidate Review** gate before any invitation is submitted."
 
+> **Dev:** "Can the Agent present a plausible installer as a confirmed potential customer?"
+> **Domain expert:** "No. Record only **Provisional Candidate Fit**, print the complete source post and identity evidence, and let the operator make the final batch decision."
+
+> **Dev:** "Should a relevant company without a verifiable connectable member consume one of ten candidate slots?"
+> **Domain expert:** "No. Record an **Unresolved Relevant Lead** and continue scrolling for an actionable candidate."
+
 > **Dev:** "Does approving ten candidates mean ten invitations may be submitted at once?"
 > **Domain expert:** "No. The **Approved Candidate Batch** is dispatched sequentially, with the confirmed **Invitation Dispatch Interval** between submissions."
 
@@ -1487,20 +1535,23 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "Should the first release sign in again inside the built-in Browser profile?"
 > **Domain expert:** "No. Use the **Codex Chrome Prospecting Surface** to operate a dedicated task tab group in the already signed-in Chrome profile."
 
-> **Dev:** "Is `tuolin-linkedin-search` a generic LinkedIn search tool for any industry?"
-> **Domain expert:** "No. It is generic across Tuolin products: every run is a **Product-Grounded LinkedIn Search** whose keywords support that product's sales goal."
+> **Dev:** "Must `tuolin-linkedin-search` resolve a formal product before it can start?"
+> **Domain expert:** "No. Start a **Keyword-Driven LinkedIn Search** from the exact **Search Keyword Phrases** supplied by the operator."
 
-> **Dev:** "May the search start from an unrecognized free-text product name?"
-> **Domain expert:** "No. Resolve and confirm one **Bound Prospecting Product** through the verified Agent interface or stop for knowledge-base work."
+> **Dev:** "Does a keyword-only run still require a verified knowledge-base Agent interface?"
+> **Domain expert:** "No. It needs durable task storage for audit, recovery, deduplication, and invitation limits, but no product knowledge preflight."
 
-> **Dev:** "May AI search every synonym it can think of for the product?"
-> **Domain expert:** "No. Present a **Product Keyword Recommendation** and search only the terms the operator confirms into the ordered list."
+> **Dev:** "May AI add synonyms that the operator did not provide?"
+> **Domain expert:** "No. Search only the exact phrases in the confirmed **Ordered Content Keyword List**."
 
-> **Dev:** "Must the interview ask which language to use for keyword recommendations?"
-> **Domain expert:** "No. Use the English **Default Keyword Language** and let the operator edit the concrete ordered terms if needed."
+> **Dev:** "Should every confirmed phrase still be searched after the candidate pool reaches the run limit?"
+> **Domain expert:** "No. Use **Keyword Fallback Progression**: later phrases supplement earlier ones only while the batch remains below its effective limit."
 
 > **Dev:** "May the Agent personalize the invitation note while dispatching each candidate?"
 > **Domain expert:** "No. Confirm or edit one **AI Invitation Note Draft** before the brief is finalized, then use that fixed text for the whole approved batch."
+
+> **Dev:** "May the note use product facts when the run has no bound product?"
+> **Domain expert:** "No. Ground it only in the confirmed keyword scope; if those phrases have no safe common topic, use a generic industry-connection note."
 
 > **Dev:** "May dispatch silently omit the note when LinkedIn no longer offers Add a note?"
 > **Domain expert:** "No. Treat it as an **Invitation Note Availability Conflict** and obtain a new explicit decision before further dispatch."
@@ -1517,9 +1568,6 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "Can two tasks dispatch for the same LinkedIn account at the same time?"
 > **Domain expert:** "No. The first release uses an **Account-Scoped Active Run Lock** so one account has at most one active run."
 
-> **Dev:** "Should prospect keyword generation reuse the LinkedIn posting context?"
-> **Domain expert:** "No. Use the dedicated **LinkedIn Search Knowledge Context** so campaign content and prospect discovery remain separate."
-
 > **Dev:** "Must exhaust wrap already be an official knowledge-card term before it can be searched?"
 > **Domain expert:** "No. It may be an **Operator-Supplied Market Search Term**, but search provenance does not make it an official product name or claim."
 
@@ -1533,7 +1581,10 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. That is not a **Decision-Relevant Interview Question**; accept the current Codex operator's explicit confirmation."
 
 > **Dev:** "How should each unresolved question be presented?"
-> **Domain expert:** "Use the **Prospecting Interview Question Format**: one numbered question, one recommendation with reason, then ask 是否确认？"
+> **Domain expert:** "Use the **Prospecting Interview Question Format**: one numbered question and, when a supported default exists, one recommendation with reason followed by 是否确认？"
+
+> **Dev:** "Should the missing-keyword question invent a recommended list?"
+> **Domain expert:** "No. Use the **Required Keyword Input Question** to explain the accepted separators and wait for the operator's exact phrases."
 
 > **Dev:** "Should the LinkedIn plan call the knowledge-base review workflow?"
 > **Domain expert:** "No. This is a **Marketing Plan Review**. It should check the campaign plan and give suggestions, not change formal knowledge."
@@ -1956,7 +2007,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - “有效” was expanded into lead-quality and conversion metrics. Resolved for the first release: apply the **First-Release Evaluation Boundary** and defer those metrics until after the connection workflow works.
 - “能加上人” could mean either submitting an invitation or becoming a first-degree connection. Resolved for the first release: completion means **Invitation Dispatch Success** and does not wait for recipient acceptance.
 - “关键词搜索” could mean searching posts, people, or companies. Resolved for the first release: use **Post-First Prospect Discovery** with content keywords; direct people search is not the primary discovery entrypoint.
-- “同行”和“潜在客户” were treated as mutually exclusive. Resolved: a same-category brand, distributor, or retailer may be a **Same-Category Channel Prospect** even though it publicly sells a competing product.
+- “同行”和“潜在客户” were previously allowed to overlap without distinguishing business models. Resolved: a **Direct Category Manufacturer** is skipped; a **Same-Category Channel Prospect** or **Downstream Material User** may continue provisionally, with unclear make-versus-source evidence left for human review.
 - “贴文作者” could be either a member or a company page. Resolved: a company-authored match must use **Company Contact Resolution** to find one prioritized personal account before invitation dispatch.
 - Company contact fallback was undefined. Resolved: if **Company Contact Resolution** finds none of the confirmed priority roles, skip the company instead of choosing another employee.
 - “重复处理” could mean only duplicates inside the current search page. Resolved: the **Prospecting Contact Ledger** provides cross-run deduplication for posts, companies, members, invitation state, and retry eligibility.
@@ -1964,22 +2015,30 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Invitation-note personalization was unspecified. Resolved: one run uses no note or one fixed confirmed note for every approved candidate; per-candidate generation is out of scope.
 - “目标地区” was proposed as an interview field even though standard post search cannot apply it. Resolved for the first release: remove it and restrict discovery decisions to **Supported Post Search Criteria**.
 - “基于搜索条件访谈” could mean forcing every visible filter into a fixed form. Resolved: always collect the three **Core Post Search Criteria** and add other supported filters only when relevant.
-- “关键词” could mean exactly one term or an unstructured batch. Resolved: use an **Ordered Content Keyword List** and preserve per-candidate keyword provenance.
+- “组合关键词” could mean one merged query, Boolean composition, or multiple phrases. Resolved: use an **Ordered Content Keyword List** in which every comma- or line-separated **Search Keyword Phrase** is searched independently and intact, while preserving per-candidate phrase provenance.
+- “关键词数量” could be confused with the number of Posts returned for one phrase. Resolved: the operator's phrase list has no fixed count ceiling, while each phrase independently follows candidate, inspection, and verified-exhaustion stop conditions.
+- “主词” could imply a separate required field or special query behavior. Resolved: it is only the **Primary Search Keyword**, meaning the first phrase searched; it is not collected separately and duplicate occurrences are removed.
 - “每天加多少个” could mean a quota per keyword or one authorization ceiling. Resolved: use one run-wide **Successful Invitation Limit** counted only by confirmed invitation dispatches.
 - The default run size and weekly pacing policy were unspecified. Resolved: recommend the **Default Run Invitation Limit** of ten and enforce a local **Seven-Day Invitation Ceiling** of one hundred per bound account.
 - “7 天” could mean a calendar week or a rolling duration. Resolved: use the rolling one-hundred-sixty-eight hours before each dispatch.
 - The seven-day ceiling could imply complete account-wide activity tracking. Resolved: count only skill-recorded successes and disclose that manual invitations are not included.
 - A requested run limit could exceed remaining seven-day capacity. Resolved: compute and confirm the **Effective Run Invitation Limit**, and block before discovery when it is zero.
 - An invitation limit could be mistaken for a quota the system must fill. Resolved: it is a ceiling, and **Search Exhaustion Completion** is a valid result below that ceiling.
+- Multiple keyword phrases could imply that all phrases must always be searched. Resolved: use **Keyword Fallback Progression** and stop discovery once the candidate pool reaches the effective run limit.
 - Post ordering was unspecified. Resolved: make it a per-run **Post Sort Decision**, recommend Latest, and preserve the operator's ability to choose Most Relevant.
 - Run authorization could be interpreted as approval to contact candidates the operator has never seen. Resolved: require a **Candidate Review Card** and **Pre-Dispatch Candidate Review** before invitation submission.
+- AI screening could be mistaken for final prospect qualification. Resolved: every included member has only **Provisional Candidate Fit** until the operator reviews the complete visible post and identity evidence in the **Candidate Review Card**.
+- A relevant post without a resolvable personal account could be counted as a candidate. Resolved: record an **Unresolved Relevant Lead** without consuming the candidate limit, and continue discovery.
 - Candidate review mode was briefly considered one-at-a-time. Resolved: review an **Approved Candidate Batch** in Codex, then dispatch its invitations sequentially with an **Invitation Dispatch Interval**.
 - Invitation pacing was unspecified. Resolved: include one operator-confirmed **Invitation Dispatch Interval** in every run brief and recommend five minutes without claiming it prevents platform restrictions.
 - Batch approval could trigger automatic replacement discovery for rejected candidates. Resolved: the reviewed list is a **Closed Candidate Batch** and further discovery requires a new task.
+- “找够 10 个” could mean refilling after human rejection. Resolved: discovery may produce up to ten reviewable cards, but operator removals are not backfilled and the final approved batch may be smaller.
 - Candidate approval and final send permission were treated as separate possible prompts. Resolved: the explicit batch confirmation is the **Final Batch Dispatch Authorization**, after which no per-member prompt is required.
 - “账号必须已登录” did not identify which member account was authorized. Resolved: bind each run to one displayed **Bound LinkedIn Account** and block on missing, unknown, or changed identity.
 - Search exhaustion had no finite inspection boundary. Resolved: inspect at most fifty posts per keyword through the fixed **Keyword Post Inspection Limit**, which is not an interview question.
+- LinkedIn's infinite result stream could be mistaken for six total results after one stalled load or a visible footer. Resolved: neither a footer, advertisement, nor discarded `page=2` parameter proves exhaustion; require **Verified Infinite-Scroll Exhaustion** before ending a keyword below its candidate and inspection limits.
 - A keyword match could be mistaken for sufficient candidate evidence. Resolved: require a binary **Post Relevance Decision** with one reason before inspecting the author or company.
+- Removing product binding could leave relevance dependent on hidden product knowledge. Resolved: judge relevance only from the source **Search Keyword Phrase** and visible LinkedIn content, skipping incidental mentions, reposted news, ordinary consumer content, homonyms, and spam.
 - Candidate resolution for personal and company-authored posts was conflated. Resolved: keep a verified **Individual Post Author Candidate** directly, and use **Company Contact Resolution** only for company-authored posts.
 - A missing ordinary Connect action could trigger alternate outreach or guessed data. Resolved: require **Standard Connect Eligibility** and skip rather than substitute Follow, Message, email guesses, or bypass attempts.
 - Dispatch failure handling was undifferentiated. Resolved: continue after a **Candidate-Local Dispatch Failure**, but stop the entire run immediately on a **Platform-Level Dispatch Stop**.
@@ -1988,23 +2047,27 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - LinkedIn publishing and prospecting were considered one skill. Resolved: create the independent **Tuolin LinkedIn Search Skill** named `tuolin-linkedin-search` and preserve the existing publishing skill's manual boundary.
 - Skill implementation could be prompt-only or a repository-owned browser bot. Resolved: use the **Hybrid Prospecting Implementation** with persisted scripts and Codex-managed browser interaction.
 - The managed browser surface was undecided. Resolved: the first release requires the official **Codex Chrome Prospecting Surface** and does not use the built-in Browser profile.
-- “完全由关键词驱动的通用 skill” could imply arbitrary industries or products. Resolved: it is generic only across existing Tuolin products, and every run binds product-grounded keywords to a sales purpose.
-- Product selection could be treated as unrestricted free text. Resolved: every run requires one **Bound Prospecting Product** from the verified Agent interface before keyword interview begins.
-- AI-generated search expansion could run without review. Resolved: AI may propose a **Product Keyword Recommendation**, but the operator controls the final ordered keyword list.
-- Keyword recommendation language was considered another interview field. Resolved: use English as the **Default Keyword Language** and collect only the concrete keyword list.
+- “完全由关键词驱动的通用 skill” previously meant generic only across formally resolved Tuolin products. Superseded: a **Keyword-Driven LinkedIn Search** requires no product selection and uses only operator-supplied phrases.
+- Product selection was previously mandatory. Superseded: formal product resolution and the `linkedin_search` knowledge context are not prerequisites for prospect search.
+- A verified knowledge-base Agent interface was previously a run-creation gate. Superseded: keyword-only prospect search requires durable writable task storage but does not require or consume the knowledge interface.
+- Existing product-bound run compatibility was considered during the test phase. Resolved: no migration or resume compatibility is required; after the keyword-driven change, testing starts from newly created runs.
+- AI-generated search expansion was previously allowed after review. Superseded: the operator supplies the complete **Ordered Content Keyword List** and the skill does not add synonyms automatically.
 - Invitation-note drafting was undefined. Resolved: when notes are enabled, AI proposes one restrained English **AI Invitation Note Draft** that the operator must confirm or edit before the brief is complete.
+- Removing product binding could tempt the note generator to invent product or company facts. Resolved: use only the confirmed keyword scope and search purpose, falling back to generic industry-connection language when no common topic is reliable.
 - Note availability can change between brief confirmation and dispatch. Resolved: an **Invitation Note Availability Conflict** pauses the batch and forbids silently downgrading to no-note invitations.
 - “每天加多少个” could imply unattended daily scheduling. Resolved: the first release has no scheduler; every task is an **Operator-Started Prospecting Run** with a run-wide invitation limit.
 - Session interruption and platform restriction were conflated. Resolved: ordinary disconnection uses **Interrupted Dispatch Recovery**, while a **Platform-Level Dispatch Stop** requires a new task.
 - Candidate review data could remain chat-only or include browser secrets. Resolved: persist review cards as Markdown and JSON, keep screenshots exceptional, and never store cookies, passwords, or browser session data.
 - Cross-task deduplication could rely only on a stale local URL list. Resolved: use **Contact Eligibility Reconciliation** against both the shared ledger and the live LinkedIn profile state before review and dispatch.
 - Same-account parallel tasks could race on deduplication and pacing. Resolved: enforce an **Account-Scoped Active Run Lock** in the first release.
-- Product-grounded search could reuse the campaign-publishing knowledge context. Resolved: add the dedicated **LinkedIn Search Knowledge Context** and prohibit campaign-output and raw-file reads.
+- A dedicated product knowledge context was previously required for every search run. Superseded: keyword-only prospect search does not consume product knowledge or campaign outputs.
 - Search keywords were at risk of being treated as formal product language. Resolved: allow an **Operator-Supplied Market Search Term** for discovery while forbidding automatic knowledge or claim promotion.
 - Interview acceptance was proposed as the command “按推荐”. Resolved: ask “是否确认？” and accept plain confirmation for the current question only.
 - Bulk acceptance of all remaining interview recommendations was considered. Resolved: the first release requires **Sequential Interview Confirmation** and does not support a blanket reply.
 - Authorization-role verification was considered. Resolved: do not infer or validate boss-versus-employee roles; explicit confirmation by the current Codex operator is sufficient.
 - Interview depth could be measured by question count. Resolved: ask only a **Decision-Relevant Interview Question** and use the consistent **Prospecting Interview Question Format**.
+- Removing product binding could still leave product, category, knowledge-base, or geography questions in the interview. Resolved: use the six-decision **Keyword-Driven Interview Scope** and skip every answer already explicit in the initial request.
+- The interview format previously required a concrete recommendation for every question. Superseded for keywords: the **Required Keyword Input Question** provides only format guidance because all search phrases must come from the operator.
 
 - "审阅" was used for both marketing campaign quality review and knowledge-base fact review. Resolved: use **Marketing Plan Review** for LinkedIn campaign planning and **Knowledge Review** for formal knowledge-base review items.
 - “母版” previously referred inconsistently to silent and narrated outputs. Resolved: remove the term and use **Video Language Version**.
