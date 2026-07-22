@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "1.52.1",
+  "version": "1.52.2",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, confirmation-gated LinkedIn content and prospect-search workflows, and evidence-driven YouTube Shorts video creation.",
   "author": {
     "name": "Tianjin Tuolin"

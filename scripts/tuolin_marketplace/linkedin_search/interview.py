@@ -228,7 +228,11 @@ def _normalize_answer(field: str, value: Any) -> Any:
             terms = [str(item).strip() for item in value]
         else:
             text = str(value).strip()
-            text = re.sub(r"^(?:使用|按顺序使用|关键词(?:为|是)?)[：:\s]*", "", text)
+            text = re.sub(
+                r"^(?:使用|按顺序使用|搜索关键词(?:为|是|用)?|关键词(?:为|是|用)?)[：:\s]*",
+                "",
+                text,
+            )
             terms = [part.strip(" \"'“”‘’") for part in re.split(r"[,，;；、\n]+", text)]
         result = _dedupe_terms([term for term in terms if term])
         if not result:

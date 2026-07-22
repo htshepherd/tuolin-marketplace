@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from tuolin_marketplace.linkedin_search.agent import continue_linkedin_search_interview
 from tuolin_marketplace.linkedin_search.browser_contract import (
     LinkedInAccountObservation,
     LinkedInPostSearchObservation,
@@ -44,6 +45,7 @@ from tuolin_marketplace.linkedin_search.evidence import record_browser_evidence
 def main() -> int:
     parser = argparse.ArgumentParser(description="Apply a deterministic state transition to a LinkedIn search run.")
     parser.add_argument("action", choices=[
+        "answer-interview",
         "bind-account", "confirm-effective-limit", "record-first-search", "record-next-search", "finish-keyword",
         "record-individual", "record-company", "prepare-review", "remove-candidates",
         "confirm-batch", "prepare-authorization", "authorize-batch",
@@ -59,7 +61,9 @@ def main() -> int:
         raise ValueError("--data-json 顶层必须是对象。")
     run_dir = Path(args.run_dir)
 
-    if args.action == "bind-account":
+    if args.action == "answer-interview":
+        result = continue_linkedin_search_interview(run_dir, str(data.get("reply") or ""))
+    elif args.action == "bind-account":
         result = bind_linkedin_account(
             run_dir,
             LinkedInAccountObservation(**data["observation"]),

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-EXPECTED_PLUGIN_VERSION = "1.52.1"
+EXPECTED_PLUGIN_VERSION = "1.52.2"
 
 
 def main() -> int:

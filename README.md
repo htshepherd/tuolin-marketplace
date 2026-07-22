@@ -25,7 +25,7 @@ codex plugin list
 
 ## LinkedIn prospect search
 
-Version 1.52.1 includes `$tuolin-linkedin-search`, a product-grounded LinkedIn Posts workflow. It requires:
+Version 1.52.2 includes `$tuolin-linkedin-search`, a product-grounded LinkedIn Posts workflow. It requires:
 
 - the real Tuolin knowledge project with a refreshed and verified `generated/agent-interface/`;
 - the official `chrome@openai-bundled` plugin;

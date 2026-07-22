@@ -45,7 +45,15 @@ After Codex collects an approved Chrome observation or user decision, persist it
 python3 "<plugin-root>/scripts/update_linkedin_search_run.py" <action> --run-dir <run-dir> --data-json '<action-payload>'
 ```
 
-Supported actions are `bind-account`, `confirm-effective-limit`, `record-first-search`, `record-next-search`, `finish-keyword`, `record-individual`, `record-company`, `prepare-review`, `remove-candidates`, `confirm-batch`, `prepare-authorization`, `authorize-batch`, `prepare-dispatch`, `record-dispatch-result`, `resolve-note-unavailable`, `prepare-recovery`, `authorize-recovery`, `prepare-platform-restart`, `create-platform-restart`, and `record-evidence`. Build payloads only from the current user decision and visible Chrome state. Never hand-edit `workflow_state.json`, candidate cards, the shared ledger, pending attempt, or authorization files.
+Supported actions are `answer-interview`, `bind-account`, `confirm-effective-limit`, `record-first-search`, `record-next-search`, `finish-keyword`, `record-individual`, `record-company`, `prepare-review`, `remove-candidates`, `confirm-batch`, `prepare-authorization`, `authorize-batch`, `prepare-dispatch`, `record-dispatch-result`, `resolve-note-unavailable`, `prepare-recovery`, `authorize-recovery`, `prepare-platform-restart`, `create-platform-restart`, and `record-evidence`. Build payloads only from the current user decision and visible Chrome state. Never hand-edit `workflow_state.json`, candidate cards, the shared ledger, pending attempt, or authorization files.
+
+## Interview transition contract
+
+- While `workflow_state.json` is in `awaiting_search_interview`, submit every user reply exactly once through `answer-interview`, passing the user's reply unchanged as `data.reply`.
+- Display the transition helper's returned `message` as the next interview prompt. Do not invent a second confirmation prompt, renumber it, or claim an answer was saved without this persisted transition.
+- `确认` accepts the recommendation shown for the current question only.
+- Any other valid reply is the user's final custom answer for the current question. Persist it as `user_supplied` and immediately advance to the next unresolved question; do not ask the same numbered question again.
+- The deterministic prompt owns visible numbering (`第一问`, `第二问`, and so on). Never generate labels such as `第 1 题（自定义答案）` in the chat layer.
 
 ## Workflow
 
@@ -97,7 +105,7 @@ If the verified Agent interface is missing or stale, stop and ask `$tuolin-kb` t
 
 Use this acceptance order:
 
-1. Confirm plugin version `1.52.1`, the verified Agent interface, and the official Chrome plugin.
+1. Confirm plugin version `1.52.2`, the verified Agent interface, and the official Chrome plugin.
 2. Start a new Codex conversation from the real knowledge project.
 3. Run interview, account binding, Posts search, discovery, and candidate-card review without sending.
 4. Verify cross-task deduplication with the preserved shared ledger.

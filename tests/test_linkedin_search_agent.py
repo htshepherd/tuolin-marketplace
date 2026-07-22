@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime
@@ -82,7 +84,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     root / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
                     root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
                 )
-                for filename in ("__init__.py", "browser_contract.py", "discovery.py", "ledger.py", "review.py")
+                for filename in ("__init__.py", "browser_contract.py", "discovery.py", "interview.py", "ledger.py", "review.py")
             ],
             (
                 root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "dispatch.py",
@@ -114,7 +116,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(root_manifest, plugin_manifest)
-        self.assertEqual(root_manifest["version"], "1.52.1")
+        self.assertEqual(root_manifest["version"], "1.52.2")
 
     def test_request_detection_is_separate_from_linkedin_content_planning(self) -> None:
         self.assertTrue(is_linkedin_search_request("在领英通过贴文搜索石英纤维隔热带潜在客户"))
@@ -224,6 +226,48 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertNotIn("sort_order", updated["interview"]["answers"])
             self.assertEqual(updated["interview"]["pending_question"]["field"], "sort_order")
             self.assertIn("第二问", step.message)
+
+    def test_update_entrypoint_persists_custom_answer_once_and_advances_question_number(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            result = create_linkedin_search_run(
+                paths,
+                "在领英通过贴文搜索石英纤维隔热带潜在客户",
+                now=datetime(2026, 7, 22, 9, 0, 0),
+            )
+            root = Path(__file__).resolve().parents[1]
+            command = [
+                sys.executable,
+                str(root / "scripts" / "update_linkedin_search_run.py"),
+                "answer-interview",
+                "--run-dir",
+                result.run_dir,
+            ]
+            custom = subprocess.run(
+                [*command, "--data-json", json.dumps({"reply": "搜索关键词用：exhaust wrap"}, ensure_ascii=False)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            custom_payload = json.loads(custom.stdout)
+            self.assertIn("第二问", custom_payload["message"])
+            self.assertNotIn("第一问", custom_payload["message"])
+            state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
+            self.assertEqual(state["interview"]["answers"]["keywords"], ["exhaust wrap"])
+            self.assertEqual(state["interview"]["history"][0]["source"], "user_supplied")
+
+            confirmed = subprocess.run(
+                [*command, "--data-json", json.dumps({"reply": "确认"}, ensure_ascii=False)],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            confirmed_payload = json.loads(confirmed.stdout)
+            self.assertIn("第三问", confirmed_payload["message"])
+            self.assertNotIn("第二问", confirmed_payload["message"])
 
     def test_interview_does_not_repeat_explicit_supported_answers_or_ask_geography(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
