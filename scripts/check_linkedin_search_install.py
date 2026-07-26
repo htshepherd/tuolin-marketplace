@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import importlib.util
 from pathlib import Path
 from typing import Any
 
 
-EXPECTED_PLUGIN_VERSION = "1.53.0"
+EXPECTED_PLUGIN_VERSION = "1.54.0"
 
 
 def main() -> int:
@@ -19,6 +20,7 @@ def main() -> int:
     checks: list[dict[str, Any]] = []
 
     _check(checks, "python", sys.version_info >= (3, 10), f"Python {sys.version.split()[0]} (requires >= 3.10)")
+    _check(checks, "openpyxl", importlib.util.find_spec("openpyxl") is not None, "required for cumulative .xlsx review workbooks")
     manifest_path = plugin_root / ".codex-plugin" / "plugin.json"
     manifest = _read_json_or_error(manifest_path, checks, "plugin_manifest")
     if manifest is not None:
@@ -30,6 +32,9 @@ def main() -> int:
         plugin_root / "scripts" / "create_linkedin_search_run.py",
         plugin_root / "scripts" / "update_linkedin_search_run.py",
         plugin_root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "dispatch.py",
+        plugin_root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "feedback.py",
+        plugin_root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "review_pool.py",
+        plugin_root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "workbook.py",
     ]
     missing_runtime = [str(path) for path in required_runtime if not path.is_file()]
     _check(checks, "linkedin_search_runtime", not missing_runtime, "complete" if not missing_runtime else f"missing={missing_runtime}")

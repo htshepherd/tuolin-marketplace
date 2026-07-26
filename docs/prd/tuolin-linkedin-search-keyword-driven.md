@@ -1,6 +1,6 @@
 # Keyword-Driven LinkedIn Prospect Search
 
-> Status: Confirmed locally on 2026-07-23. This PRD supersedes the product-bound run design for all newly created test runs. It is intentionally not published to an issue tracker.
+> Status: Superseded in its discovery-volume, candidate-review, invitation-count, and dispatch-interval decisions by `LinkedIn Human Review Pool and Cumulative Prospect Workbook` on 2026-07-26. Its keyword-only search scope and retained safety boundaries remain applicable. It is intentionally not published to an issue tracker.
 
 ## Problem Statement
 

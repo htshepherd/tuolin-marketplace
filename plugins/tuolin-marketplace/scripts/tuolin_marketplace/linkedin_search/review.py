@@ -17,22 +17,27 @@ from .cards import (
     verify_candidate_identity,
     verify_candidate_review,
 )
-from .ledger import release_account_run_lock, release_candidate_reservation, rolling_capacity
+from .ledger import release_account_run_lock, release_candidate_reservation, reserve_candidate, rolling_capacity
+from .workbook import append_dispatch_records, read_current_selections, set_boss_decision
+from .feedback import capture_workbook_feedback
 
 
 def prepare_candidate_batch_review(run_dir: Path, *, now: datetime | None = None) -> LinkedInSearchStepResult:
     run_dir, state_path, state = _load_run(run_dir)
     if state.get("phase") != "awaiting_candidate_batch_review":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能准备候选批次审核。")
-    cards = _active_candidate_cards(run_dir, state)
+    feedback = capture_workbook_feedback(run_dir, state["account_binding"]["profile_url"], now=now)
+    state.setdefault("files", {})["prospect_feedback"] = feedback["feedback_path"]
+    cards = _workbook_selected_cards(run_dir, state, now=now)
     if not cards:
-        raise ValueError("当前没有候选人可封闭为发送批次；任务应以零候选正常结束。")
+        raise ValueError("累计潜客表中没有标记为“发送”的可行动联系人；请先由老板筛选。")
     timestamp = _timestamp(now)
     payload = {
         "status": "candidate_batch_review",
         "candidate_ids": [card["candidate_id"] for card in cards],
         "candidate_count": len(cards),
         "candidates": cards,
+        "selection_source": "account_prospect_workbook",
         "no_backfill": True,
         "prepared_at": timestamp,
     }
@@ -48,7 +53,7 @@ def prepare_candidate_batch_review(run_dir: Path, *, now: datetime | None = None
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)
-    _append_change(run_dir, timestamp, f"生成候选批次审核视图：{len(cards)} 人；不自动找补。")
+    _append_change(run_dir, timestamp, f"从账号累计潜客表生成当前发送选择：{len(cards)} 人。")
     return _result(run_dir, state_path, state, (markdown_path, json_path, state_path), markdown_path.read_text(encoding="utf-8"))
 
 
@@ -80,6 +85,7 @@ def remove_candidates_from_batch(
             member_profile_url=member["profile_url"],
             candidate_id=card["candidate_id"],
         )
+        set_boss_decision(run_dir, account_url, member["profile_url"], "排除", "在当前任务中由用户明确移除。")
         removed.append(card["candidate_id"])
     if not removed:
         raise ValueError("没有找到与删除标识匹配的候选。")
@@ -205,12 +211,15 @@ def prepare_dispatch_authorization(
         note_mode = "no_note"
     account = state.get("account_binding") or {}
     capacity = rolling_capacity(run_dir, account_profile_url=account["profile_url"], now=now)
-    requested_limit = int(brief.get("requested_limit") or 10)
-    effective_limit = min(requested_limit, capacity["remaining_capacity"])
-    if effective_limit <= 0:
-        raise ValueError("当前账号在本 Skill 的滚动 168 小时记录中没有剩余发送容量。")
-    dispatch_cards = list(closed.get("candidates") or [])[:effective_limit]
-    deferred_cards = list(closed.get("candidates") or [])[effective_limit:]
+    dispatch_cards = list(closed.get("candidates") or [])
+    approved_count = len(dispatch_cards)
+    if capacity["remaining_capacity"] <= 0:
+        raise ValueError("当前发送容量为 0；搜索、工作簿和审核结果保持有效，但不能创建 Connect 授权快照。")
+    if capacity["remaining_capacity"] < approved_count:
+        raise ValueError(
+            f"老板选择了 {approved_count} 人，但当前只剩 {capacity['remaining_capacity']} 个本地记录容量。"
+            "系统不会自动截取前 N 人；请在累计潜客表中重新选择精确子集后再次生成快照。"
+        )
     for card in dispatch_cards:
         card["note_decision"] = {"mode": note_mode, "text": frozen_note}
         persist_candidate_card(run_dir, card)
@@ -227,23 +236,23 @@ def prepare_dispatch_authorization(
         "candidate_review_digests": {
             card["candidate_id"]: candidate_review_digest(card) for card in dispatch_cards
         },
-        "deferred_candidate_ids": [card["candidate_id"] for card in deferred_cards],
+        "deferred_candidate_ids": [],
         "count": len(dispatch_cards),
         "note_mode": note_mode,
         "note_text": frozen_note,
         "note_digest": _digest(frozen_note) if frozen_note is not None else None,
-        "interval_seconds": int(brief.get("interval_seconds") or 300),
-        "requested_limit": requested_limit,
+        "interval_seconds": int(brief.get("interval_seconds") or 120),
+        "approved_dispatch_count": approved_count,
         "recorded_successes_in_168_hours": capacity["recorded_successes"],
         "remaining_recorded_capacity": capacity["remaining_capacity"],
-        "effective_limit": effective_limit,
+        "effective_limit": approved_count,
         "manual_linkedin_actions_counted": False,
         "prepared_at": timestamp,
     }
     payload["authorization_digest"] = _digest(payload)
     batch_dir = run_dir / "batch"
-    json_path = batch_dir / "dispatch-authorization-brief.json"
-    markdown_path = batch_dir / "dispatch-authorization-brief.md"
+    json_path = batch_dir / "final-dispatch-snapshot.json"
+    markdown_path = batch_dir / "final-dispatch-snapshot.md"
     _write_json_atomic(json_path, payload)
     markdown_path.write_text(_render_dispatch_brief(payload), encoding="utf-8")
     state["dispatch_authorization_brief"] = {
@@ -257,7 +266,7 @@ def prepare_dispatch_authorization(
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)
-    _append_change(run_dir, timestamp, f"生成最终发送授权简报：{len(dispatch_cards)} 人；有效上限={effective_limit}。")
+    _append_change(run_dir, timestamp, f"生成不可变最终发送快照：{len(dispatch_cards)} 人；容量充足。")
     return _result(run_dir, state_path, state, (markdown_path, json_path, state_path), markdown_path.read_text(encoding="utf-8"))
 
 
@@ -290,17 +299,22 @@ def authorize_dispatch_batch(
         "account_profile_url": account["profile_url"],
         "confirmed_at": timestamp,
     }
-    deferred_ids = list(payload.get("deferred_candidate_ids") or [])
-    for candidate_id in deferred_ids:
-        card = _load_candidate_cards(run_dir, [candidate_id])[0]
-        release_candidate_reservation(
-            run_dir,
-            account_profile_url=account["profile_url"],
-            member_profile_url=card["selected_member"]["profile_url"],
-            candidate_id=candidate_id,
-        )
-        card["approval"] = "not_authorized_capacity_reduction"
-        persist_candidate_card(run_dir, card)
+    deferred_ids: list[str] = []
+    append_dispatch_records(
+        run_dir,
+        account_profile_url=account["profile_url"],
+        records=[
+            {
+                "batch_digest": digest,
+                "contact_id": "contact_" + hashlib.sha256(card["selected_member"]["profile_url"].encode("utf-8")).hexdigest()[:16],
+                "authorized_at": timestamp,
+                "note": payload.get("note_text") or "",
+                "interval_seconds": int(payload.get("interval_seconds") or 0),
+                "result": "authorized",
+            }
+            for card in payload.get("dispatch_candidates") or []
+        ],
+    )
     state["status"] = "dispatch_batch_authorized"
     state["phase"] = "ready_to_dispatch"
     state["updated_at"] = timestamp
@@ -314,7 +328,7 @@ def authorize_dispatch_batch(
         (state_path,),
         (
             f"已授权精确批次 {len(payload['dispatch_candidate_ids'])} 人；可以按固定间隔顺序执行，无需逐人再次确认。"
-            + (f"另有 {len(deferred_ids)} 人因最新容量降低未获授权，reservation 已释放。" if deferred_ids else "")
+            + " 最终快照已冻结，批次执行期间不会自动改写成员、留言或间隔。"
         ),
     )
 
@@ -330,6 +344,79 @@ def _active_candidate_cards(run_dir: Path, state: dict[str, Any]) -> list[dict[s
             verify_candidate_identity(card, card["identity_digest"])
         if card.get("approval") == "pending_batch_review":
             cards.append(card)
+    return cards
+
+
+def _workbook_selected_cards(run_dir: Path, state: dict[str, Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
+    account_url = state["account_binding"]["profile_url"]
+    selections = read_current_selections(run_dir, account_url)
+    restart_ids = set((state.get("restart_source") or {}).get("candidate_ids") or [])
+    if restart_ids:
+        selections = [
+            item for item in selections
+            if "candidate_" + hashlib.sha256(normalize_linkedin_url(str(item["LinkedIn主页"])).encode("utf-8")).hexdigest()[:16] in restart_ids
+        ]
+    selected_profiles = {normalize_linkedin_url(str(item["LinkedIn主页"])) for item in selections}
+    current_cards = {card["selected_member"]["profile_url"]: card for card in _active_candidate_cards(run_dir, state)}
+    cards: list[dict[str, Any]] = []
+    for selection in selections:
+        profile_url = normalize_linkedin_url(str(selection["LinkedIn主页"]))
+        card = current_cards.get(profile_url)
+        if card is None:
+            evidence = selection.get("最新证据") or {}
+            company_url = normalize_linkedin_url(str(selection.get("公司主页") or "")) if selection.get("公司主页") else ""
+            post_url = normalize_linkedin_url(str(evidence.get("贴文链接") or "")) if evidence.get("贴文链接") else ""
+            candidate_id = "candidate_" + hashlib.sha256(profile_url.encode("utf-8")).hexdigest()[:16]
+            reservation = reserve_candidate(
+                run_dir,
+                account_profile_url=account_url,
+                member_profile_url=profile_url,
+                company_url=company_url,
+                source_post_url=post_url,
+                candidate_id=candidate_id,
+                live_state="none",
+                now=now,
+            )
+            if not reservation["eligible"]:
+                raise ValueError(f"历史待定联系人 {profile_url} 重新校验失败：{reservation['reason']}")
+            card = {
+                "candidate_id": candidate_id,
+                "source_keyword": evidence.get("关键词") or "",
+                "post_text": evidence.get("完整贴文") or "",
+                "post_url": post_url,
+                "relevance_decision": "continue",
+                "relevance_reason": evidence.get("Codex初步判断") or "历史待定联系人由老板本次明确选择。",
+                "fit_status": "provisional_candidate_fit",
+                "business_role": evidence.get("商业角色") or "ambiguous",
+                "supporting_evidence": evidence.get("支持证据") or "",
+                "material_doubts": evidence.get("不确定性") or "",
+                "preliminary_assessment": {
+                    "summary": evidence.get("Codex初步判断") or "",
+                    "business_role": evidence.get("商业角色") or "ambiguous",
+                    "supporting_evidence": evidence.get("支持证据") or "",
+                    "uncertainty": evidence.get("不确定性") or "",
+                    "recommendation": evidence.get("Codex建议") or "保留给老板判断",
+                    "provisional": "true",
+                },
+                "author": {"name": "", "type": "historical_workbook", "profile_url": profile_url},
+                "company": {"name": selection.get("公司") or "", "url": company_url},
+                "selected_member": {"name": selection.get("姓名") or "", "title": selection.get("职位") or "", "company": selection.get("公司") or "", "profile_url": profile_url},
+                "connect_path": "standard_connect",
+                "approval": "pending_batch_review",
+                "note_decision": None,
+                "final_outcome": None,
+                "created_at": _timestamp(now),
+                "selection_source": "historical_pending_explicitly_selected",
+            }
+            persist_candidate_card(run_dir, card)
+        cards.append(card)
+    for profile_url, card in current_cards.items():
+        if profile_url in selected_profiles:
+            continue
+        release_candidate_reservation(run_dir, account_profile_url=account_url, member_profile_url=profile_url, candidate_id=card["candidate_id"])
+        card["approval"] = "not_selected_in_workbook"
+        persist_candidate_card(run_dir, card)
+    state["candidate_ids"] = [card["candidate_id"] for card in cards]
     return cards
 
 
@@ -353,11 +440,10 @@ def _render_dispatch_brief(payload: dict[str, Any]) -> str:
         f"- 留言方式：{payload['note_mode']}",
         f"- 固定留言：{payload['note_text'] if payload['note_text'] is not None else '不使用留言'}",
         f"- 固定间隔：{payload['interval_seconds']} 秒",
-        f"- 请求上限：{payload['requested_limit']}",
+        f"- 老板批准发送人数：{payload['approved_dispatch_count']}",
         f"- 过去 168 小时本 Skill 记录成功数：{payload['recorded_successes_in_168_hours']}",
         f"- 剩余记录容量：{payload['remaining_recorded_capacity']}",
         f"- 有效上限：{payload['effective_limit']}",
-        f"- 因最新容量未纳入授权：{len(payload.get('deferred_candidate_ids') or [])}",
         "- 手工 LinkedIn 操作：不计入本地统计",
         "",
         "## 将要发送的精确候选",
@@ -365,10 +451,22 @@ def _render_dispatch_brief(payload: dict[str, Any]) -> str:
     ]
     for index, card in enumerate(payload["dispatch_candidates"], start=1):
         member = card["selected_member"]
-        lines.append(f"{index}. {member['name']} — {member['title']} — {member['company']} — {member['profile_url']}")
-    if payload.get("deferred_candidate_ids"):
-        lines.extend(["", "以下候选因最新滚动容量降低不在本次授权内："])
-        lines.extend(f"- {candidate_id}" for candidate_id in payload["deferred_candidate_ids"])
+        lines.extend([
+            f"### {index}. {member['name']} — {member['title']}",
+            "",
+            f"- 公司：{member['company']}",
+            f"- Profile：{member['profile_url']}",
+            f"- 来源关键词：{card.get('source_keyword')}",
+            f"- 贴文链接：{card.get('post_url')}",
+            f"- Codex 初步判断：{card.get('relevance_reason')}",
+            f"- 支持证据：{card.get('supporting_evidence')}",
+            f"- 不确定性：{card.get('material_doubts') or '无额外说明'}",
+            "",
+            "完整贴文：",
+            "",
+            str(card.get("post_text") or ""),
+            "",
+        ])
     lines.extend(["", "确认本简报后才可开始顺序发送。", ""])
     return "\n".join(lines)
 

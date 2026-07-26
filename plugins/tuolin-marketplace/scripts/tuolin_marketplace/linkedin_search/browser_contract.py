@@ -80,25 +80,14 @@ def bind_linkedin_account(
     }
     state.setdefault("files", {})["account_run_lock"] = str(lock_path)
     capacity = rolling_capacity(run_dir, account_profile_url=profile_url, now=now)
-    requested_limit = int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
-    effective_limit = min(requested_limit, capacity["remaining_capacity"])
     state["capacity_at_account_binding"] = {
         **capacity,
-        "requested_limit": requested_limit,
-        "effective_limit": effective_limit,
+        "discovery_blocked": False,
         "manual_linkedin_actions_counted": False,
         "next_phase": "awaiting_candidate_batch_review" if state.get("restart_source") else "awaiting_first_posts_search",
     }
-    if effective_limit <= 0:
-        state["status"] = "blocked_rolling_capacity"
-        state["phase"] = "blocked_before_discovery"
-        release_account_run_lock(run_dir, profile_url)
-    elif effective_limit < requested_limit:
-        state["status"] = "effective_limit_confirmation_required"
-        state["phase"] = "awaiting_effective_limit_confirmation"
-    else:
-        state["status"] = "linkedin_account_bound"
-        state["phase"] = state["capacity_at_account_binding"]["next_phase"]
+    state["status"] = "linkedin_account_bound"
+    state["phase"] = state["capacity_at_account_binding"]["next_phase"]
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)
@@ -112,19 +101,8 @@ def bind_linkedin_account(
         output_paths=(str(state_path),),
         message=(
             f"已绑定 LinkedIn 账号：{name}（{profile_url}）。"
-            + (
-                "本 Skill 的滚动 168 小时记录容量为零，已在浏览器发现前阻断。"
-                if effective_limit <= 0
-                else (
-                    f"请求上限 {requested_limit} 已降为有效上限 {effective_limit}；必须确认后才能搜索。"
-                    if effective_limit < requested_limit
-                    else (
-                        "下一步重新审核重启任务保留的候选；不会重新搜索。"
-                        if restart_source
-                        else "下一步按已确认的第一个关键词执行 Posts 搜索。"
-                    )
-                )
-            )
+            + ("下一步重新审核重启任务保留的候选；不会重新搜索。" if restart_source else "下一步按已确认的第一个关键词执行 Posts 搜索。")
+            + (" 当前发送容量为 0，但不影响搜索、工作簿和人工审核；仅 Connect 阶段会被阻断。" if capacity["remaining_capacity"] <= 0 else f" 当前本地记录剩余发送容量为 {capacity['remaining_capacity']}；将在最终选择后重新校验。")
         ),
     )
 
@@ -136,6 +114,8 @@ def confirm_effective_limit(
     now: datetime | None = None,
 ) -> LinkedInSearchStepResult:
     run_dir, state_path, state = _load_run(run_dir)
+    if int(state.get("schema_version") or 0) >= 3:
+        raise ValueError("新版运行已将搜索与发送容量解耦，不再需要搜索前确认有效邀请上限。")
     if state.get("phase") != "awaiting_effective_limit_confirmation":
         raise ValueError("当前没有待确认的有效运行上限。")
     if not confirmed:
@@ -193,6 +173,8 @@ def record_first_posts_search(
     search_dir = run_dir / "discovery"
     search_dir.mkdir(parents=True, exist_ok=True)
     search_path = search_dir / "search-progress.json"
+    from .review_pool import initialize_review_pool
+    pool = initialize_review_pool(int(brief.get("human_review_pool_limit") or 50), keywords)
     progress = {
         "search_surface": "linkedin_posts",
         "ordered_keywords": keywords,
@@ -209,6 +191,7 @@ def record_first_posts_search(
         "consecutive_bottom_no_growth_cycles": 0,
         "recorded_at": timestamp,
         "browser_surface": "official_codex_chrome_extension",
+        "review_pool": pool,
     }
     _write_json_atomic(search_path, progress)
     state["search_progress"] = progress
@@ -252,16 +235,15 @@ def record_next_posts_search(
     if not observation.dedicated_tab_group or "geography" in observation.applied_filters:
         raise ValueError("下一关键词必须在专用任务标签组中执行，且不能使用地区筛选。")
     progress = dict(state.get("search_progress") or {})
+    from .review_pool import progress_for_current_keyword
+    pool = dict(progress.get("review_pool") or {})
+    restored = progress_for_current_keyword(pool)
     timestamp = _timestamp(now)
     progress.update(
         {
             "current_keyword": observation.keyword,
             "visible_result_count": observation.visible_result_count,
-            "opened_post_count": 0,
-            "evaluated_post_urls": [],
-            "seen_result_urls": [],
-            "scroll_cycles": [],
-            "consecutive_bottom_no_growth_cycles": 0,
+            **restored,
             "applied_filters": observation.applied_filters,
             "recorded_at": timestamp,
         }
@@ -325,6 +307,8 @@ def record_infinite_scroll_cycle(
     progress["seen_result_urls"] = seen
     progress["consecutive_bottom_no_growth_cycles"] = consecutive
     progress.setdefault("scroll_cycles", []).append(cycle)
+    from .review_pool import update_current_keyword_progress
+    progress["review_pool"] = update_current_keyword_progress(progress.get("review_pool") or {}, progress)
     state["search_progress"] = progress
     state["updated_at"] = timestamp
     _write_json_atomic(Path(state["files"]["search_progress"]), progress)
@@ -347,37 +331,29 @@ def finish_current_keyword(
     if state.get("phase") != "discovering_posts":
         raise ValueError(f"当前阶段是 {state.get('phase')!r}，不能结束当前关键词。")
     progress = dict(state.get("search_progress") or {})
+    from .review_pool import finish_keyword, keyword_can_finish, update_current_keyword_progress
+    progress["review_pool"] = update_current_keyword_progress(progress.get("review_pool") or {}, progress)
+    _, current_stop_reason = keyword_can_finish(progress["review_pool"])
+    pool, stop_reason, next_keyword = finish_keyword(progress["review_pool"])
+    progress["review_pool"] = pool
     opened = int(progress.get("opened_post_count") or 0)
-    candidate_count = len(state.get("candidate_ids") or [])
-    effective_limit = int((state.get("capacity_at_account_binding") or {}).get("effective_limit") or 0)
-    discovery_limit = effective_limit or int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
-    verified_exhausted = int(progress.get("consecutive_bottom_no_growth_cycles") or 0) >= 3
-    candidate_limit_reached = candidate_count >= discovery_limit
-    opened_limit_reached = opened >= 50
-    if not (verified_exhausted or candidate_limit_reached or opened_limit_reached):
-        raise ValueError("当前关键词尚未满足停止条件：需候选达上限、打开 50 条唯一贴文，或连续 3 次到底等待无新增。")
+    candidate_count = len(pool.get("new_contact_ids") or [])
     timestamp = _timestamp(now)
     completed = state.setdefault("completed_keywords", [])
     completed.append(
         {
             "keyword": progress.get("current_keyword"),
             "opened_post_count": opened,
-            "stop_reason": (
-                "candidate_limit_reached" if candidate_limit_reached
-                else "opened_post_limit_reached" if opened_limit_reached
-                else "verified_infinite_scroll_exhaustion"
-            ),
+            "stop_reason": current_stop_reason,
             "verified_exhaustion_cycles": int(progress.get("consecutive_bottom_no_growth_cycles") or 0),
             "completed_at": timestamp,
         }
     )
-    keywords = list(progress.get("ordered_keywords") or [])
-    next_index = int(progress.get("current_keyword_index") or 0) + 1
-    if candidate_count >= discovery_limit or next_index >= len(keywords):
+    if next_keyword is None:
         state["status"] = "completed_no_candidates" if candidate_count == 0 else "candidate_discovery_complete"
         state["phase"] = "completed" if candidate_count == 0 else "awaiting_candidate_batch_review"
         state["pending_keyword"] = None
-        reason = "candidate_limit_reached" if candidate_count >= discovery_limit else "all_keywords_exhausted"
+        reason = stop_reason
         state["discovery_stop_reason"] = reason
         message = f"候选发现已结束：{reason}；实际候选 {candidate_count} 人。不会自动扩词或找补。"
         if candidate_count == 0:
@@ -385,14 +361,14 @@ def finish_current_keyword(
 
             release_account_run_lock(run_dir, state["account_binding"]["profile_url"])
     else:
-        progress["current_keyword_index"] = next_index
+        progress["current_keyword_index"] = int(pool.get("current_keyword_index") or 0)
         progress["current_keyword"] = None
         progress["opened_post_count"] = 0
         state["search_progress"] = progress
-        state["pending_keyword"] = keywords[next_index]
+        state["pending_keyword"] = next_keyword
         state["status"] = "next_keyword_required"
         state["phase"] = "awaiting_next_keyword_search"
-        message = f"当前关键词已结束；下一关键词是 {keywords[next_index]}。不会重复或放宽上一搜索。"
+        message = f"当前关键词已结束（{stop_reason}）；下一关键词是 {next_keyword}。不会扩词或放宽筛选。"
     state["updated_at"] = timestamp
     _append_history(state, timestamp)
     _write_json_atomic(state_path, state)

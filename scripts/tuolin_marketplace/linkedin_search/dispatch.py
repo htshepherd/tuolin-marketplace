@@ -17,6 +17,7 @@ from .ledger import (
     release_run_reservations,
     rolling_capacity,
 )
+from .workbook import append_dispatch_record, update_contact_state
 
 
 PLATFORM_STOP_RESULTS = {"platform_restriction", "security_checkpoint", "captcha", "logged_out"}
@@ -289,6 +290,30 @@ def record_dispatch_result(
         _record_result(state, card, "invitation_dispatch_success", current, terminal=True, detail=observation.visible_confirmation)
         card["final_outcome"] = "invitation_dispatch_success"
         persist_candidate_card(run_dir, card)
+        try:
+            update_contact_state(run_dir, account["profile_url"], member["profile_url"], "pending")
+            append_dispatch_record(
+                run_dir,
+                account_profile_url=account["profile_url"],
+                batch_digest=authorization["authorization_digest"],
+                contact_id="contact_" + hashlib.sha256(member["profile_url"].encode("utf-8")).hexdigest()[:16],
+                interval_seconds=int(authorization.get("interval_seconds") or 0),
+                attempted_at=current.isoformat(),
+                result="invitation_dispatch_success",
+                result_at=current.isoformat(),
+            )
+        except (OSError, ValueError) as exc:
+            state["status"] = "reconciliation_required"
+            state["phase"] = "reconciliation_required"
+            state["reconciliation"] = {
+                "candidate_id": expected_id,
+                "reason": "linkedin_success_workbook_write_failed",
+                "visible_confirmation": observation.visible_confirmation,
+                "error": str(exc),
+            }
+            state["updated_at"] = current.isoformat()
+            _write_json_atomic(state_path, state)
+            return _result(run_dir, state_path, state, "LinkedIn 和共享账本已记录邀请成功，但累计工作簿写入失败。已停止，必须先人工对账。")
         attempt["ledger_recorded"] = True
         _write_json_atomic(attempt_path, attempt)
         state["pending_dispatch_attempt"] = None
@@ -308,6 +333,16 @@ def record_dispatch_result(
         _record_result(state, card, outcome, current, terminal=True)
         card["final_outcome"] = outcome
         persist_candidate_card(run_dir, card)
+        append_dispatch_record(
+            run_dir,
+            account_profile_url=account["profile_url"],
+            batch_digest=authorization["authorization_digest"],
+            contact_id="contact_" + hashlib.sha256(member["profile_url"].encode("utf-8")).hexdigest()[:16],
+            interval_seconds=int(authorization.get("interval_seconds") or 0),
+            attempted_at=current.isoformat(),
+            result=outcome,
+            result_at=current.isoformat(),
+        )
         attempt["ledger_recorded"] = True
         _write_json_atomic(attempt_path, attempt)
         state["pending_dispatch_attempt"] = None
@@ -337,6 +372,16 @@ def record_dispatch_result(
         _record_result(state, card, outcome, current, terminal=True, detail=observation.visible_confirmation)
         card["final_outcome"] = outcome
         persist_candidate_card(run_dir, card)
+        append_dispatch_record(
+            run_dir,
+            account_profile_url=account["profile_url"],
+            batch_digest=authorization["authorization_digest"],
+            contact_id="contact_" + hashlib.sha256(member["profile_url"].encode("utf-8")).hexdigest()[:16],
+            interval_seconds=int(authorization.get("interval_seconds") or 0),
+            attempted_at=current.isoformat(),
+            result=outcome,
+            result_at=current.isoformat(),
+        )
         state["pending_dispatch_attempt"] = None
         return _stop_batch(run_dir, state_path, state, current, result, f"检测到平台级停止：{result}。")
     return _stop_batch(run_dir, state_path, state, current, "ambiguous_dispatch", "邀请结果不明确，禁止重试。", ambiguous_candidate=expected_id)

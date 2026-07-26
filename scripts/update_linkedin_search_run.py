@@ -42,6 +42,8 @@ from tuolin_marketplace.linkedin_search.dispatch import (
     resolve_note_unavailable,
 )
 from tuolin_marketplace.linkedin_search.evidence import record_browser_evidence
+from tuolin_marketplace.linkedin_search.feedback import capture_workbook_feedback, confirm_screening_rule, propose_screening_rule
+from tuolin_marketplace.linkedin_search.workbook import set_boss_decision
 
 
 def main() -> int:
@@ -54,6 +56,7 @@ def main() -> int:
         "prepare-dispatch", "record-dispatch-result", "resolve-note-unavailable",
         "prepare-recovery", "authorize-recovery", "prepare-platform-restart",
         "create-platform-restart", "record-evidence",
+        "set-boss-decision", "capture-feedback", "propose-rule", "confirm-rule",
     ])
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--data-json", default="{}", help="Action payload as a JSON object.")
@@ -147,7 +150,7 @@ def main() -> int:
         result = prepare_platform_restart_handoff(run_dir)
     elif args.action == "create-platform-restart":
         result = create_platform_restart_run(run_dir)
-    else:
+    elif args.action == "record-evidence":
         result = record_browser_evidence(
             run_dir,
             Path(str(data.get("screenshot_path") or "")),
@@ -157,7 +160,40 @@ def main() -> int:
             disputed_state=bool(data.get("disputed_state")),
             platform_stop=bool(data.get("platform_stop")),
         )
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    elif args.action == "set-boss-decision":
+        state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+        result = {
+            "workbook_path": str(set_boss_decision(
+                run_dir,
+                state["account_binding"]["profile_url"],
+                str(data.get("profile_url") or ""),
+                str(data.get("decision") or ""),
+                str(data.get("note") or ""),
+            ))
+        }
+    elif args.action == "capture-feedback":
+        state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+        result = capture_workbook_feedback(run_dir, state["account_binding"]["profile_url"])
+    elif args.action == "propose-rule":
+        state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+        result = propose_screening_rule(
+            run_dir,
+            state["account_binding"]["profile_url"],
+            wording=str(data.get("wording") or ""),
+            scope=str(data.get("scope") or ""),
+            supporting_feedback_ids=list(data.get("supporting_feedback_ids") or []),
+            conflicting_feedback_ids=list(data.get("conflicting_feedback_ids") or []),
+        )
+    else:
+        state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+        result = confirm_screening_rule(
+            run_dir,
+            state["account_binding"]["profile_url"],
+            rule_id=str(data.get("rule_id") or ""),
+            confirmed=bool(data.get("confirmed")),
+        )
+    payload = result.to_dict() if hasattr(result, "to_dict") else result
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 

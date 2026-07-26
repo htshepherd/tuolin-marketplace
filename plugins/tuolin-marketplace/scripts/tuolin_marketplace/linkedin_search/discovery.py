@@ -11,6 +11,9 @@ from .agent import LinkedInSearchStepResult
 from .browser_contract import _append_change, _append_history, _load_run, _timestamp, _write_json_atomic, normalize_linkedin_url
 from .cards import persist_candidate_card, render_candidate_card
 from .ledger import reserve_candidate
+from .review_pool import pool_is_full, register_contact, update_current_keyword_progress
+from .workbook import load_contact_index, sync_candidate
+from .feedback import relevant_feedback
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class CompanyContactObservation:
     standard_connect_available: bool
     requires_email_or_extra_identity: bool = False
     live_connection_state: str = "none"
+    selection_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,7 @@ class ProspectClassificationObservation:
     business_role: str
     supporting_evidence: str
     material_doubts: str = ""
+    recommendation: str = "保留给老板判断"
 
 
 def record_individual_post_evaluation(
@@ -80,8 +85,6 @@ def record_individual_post_evaluation(
     _ensure_discovery_capacity(state)
     if post.keyword != progress.get("current_keyword"):
         raise ValueError("贴文来源关键词与当前搜索进度不一致。")
-    if int(progress.get("opened_post_count") or 0) >= 50:
-        raise ValueError("当前关键词已经达到 50 条打开贴文上限，必须结束或进入下一关键词。")
     post_url = normalize_linkedin_url(post.post_url)
     _register_unique_opened_post(progress, post_url)
     author_profile_url = normalize_linkedin_url(post.author_profile_url)
@@ -120,23 +123,6 @@ def record_individual_post_evaluation(
             if profile_url != author_profile_url:
                 raise ValueError("个人作者候选必须保持为原贴文作者，不能自动替换为其他员工。")
             candidate_id = "candidate_" + hashlib.sha256(profile_url.encode("utf-8")).hexdigest()[:16]
-            reservation = reserve_candidate(
-                run_dir,
-                account_profile_url=state["account_binding"]["profile_url"],
-                member_profile_url=profile_url,
-                company_url=company_url,
-                source_post_url=post_url,
-                candidate_id=candidate_id,
-                live_state=candidate.live_connection_state,
-                now=now,
-            )
-            if not reservation["eligible"]:
-                evaluation["candidate_outcome"] = reservation["reason"]
-                message = f"Skip：联系人去重或实时状态不允许进入候选卡（{reservation['reason']}）。"
-                candidate = None
-            else:
-                evaluation["candidate_outcome"] = "candidate_reserved"
-        if candidate is not None and normalized_decision == "continue" and evaluation.get("candidate_outcome") == "candidate_reserved":
             card = {
                 "candidate_id": candidate_id,
                 "source_keyword": post.keyword,
@@ -148,26 +134,68 @@ def record_individual_post_evaluation(
                 "business_role": classification_data["business_role"],
                 "supporting_evidence": classification_data["supporting_evidence"],
                 "material_doubts": classification_data["material_doubts"],
-                "author": {
-                    "name": post.author_name,
-                    "type": "individual",
-                    "profile_url": author_profile_url,
-                },
+                "preliminary_assessment": _preliminary_assessment(classification_data, reason_text),
+                "author": {"name": post.author_name, "type": "individual", "profile_url": author_profile_url},
                 "company": {"name": candidate.company_name or post.company_name, "url": company_url},
-                "selected_member": {
-                    "name": candidate.member_name,
-                    "title": candidate.title,
-                    "company": candidate.company_name,
-                    "profile_url": profile_url,
-                },
+                "selected_member": {"name": candidate.member_name, "title": candidate.title, "company": candidate.company_name, "profile_url": profile_url},
                 "connect_path": "standard_connect",
                 "approval": "pending_batch_review",
                 "note_decision": None,
                 "final_outcome": None,
                 "created_at": timestamp,
             }
+            card["preliminary_assessment"]["feedback_references"] = [
+                item["feedback_id"] for item in relevant_feedback(
+                    run_dir,
+                    state["account_binding"]["profile_url"],
+                    company_name=card["company"]["name"],
+                )
+            ]
+            contact_index = load_contact_index(run_dir, state["account_binding"]["profile_url"])
+            existing = contact_index.get(profile_url) or _existing_company_contact(contact_index, company_url)
+            if existing:
+                existing_profile = normalize_linkedin_url(str(existing["LinkedIn主页"]))
+                card["candidate_id"] = "candidate_" + hashlib.sha256(existing_profile.encode("utf-8")).hexdigest()[:16]
+                card["selected_member"] = {
+                    "name": existing.get("姓名") or "",
+                    "title": existing.get("职位") or "",
+                    "company": existing.get("公司") or card["company"]["name"],
+                    "profile_url": existing_profile,
+                }
+                candidate_id = card["candidate_id"]
+                receipt = sync_candidate(run_dir, account_profile_url=state["account_binding"]["profile_url"], card=card, now=now)
+                progress["review_pool"] = register_contact(progress.get("review_pool") or {}, candidate_id, is_new=False)
+                state.setdefault("repeated_contact_ids", []).append(candidate_id)
+                state.setdefault("files", {}).setdefault("workbook_sync_receipts", []).append(receipt["receipt_path"])
+                evaluation["candidate_outcome"] = "repeated_workbook_contact"
+                evaluation["workbook_receipt"] = receipt
+                message = "已在累计潜客表追加新贴文证据；该联系人不是本轮新增，不占人工审核人数。"
+                candidate = None
+            else:
+                reservation = reserve_candidate(
+                run_dir,
+                account_profile_url=state["account_binding"]["profile_url"],
+                member_profile_url=profile_url,
+                company_url=company_url,
+                source_post_url=post_url,
+                candidate_id=candidate_id,
+                live_state=candidate.live_connection_state,
+                now=now,
+                )
+                if not reservation["eligible"]:
+                    evaluation["candidate_outcome"] = reservation["reason"]
+                    message = f"Skip：联系人去重或实时状态不允许进入候选卡（{reservation['reason']}）。"
+                    candidate = None
+                else:
+                    receipt = sync_candidate(run_dir, account_profile_url=state["account_binding"]["profile_url"], card=card, now=now)
+                    evaluation["candidate_outcome"] = "candidate_reserved"
+                    evaluation["workbook_receipt"] = receipt
+                    state.setdefault("files", {}).setdefault("workbook_sync_receipts", []).append(receipt["receipt_path"])
+        if candidate is not None and normalized_decision == "continue" and evaluation.get("candidate_outcome") == "candidate_reserved":
             markdown_path, json_path = persist_candidate_card(run_dir, card)
             state.setdefault("candidate_ids", []).append(candidate_id)
+            state.setdefault("new_review_contact_ids", []).append(candidate_id)
+            progress["review_pool"] = register_contact(progress.get("review_pool") or {}, candidate_id, is_new=True)
             state.setdefault("files", {}).setdefault("candidate_cards", []).extend([str(markdown_path), str(json_path)])
             output_paths.extend([str(markdown_path), str(json_path)])
             message = render_candidate_card(card)
@@ -213,8 +241,6 @@ def record_company_post_evaluation(
     _ensure_discovery_capacity(state)
     if post.keyword != progress.get("current_keyword"):
         raise ValueError("贴文来源关键词与当前搜索进度不一致。")
-    if int(progress.get("opened_post_count") or 0) >= 50:
-        raise ValueError("当前关键词已经达到 50 条打开贴文上限。")
     timestamp = _timestamp(now)
     post_url = normalize_linkedin_url(post.post_url)
     _register_unique_opened_post(progress, post_url)
@@ -239,9 +265,9 @@ def record_company_post_evaluation(
         eligible_contacts = [
             contact
             for contact in contacts
-            if contact.standard_connect_available and not contact.requires_email_or_extra_identity and _role_rank(contact.title) is not None
+            if contact.standard_connect_available and not contact.requires_email_or_extra_identity and _role_rank(contact.title, contact.selection_reason) is not None
         ]
-        eligible_contacts.sort(key=lambda item: (_role_rank(item.title), item.member_name.casefold()))
+        eligible_contacts.sort(key=lambda item: (_role_rank(item.title, item.selection_reason), item.member_name.casefold()))
         selected = eligible_contacts[0] if eligible_contacts else None
         if selected is None:
             unresolved_id = "lead_" + hashlib.sha256(company_url.encode("utf-8")).hexdigest()[:16]
@@ -268,7 +294,57 @@ def record_company_post_evaluation(
         else:
             profile_url = normalize_linkedin_url(selected.profile_url)
             candidate_id = "candidate_" + hashlib.sha256(profile_url.encode("utf-8")).hexdigest()[:16]
-            reservation = reserve_candidate(
+            card = {
+                "candidate_id": candidate_id,
+                "source_keyword": post.keyword,
+                "post_text": post.post_text,
+                "post_url": post_url,
+                "relevance_decision": "continue",
+                "relevance_reason": reason_text,
+                "fit_status": classification_data["outcome"],
+                "business_role": classification_data["business_role"],
+                "supporting_evidence": classification_data["supporting_evidence"],
+                "material_doubts": classification_data["material_doubts"],
+                "preliminary_assessment": _preliminary_assessment(classification_data, reason_text),
+                "author": {"name": post.author_name, "type": "company", "profile_url": company_url},
+                "company": {"name": selected.company_name or post.company_name, "url": company_url},
+                "selected_member": {"name": selected.member_name, "title": selected.title, "company": selected.company_name, "profile_url": profile_url},
+                "selection_reason": selected.selection_reason.strip() or f"公司贴文联系人按角色优先级选择：{selected.title}",
+                "connect_path": "standard_connect",
+                "approval": "pending_batch_review",
+                "note_decision": None,
+                "final_outcome": None,
+                "created_at": timestamp,
+            }
+            card["preliminary_assessment"]["feedback_references"] = [
+                item["feedback_id"] for item in relevant_feedback(
+                    run_dir,
+                    state["account_binding"]["profile_url"],
+                    company_name=card["company"]["name"],
+                )
+            ]
+            contact_index = load_contact_index(run_dir, state["account_binding"]["profile_url"])
+            existing = contact_index.get(profile_url) or _existing_company_contact(contact_index, company_url)
+            if existing:
+                existing_profile = normalize_linkedin_url(str(existing["LinkedIn主页"]))
+                card["candidate_id"] = "candidate_" + hashlib.sha256(existing_profile.encode("utf-8")).hexdigest()[:16]
+                card["selected_member"] = {
+                    "name": existing.get("姓名") or "",
+                    "title": existing.get("职位") or "",
+                    "company": existing.get("公司") or card["company"]["name"],
+                    "profile_url": existing_profile,
+                }
+                candidate_id = card["candidate_id"]
+                receipt = sync_candidate(run_dir, account_profile_url=state["account_binding"]["profile_url"], card=card, now=now)
+                progress["review_pool"] = register_contact(progress.get("review_pool") or {}, candidate_id, is_new=False)
+                state.setdefault("repeated_contact_ids", []).append(candidate_id)
+                state.setdefault("files", {}).setdefault("workbook_sync_receipts", []).append(receipt["receipt_path"])
+                evaluation["candidate_outcome"] = "repeated_workbook_contact"
+                evaluation["workbook_receipt"] = receipt
+                message = "已在累计潜客表追加公司贴文证据；联系人不占本轮新增审核人数。"
+                reservation = {"eligible": False, "reason": "repeated_workbook_contact"}
+            else:
+                reservation = reserve_candidate(
                 run_dir,
                 account_profile_url=state["account_binding"]["profile_url"],
                 member_profile_url=profile_url,
@@ -277,43 +353,23 @@ def record_company_post_evaluation(
                 candidate_id=candidate_id,
                 live_state=selected.live_connection_state,
                 now=now,
-            )
+                )
             if not reservation["eligible"]:
-                evaluation["candidate_outcome"] = reservation["reason"]
-                message = f"Skip：联系人去重或实时状态不允许进入候选卡（{reservation['reason']}）。"
+                if reservation["reason"] != "repeated_workbook_contact":
+                    evaluation["candidate_outcome"] = reservation["reason"]
+                    message = f"Skip：联系人去重或实时状态不允许进入候选卡（{reservation['reason']}）。"
             else:
-                card = {
-                    "candidate_id": candidate_id,
-                    "source_keyword": post.keyword,
-                    "post_text": post.post_text,
-                    "post_url": post_url,
-                    "relevance_decision": "continue",
-                    "relevance_reason": reason_text,
-                    "fit_status": classification_data["outcome"],
-                    "business_role": classification_data["business_role"],
-                    "supporting_evidence": classification_data["supporting_evidence"],
-                    "material_doubts": classification_data["material_doubts"],
-                    "author": {"name": post.author_name, "type": "company", "profile_url": company_url},
-                    "company": {"name": selected.company_name or post.company_name, "url": company_url},
-                    "selected_member": {
-                        "name": selected.member_name,
-                        "title": selected.title,
-                        "company": selected.company_name,
-                        "profile_url": profile_url,
-                    },
-                    "selection_reason": f"公司贴文联系人按角色优先级选择：{selected.title}",
-                    "connect_path": "standard_connect",
-                    "approval": "pending_batch_review",
-                    "note_decision": None,
-                    "final_outcome": None,
-                    "created_at": timestamp,
-                }
+                receipt = sync_candidate(run_dir, account_profile_url=state["account_binding"]["profile_url"], card=card, now=now)
                 markdown_path, json_path = persist_candidate_card(run_dir, card)
                 state.setdefault("candidate_ids", []).append(candidate_id)
+                state.setdefault("new_review_contact_ids", []).append(candidate_id)
+                progress["review_pool"] = register_contact(progress.get("review_pool") or {}, candidate_id, is_new=True)
+                state.setdefault("files", {}).setdefault("workbook_sync_receipts", []).append(receipt["receipt_path"])
                 state.setdefault("files", {}).setdefault("candidate_cards", []).extend([str(markdown_path), str(json_path)])
                 output_paths.extend([str(markdown_path), str(json_path)])
                 evaluation["candidate_outcome"] = "candidate_reserved"
                 evaluation["selected_member"] = card["selected_member"]
+                evaluation["workbook_receipt"] = receipt
                 message = render_candidate_card(card)
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(evaluation, ensure_ascii=False) + "\n")
@@ -332,7 +388,7 @@ def record_company_post_evaluation(
     )
 
 
-def _role_rank(title: str) -> int | None:
+def _role_rank(title: str, selection_reason: str = "") -> int | None:
     value = title.casefold()
     groups = (
         ("owner", "founder", "co-founder", "cofounder"),
@@ -343,21 +399,19 @@ def _role_rank(title: str) -> int | None:
     for index, terms in enumerate(groups):
         if any(term in value for term in terms):
             return index
-    return None
+    return len(groups) if selection_reason.strip() else None
 
 
 def _ensure_discovery_capacity(state: dict[str, Any]) -> None:
-    effective_limit = int((state.get("capacity_at_account_binding") or {}).get("effective_limit") or 0)
-    requested_limit = int((state.get("confirmed_search_brief") or {}).get("requested_limit") or 10)
-    limit = effective_limit or requested_limit
-    if len(state.get("candidate_ids") or []) >= limit:
-        raise ValueError(f"候选数量已经达到本次有效上限 {limit}；必须结束发现阶段，不能继续打开贴文。")
+    pool = (state.get("search_progress") or {}).get("review_pool") or {}
+    if pool and pool_is_full(pool):
+        raise ValueError(f"新增人工审核联系人已经达到目标 {pool.get('target')}；必须结束发现阶段。")
 
 
 def _register_unique_opened_post(progress: dict[str, Any], post_url: str) -> None:
     evaluated = list(progress.get("evaluated_post_urls") or [])
     if post_url in evaluated:
-        raise ValueError("该 LinkedIn 贴文已经打开并判断过；重复结果不能计入 50 条上限。")
+        raise ValueError("该 LinkedIn 贴文已经打开并判断过；重复结果不能计入发现进度。")
     evaluated.append(post_url)
     progress["evaluated_post_urls"] = evaluated
     progress["opened_post_count"] = len(evaluated)
@@ -388,3 +442,24 @@ def _validated_classification(
     if decision == "continue" and classification.outcome == "obvious_skip":
         raise ValueError("Continue 不能同时标记为 obvious_skip。")
     return asdict(classification)
+
+
+def _preliminary_assessment(classification: dict[str, str], reason: str) -> dict[str, str]:
+    return {
+        "summary": reason,
+        "business_role": classification["business_role"],
+        "supporting_evidence": classification["supporting_evidence"],
+        "uncertainty": classification.get("material_doubts", ""),
+        "recommendation": classification.get("recommendation") or "保留给老板判断",
+        "provisional": "true",
+    }
+
+
+def _existing_company_contact(index: dict[str, dict[str, Any]], company_url: str) -> dict[str, Any] | None:
+    if not company_url:
+        return None
+    for record in index.values():
+        value = record.get("公司主页")
+        if value and normalize_linkedin_url(str(value)) == company_url:
+            return record
+    return None

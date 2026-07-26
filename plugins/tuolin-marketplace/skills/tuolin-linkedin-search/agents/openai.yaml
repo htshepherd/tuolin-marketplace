@@ -1,4 +1,4 @@
 interface:
   display_name: "Tuolin LinkedIn Search"
-  short_description: "Search LinkedIn posts and review Tuolin sales prospects"
-  default_prompt: "Use $tuolin-linkedin-search to find LinkedIn prospects from operator-supplied keyword phrases through a confirmation-gated workflow."
+  short_description: "Build an Excel review pool from LinkedIn Posts, then send a boss-selected batch"
+  default_prompt: "Use $tuolin-linkedin-search to find a broad review pool from my keyword phrases, write it to the account workbook, and wait for my exact dispatch selection."

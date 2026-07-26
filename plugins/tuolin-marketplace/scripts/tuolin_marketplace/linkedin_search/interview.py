@@ -11,7 +11,7 @@ INTERVIEW_ORDER = (
     "publication_range",
     "invitation_note",
     "interval_seconds",
-    "requested_limit",
+    "human_review_pool_limit",
 )
 
 QUESTION_NUMBERS = {key: index for index, key in enumerate(INTERVIEW_ORDER, start=1)}
@@ -19,9 +19,10 @@ QUESTION_NUMBERS = {key: index for index, key in enumerate(INTERVIEW_ORDER, star
 
 def build_search_interview(request_text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build the six-field executable interview without reading product knowledge."""
+    extracted = _extract_explicit_answers(request_text)
     interview = {
-        "schema_version": 2,
-        "answers": _extract_explicit_answers(request_text),
+        "schema_version": 3,
+        "answers": {field: _normalize_answer(field, value) for field, value in extracted.items()},
         "recommendations": _build_recommendations(),
         "pending_question": None,
         "history": [],
@@ -88,8 +89,8 @@ def confirmed_search_brief(interview: dict[str, Any]) -> dict[str, Any]:
         {
             "candidate_intent": "potential_customer",
             "search_surface": "linkedin_posts",
-            "opened_post_limit_per_keyword": 50,
             "verified_exhaustion_no_growth_cycles": 3,
+            "discovery_policy": "balanced_keyword_sampling",
         }
     )
     return answers
@@ -147,9 +148,9 @@ def _extract_explicit_answers(text: str) -> dict[str, Any]:
     interval = re.search(r"(?:间隔|每隔)\s*(\d+)\s*分钟", text)
     if interval:
         answers["interval_seconds"] = int(interval.group(1)) * 60
-    limit = re.search(r"(?:最多|上限|添加|邀请)\s*(\d+)\s*(?:人|个)", text)
+    limit = re.search(r"(?:最多找|最多|上限|筛选人数|审核人数|审核池)\s*(\d+)\s*(?:人|个|名)?", text)
     if limit:
-        answers["requested_limit"] = int(limit.group(1))
+        answers["human_review_pool_limit"] = int(limit.group(1))
     return answers
 
 
@@ -177,8 +178,8 @@ def _build_recommendations() -> dict[str, dict[str, Any]]:
         "sort_order": {"question": "贴文搜索使用什么排序？", "value": "latest", "display": "使用 Latest（最新）", "reason": "近期内容更能反映当前业务活动。"},
         "publication_range": {"question": "贴文发布日期范围使用什么条件？", "value": "past_month", "display": "使用 Past month（近一个月）", "reason": "近一个月兼顾时效性和可发现数量。"},
         "invitation_note": {"question": "连接邀请是否使用 Add a note 留言？", "value": False, "display": "第一批不使用留言", "reason": "先验证搜索、审核和发送主链路；需要时可明确选择使用留言。"},
-        "interval_seconds": {"question": "批次内两次连接邀请之间使用多长固定间隔？", "value": 300, "display": "固定间隔 5 分钟", "reason": "固定节奏便于人工理解、执行和审计。"},
-        "requested_limit": {"question": "本次任务最多发送多少个连接邀请？", "value": 10, "display": "最多 10 个", "reason": "10 是已确认的默认单次上限；它是上限，不要求凑数。"},
+        "interval_seconds": {"question": "批次内两次连接邀请之间使用多长固定间隔？", "value": 120, "display": "固定间隔 2 分钟", "reason": "2 分钟符合当前业务测试节奏，并保持固定、可审计。"},
+        "human_review_pool_limit": {"question": "本次最多找多少个联系人给您筛选？", "value": 50, "display": "最多找 50 个联系人给您筛选", "reason": "50 人能给老板提供足够的比较空间，最终发送人数由老板筛选结果决定。"},
     }
 
 
@@ -215,11 +216,11 @@ def _normalize_answer(field: str, value: Any) -> Any:
         else:
             minute_match = re.search(r"(\d+)\s*分钟", str(value)); second_match = re.search(r"(\d+)\s*秒", str(value))
             seconds = int(minute_match.group(1)) * 60 if minute_match else int(second_match.group(1)) if second_match else 0
-        if seconds <= 0: raise ValueError("固定间隔必须大于 0 秒。")
+        if seconds < 60 or seconds % 60 != 0: raise ValueError("固定间隔必须是不低于 1 分钟的整数分钟。")
         return seconds
-    if field == "requested_limit":
+    if field == "human_review_pool_limit":
         limit = value if isinstance(value, int) else int(re.search(r"\d+", str(value)).group(0)) if re.search(r"\d+", str(value)) else 0
-        if limit <= 0: raise ValueError("本次邀请上限必须是正整数。")
+        if not 1 <= limit <= 100: raise ValueError("本次人工审核人数必须是 1–100 的整数。")
         return limit
     raise ValueError(f"未知访谈字段：{field}")
 

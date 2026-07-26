@@ -21,7 +21,7 @@ The current Codex operator's explicit acknowledgement that automated LinkedIn ac
 _Avoid_: LinkedIn authorization, undetectability guarantee, blanket approval for every future run
 
 **Prospecting Run Authorization**:
-The current Codex operator's explicit approval for one prospecting run after reviewing its account, targeting criteria, target type, action limit, and planned external actions.
+The current Codex operator's explicit approval for one prospecting run after reviewing its account, targeting criteria, target type, human-review pool limit, and browser-search scope.
 _Avoid_: standing authorization, approval inherited by a later run, browser login alone
 
 **Prospecting Target Intent**:
@@ -53,8 +53,8 @@ An installer, contractor, system integrator, fabricator, equipment maker, or pro
 _Avoid_: requiring a public RFQ, treating direct material suppliers as downstream users, accepting a usage inference without visible business evidence
 
 **Company Contact Resolution**:
-The conversion of a qualifying company-authored post into at most one connectable member, prioritized by Owner or Founder, Procurement or Sourcing, Managing Director or General Manager, then Product Manager.
-_Avoid_: connecting to a company page, inviting multiple employees from the same company in one run, choosing an arbitrary employee, expanding the role set during a run
+The conversion of a qualifying company-authored post into one connectable member, prioritizing Owner or Founder, Procurement or Sourcing, Managing Director or General Manager, Product Manager, then another visibly relevant responsible manager with an explicit Codex selection reason.
+_Avoid_: connecting to a company page, placing multiple employees from one company in the human review pool, choosing an arbitrary employee without evidence
 
 **Prospecting Contact Ledger**:
 The persistent cross-run record of discovered post, company, and member identities together with invitation state and retry eligibility.
@@ -65,7 +65,7 @@ A one-question-at-a-time conversation with the current operator that resolves on
 _Avoid_: a fixed form, product or knowledge-base questions, geography unsupported by Posts search, asking implementation questions, inheriting unresolved choices from an earlier run
 
 **Confirmed Prospecting Brief**:
-The reviewed output of a prospecting interview containing the run's content keywords, supported post-search criteria, target intent, successful-invitation limit, invitation-note decision, and invitation-dispatch interval.
+The reviewed output of a prospecting interview containing the run's content keywords, supported post-search criteria, target intent, human-review pool limit, invitation-note decision, and invitation-dispatch interval.
 _Avoid_: standing campaign configuration, an unconfirmed chat summary, implementation settings
 
 **Invitation Note Decision**:
@@ -81,7 +81,7 @@ The three post-search decisions always resolved for a run: content keywords, sor
 _Avoid_: forcing every optional LinkedIn filter into every interview
 
 **Keyword-Driven Interview Scope**:
-The six executable run decisions covering the ordered keyword list, Posts sort, publication range, invitation-note choice, fixed dispatch interval, and maximum invitation count.
+The six executable run decisions covering the ordered keyword list, Posts sort, publication range, invitation-note choice, fixed dispatch interval, and maximum number of contacts to find for human screening.
 _Avoid_: product selection, product category, knowledge-base state, geography, AI keyword recommendations, repeating answers already present in the request
 
 **Ordered Content Keyword List**:
@@ -97,36 +97,80 @@ The first phrase in the ordered keyword list, carrying search priority but no di
 _Avoid_: a separate interview field, a product identity, automatically generating related phrases from it
 
 **Successful Invitation Limit**:
-The maximum number of invitation-dispatch successes authorized across all keywords in one prospecting run.
-_Avoid_: a per-keyword quota, attempted-click count, a target that permits exceeding the authorization
+The maximum number of invitation-dispatch successes authorized after the operator selects the final dispatch subset from the human review pool.
+_Avoid_: a discovery-pool size, a pre-search default of ten, attempted-click count, exceeding the approved subset
 
-**Default Run Invitation Limit**:
-Ten successful invitation dispatches, presented as the interview recommendation when the operator did not specify a run limit.
-_Avoid_: an official LinkedIn safety limit, a quota that must be filled, overriding an explicit operator limit
+**Approved Dispatch Count**:
+The number of reviewed members the operator explicitly selects for the final dispatch batch after screening the human review pool.
+_Avoid_: a number chosen before candidates are visible, the human review pool limit, a fixed default of ten
 
 **Seven-Day Invitation Ceiling**:
 The local account-scoped rule that the rolling one-hundred-sixty-eight hours before each proposed dispatch may contain no more than one hundred recorded invitation-dispatch successes across prospecting runs.
 _Avoid_: claiming it is a current official LinkedIn limit, resetting it per keyword or per run, claiming manually sent invitations are counted
 
 **Effective Run Invitation Limit**:
-The lesser of the operator-requested or default run limit and the remaining skill-recorded capacity under the seven-day invitation ceiling, shown explicitly in the brief.
-_Avoid_: silent reduction, exceeding remaining capacity, starting discovery when the effective limit is zero
+The lesser of the approved dispatch count and the remaining skill-recorded capacity under the seven-day invitation ceiling, shown explicitly in the final authorization brief.
+_Avoid_: silent reduction, exceeding remaining capacity, using the invitation limit as the discovery or human-review pool size
 
 **Search Exhaustion Completion**:
 The normal completion of a run when every confirmed keyword has no remaining eligible candidates, even though the successful-invitation limit was not reached.
 _Avoid_: repeating old results, silently loosening filters, inventing new keywords to fill the limit
 
-**Keyword Fallback Progression**:
-The ordered discovery rule that advances to the next search keyword phrase only while the current candidate pool remains below the effective run invitation limit.
-_Avoid_: searching every phrase after the candidate pool is full, per-keyword quotas, redistributing a full batch across later phrases
+**Balanced Keyword Sampling**:
+The discovery rule that gives every confirmed search phrase a soft first-pass share of the human review pool, redistributes unused shares from exhausted phrases, then revisits productive phrases in original order until the pool is full or all phrases are exhausted.
+_Avoid_: letting the first broad phrase fill the pool, hard equal quotas, skipping later phrases, treating a soft share as a guaranteed result count
 
 **Post Sort Decision**:
 The operator's per-run selection of Latest or Most Relevant, with Latest presented as the interview recommendation.
 _Avoid_: a hidden fixed sort, changing sort during a run without new authorization
 
 **Candidate Review Card**:
-A Codex-visible and run-persisted Markdown-and-JSON pre-dispatch record containing the complete visible source-post text and URL, source keyword phrase, provisional AI relevance reason, post author or company, selected member name, title, company, profile URL, approval state, invitation-note decision, and final dispatch outcome.
-_Avoid_: a post summary that hides material context, an unexplained profile URL, presenting AI judgment as confirmed fit, a lead-quality score, sending before the card is shown
+A run-persisted pre-dispatch evidence record containing the complete visible source-post text and URL, source keyword phrase, Codex assessment, post author or company, selected member identity, approval state, invitation-note decision, and final dispatch outcome.
+_Avoid_: a post summary that hides material context, an unexplained profile URL, presenting AI judgment as confirmed fit, a lead-quality score, sending before selected cards are shown
+
+**Human Review Pool**:
+The deduplicated collection of connectable LinkedIn members presented with complete candidate review cards for the operator to judge before any dispatch batch is chosen.
+_Avoid_: raw inspected posts, AI-approved customers, the final dispatch batch, duplicate members occupying multiple review positions
+
+**Human Review Pool Limit**:
+The operator-confirmed maximum of one to one hundred new deduplicated connectable members for one run's human review pool, with fifty presented as the recommendation.
+_Avoid_: fifty raw keyword matches, a fixed non-editable value, values above one hundred in one run, a requirement to send every reviewed contact
+
+**Prospect Review Workbook**:
+The account-scoped cumulative Excel workbook shared by all search runs for one bound LinkedIn account, separating deduplicated contacts, repeated post evidence, and immutable dispatch history into dedicated worksheets.
+_Avoid_: a new disconnected result file for every run, sharing one workbook across different LinkedIn accounts, using the workbook itself as mutable dispatch authorization
+
+**Prospect Contact Sheet**:
+The workbook sheet containing exactly one current row per deduplicated LinkedIn member with identity, company, a validated boss-decision dropdown, optional boss note, connection state, and first- and latest-seen timestamps.
+_Avoid_: duplicate rows for later posts, full dispatch history, one row per keyword hit
+
+**Prospect Evidence Sheet**:
+The workbook sheet containing every retained discovery occurrence with run, keyword, complete source post, post URL, Codex assessment, and uncertainty linked back to one contact.
+_Avoid_: overwriting older evidence, hiding repeated discoveries, treating evidence rows as new contacts
+
+**Prospect Dispatch Sheet**:
+The workbook sheet containing immutable authorized-batch membership, interval, note decision, submission time, and final outcome for every dispatch attempt.
+_Avoid_: editable candidate screening state, rewriting prior batch membership, mixing account histories
+
+**New Review Contact**:
+A deduplicated connectable member absent from the prospect review workbook when the current run first encounters them and therefore eligible to consume one position in that run's human review pool.
+_Avoid_: an existing workbook row with new evidence, a duplicate profile, a previously sent or excluded member
+
+**Final Dispatch Snapshot**:
+The immutable run-local copy of workbook rows marked Send that Codex reprints with their source evidence before requesting final batch dispatch authorization.
+_Avoid_: dispatching directly from later-mutated workbook rows, including Exclude or Pending rows, changing the selected list after authorization
+
+**Current Dispatch Selection**:
+The operator's explicit present-run marking of eligible new or historical Pending contacts for inclusion in the next final dispatch snapshot.
+_Avoid_: automatically reusing an old Send decision, selecting every Pending row, bypassing current live-state reconciliation
+
+**Prospect Review Feedback**:
+The boss's required dropdown judgment of Send, Exclude, or Pending plus an optional free-text note on a reviewed contact, retained as evidence that Codex may cite in later preliminary assessments but not silently convert into a permanent rule.
+_Avoid_: automatic model training, treating one decision as a universal rule, ignoring contradictory decisions
+
+**Confirmed Prospect Screening Rule**:
+A reusable future-search rule proposed by Codex from accumulated review feedback and activated only after the boss explicitly confirms its wording and scope.
+_Avoid_: an inferred hidden rule, automatic activation, replacing visible-evidence reasoning, applying a rule outside its confirmed scope
 
 **Pre-Dispatch Candidate Review**:
 The human confirmation gate in which the operator reads each candidate's complete visible source post and identity evidence before approving or removing the candidate.
@@ -136,17 +180,21 @@ _Avoid_: treating run authorization as approval of unseen candidates, confirming
 The AI's non-final visible-evidence judgment that a post and member are plausible enough to show for human candidate review.
 _Avoid_: qualified lead, verified buyer, final customer judgment, hiding uncertainty from the operator
 
+**Codex Preliminary Prospect Assessment**:
+Codex's reasoned pre-review of visible post, company, author, role, and keyword evidence that explains likely commercial relevance, business role, uncertainties, and a keep-or-remove recommendation without making the final decision.
+_Avoid_: an unexplained relevance score, claiming buyer status, suppressing uncertain but plausible contacts, replacing the operator's judgment
+
 **Unresolved Relevant Lead**:
 A plausibly relevant post or company for which no verifiable personal LinkedIn profile with a standard Connect path can be resolved.
-_Avoid_: counting it toward the candidate limit, fabricating a contact, presenting it as an actionable candidate
+_Avoid_: counting it toward the human review pool limit, fabricating a contact, presenting it as an actionable candidate
 
 **Approved Candidate Batch**:
 The operator-confirmed subset of displayed candidate review cards that may proceed to sequential invitation dispatch in the current run.
 _Avoid_: approving undisplayed candidates, adding candidates after confirmation, treating the batch as already contacted
 
 **Invitation Dispatch Interval**:
-The operator-confirmed minimum elapsed time enforced between two consecutive invitation submissions in one run, with five minutes presented as the interview recommendation.
-_Avoid_: simultaneous dispatch, hidden pacing, claiming an interval guarantees freedom from platform restriction
+The operator-confirmed fixed elapsed time enforced between two consecutive invitation submissions in one run, accepting whole-minute values of at least one minute and recommending two minutes.
+_Avoid_: simultaneous dispatch, forcing five minutes, values below one minute, changing pacing during the batch, claiming an interval guarantees freedom from platform restriction
 
 **Closed Candidate Batch**:
 An approved candidate batch whose rejected or skipped members are not replaced by further discovery within the same run.
@@ -159,10 +207,6 @@ _Avoid_: per-member repeated prompts, authorization before candidates are known,
 **Bound LinkedIn Account**:
 The authenticated member identity, represented by displayed name and profile URL, that the operator confirms for exactly one prospecting run.
 _Avoid_: any logged-in account, credentials as identity, silently continuing after an account switch
-
-**Keyword Post Inspection Limit**:
-The fixed first-release ceiling of fifty inspected posts for each content keyword before discovery advances to the next keyword.
-_Avoid_: an interview field, unbounded scrolling, counting unopened search-result placeholders as inspected posts
 
 **Verified Infinite-Scroll Exhaustion**:
 Evidence that the current LinkedIn Posts result stream produced no new unique post identities across three consecutive bottom-scroll-and-load-wait cycles, rather than a conclusion drawn from a visible footer, advertisement, one stalled load, or a discarded page parameter.
@@ -788,7 +832,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - A **Same-Category Channel Prospect** may continue as provisional when visible evidence supports branding, distribution, retail, or private-label activity; an unclear make-versus-source model remains a human-review uncertainty
 - A **Downstream Material User** may continue without an explicit RFQ when visible evidence shows installation, integration, fabrication, equipment, or project use of the referenced category
 - A qualifying company-authored post requires **Company Contact Resolution** before a **Connection Invitation** can be sent
-- **Company Contact Resolution** that finds no member in the confirmed role priority ends with the company skipped, not an arbitrary fallback employee
+- **Company Contact Resolution** keeps only one member per company; if the four preferred role groups are unavailable, Codex may choose another visibly relevant responsible manager only with an explicit evidence-based reason
 - The **Prospecting Contact Ledger** deduplicates post URLs, company-page URLs, and member-profile URLs across all runs
 - A member with a successful or pending invitation is ineligible for another invitation; a failed candidate is retryable only when no invitation was submitted
 - After one member from a company reaches **Invitation Dispatch Success**, other members of that company are ineligible in the first release
@@ -800,34 +844,53 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Every **Confirmed Prospecting Brief** contains the **Core Post Search Criteria**; other supported filters are included only when the operator requests them or the current goal requires them
 - The content-keyword portion of the **Core Post Search Criteria** is an **Ordered Content Keyword List**
 - One run processes the **Ordered Content Keyword List** sequentially while the **Prospecting Contact Ledger** deduplicates candidates across keywords
-- The **Successful Invitation Limit** applies once to the whole run and stops further external invitation actions immediately when reached
-- The **Default Run Invitation Limit** supplies the recommendation only when the operator omitted a limit
-- Every run's **Successful Invitation Limit** is additionally bounded by the remaining capacity under the **Seven-Day Invitation Ceiling**
+- The **Successful Invitation Limit** is determined only after the operator chooses the final reviewed subset and stops further external invitation actions immediately when reached
+- The **Approved Dispatch Count** may be twelve or another operator-selected number; it is not fixed to a default of ten
+- Every run's **Approved Dispatch Count** is additionally bounded by the remaining capacity under the **Seven-Day Invitation Ceiling**
+- Zero remaining capacity under the **Seven-Day Invitation Ceiling** blocks final dispatch but does not block search, Codex assessment, workbook updates, or boss review
 - The **Seven-Day Invitation Ceiling** is recalculated immediately before every invitation submission and never resets on a calendar-week boundary
 - The **Seven-Day Invitation Ceiling** counts only dispatch successes recorded by the **Tuolin LinkedIn Search Skill**; the brief must disclose that manual LinkedIn invitations are untracked
-- The **Effective Run Invitation Limit** controls candidate-batch capacity and dispatch; an effective limit of zero blocks the run before browser discovery
+- The **Effective Run Invitation Limit** controls final dispatch capacity but does not limit the size of the **Human Review Pool**
 - A run may finish through **Search Exhaustion Completion** with fewer dispatches than its **Successful Invitation Limit**
 - Expanding criteria after **Search Exhaustion Completion** requires a new brief and a new run authorization
 - The **Core Post Search Criteria** contains exactly one **Post Sort Decision** shared by all keywords in the run
 - Every candidate proposed for invitation must have a **Candidate Review Card** shown during **Pre-Dispatch Candidate Review**
-- Every **Candidate Review Card** prints the complete visible source-post text in Codex so the operator can independently judge **Provisional Candidate Fit**
+- Every **Candidate Review Card** preserves the complete visible source-post text so the operator can independently judge **Provisional Candidate Fit** in the **Prospect Review Workbook**
+- Before a card enters the **Human Review Pool**, Codex produces one **Codex Preliminary Prospect Assessment** from the visible evidence and prints its reasoning, uncertainty, and recommendation on the card
+- One **Human Review Pool** contains at most the **Human Review Pool Limit** of deduplicated members, each represented by one complete **Candidate Review Card**
+- The interview asks “本次最多找多少个联系人给您筛选？”; it recommends fifty and accepts an operator-supplied integer from one through one hundred
+- The **Human Review Pool Limit** and **Effective Run Invitation Limit** are independent: discovery may collect fifty reviewable members even when the eventual invitation batch is smaller
+- Each run appends new reviewable contacts to the same **Prospect Review Workbook** while preserving source-run and source-keyword provenance
+- One **Bound LinkedIn Account** owns exactly one **Prospect Review Workbook**; another LinkedIn account uses a separate workbook
+- The **Prospect Contact Sheet** keeps one row per member, the **Prospect Evidence Sheet** appends every retained post occurrence, and the **Prospect Dispatch Sheet** preserves final batch and outcome history
+- The **Human Review Pool Limit** counts only **New Review Contacts**; an existing workbook contact never consumes one of the current run's fifty new-contact positions
+- A repeated contact updates the existing workbook row with new source keywords, source posts, evidence, and latest-seen time instead of creating another row
+- Sent, Pending-invitation, connected, or Exclude rows do not re-enter review; a boss-marked Pending row remains available in the workbook but is not counted as newly found
+- An Exclude row returns to consideration only when the boss explicitly changes its decision back to Pending
+- The **Prospect Contact Sheet** implements the required boss decision as an Excel data-validation dropdown limited to Send, Exclude, or Pending, plus an optional free-text boss-note column
+- Every boss decision becomes **Prospect Review Feedback** available as cited context for later Codex preliminary assessments
+- Explicit boss notes are stronger feedback evidence; when a note is blank, Codex may propose only a clearly labeled weak inference from the decision and visible contact evidence
+- Codex may summarize repeated keep, exclude, and contradictory patterns from review feedback, but only an explicitly approved **Confirmed Prospect Screening Rule** may change future hard screening behavior
+- Rows marked Send are copied into a **Final Dispatch Snapshot**; Codex reprints that exact selected subset and its source evidence before final authorization
+- A **Current Dispatch Selection** may include new contacts and historical Pending contacts from the same account workbook, but historical rows never join automatically
+- Every selected historical contact undergoes current ledger, live connection-state, company-duplication, standard Connect, and rolling-capacity reconciliation before entering the **Final Dispatch Snapshot**
 - Plausible but uncertain downstream users with verified personal identity and **Standard Connect Eligibility** enter review as **Provisional Candidate Fit**, with visible supporting evidence and doubts
-- An **Unresolved Relevant Lead** is recorded for traceability but does not enter the candidate batch or count toward its effective limit
+- AI screening uses a broad-entry rule: only obvious semantic mismatches, direct category manufacturers or suppliers, duplicate or already-contacted members, and members without verifiable standard Connect eligibility are excluded before human review
+- An **Unresolved Relevant Lead** is recorded for traceability but does not enter the human review pool or count toward its limit
 - A **Connection Invitation** cannot be submitted until its candidate passes **Pre-Dispatch Candidate Review**
 - **Pre-Dispatch Candidate Review** produces exactly one **Approved Candidate Batch** for the run
 - Members of an **Approved Candidate Batch** are processed sequentially and every consecutive submission must respect the **Invitation Dispatch Interval**
 - Every **Confirmed Prospecting Brief** includes exactly one **Invitation Dispatch Interval** shared by the approved batch
-- The displayed candidate batch contains no more members than the **Successful Invitation Limit**
+- The displayed **Human Review Pool** may contain more members than the **Successful Invitation Limit**; the operator's selected subset establishes the **Approved Dispatch Count** and is then bounded by invitation capacity
 - Once reviewed, the batch becomes a **Closed Candidate Batch**; its approved subset is dispatched and any further discovery requires a new run
-- Discovery continues only until the provisional candidate-card pool reaches the effective run limit, the current search space reaches a valid stop condition, or all phrases finish; operator removals during review never reopen discovery or trigger backfill
+- Discovery continues until the **Human Review Pool Limit**, a valid search-space stop condition, or completion of all phrases; operator removals during review never reopen discovery or trigger backfill
 - **Pre-Dispatch Candidate Review** ends only when the operator grants **Final Batch Dispatch Authorization** or rejects the batch
 - After **Final Batch Dispatch Authorization**, the approved batch is dispatched sequentially without additional per-member confirmation
 - Every **Automated LinkedIn Prospecting Run** has exactly one **Bound LinkedIn Account**, shown before discovery and again at final batch authorization
 - Missing authentication, unresolvable identity, or a change to the **Bound LinkedIn Account** blocks the run; credentials and verification codes remain user-entered
-- **Post-First Prospect Discovery** inspects no more than the **Keyword Post Inspection Limit** for each keyword and then advances in list order
-- Before the effective candidate limit or **Keyword Post Inspection Limit** is reached, a keyword may end as exhausted only with **Verified Infinite-Scroll Exhaustion**
-- Advertisements and duplicate post identities do not count toward the **Keyword Post Inspection Limit**
-- Reaching every keyword's inspection limit without filling the candidate batch leads to the existing actual-size batch, not broader automatic discovery
+- **Post-First Prospect Discovery** continues through each keyword while the **Human Review Pool** is below its limit and advances only after **Verified Infinite-Scroll Exhaustion**
+- Advertisements, placeholders, and duplicate post identities do not count as new evidence and cannot reset or satisfy exhaustion by themselves
+- When every confirmed keyword reaches **Verified Infinite-Scroll Exhaustion** before the review pool reaches fifty, the run ends with its actual-size pool instead of expanding keywords or weakening hard eligibility rules
 - Each inspected post receives one **Post Relevance Decision** before its author or company can become a discovery candidate
 - Each **Post Relevance Decision** uses only the source **Search Keyword Phrase** plus visible post, author, and company evidence; product knowledge and a verified knowledge interface are not prerequisites
 - News reposts, unrelated homonyms, ordinary consumer sharing, and obvious spam receive a Skip decision in the first release
@@ -846,7 +909,9 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Every item in the **Ordered Content Keyword List** is one exact **Search Keyword Phrase** and is searched separately in the confirmed order
 - The **Ordered Content Keyword List** has no business whitelist or fixed phrase-count ceiling; its deduplicated count and complete execution order are shown in the run brief
 - A **Primary Search Keyword** is simply the first list item; exact duplicates are removed case-insensitively while the first occurrence keeps its position
-- **Keyword Fallback Progression** stops discovery as soon as the candidate pool reaches the effective run invitation limit; later phrases are searched only when earlier phrases do not supply enough eligible candidates
+- **Balanced Keyword Sampling** computes a soft first-pass share from the human review pool limit and keyword count so every confirmed phrase is sampled before productive phrases fill unused capacity
+- A phrase that reaches **Verified Infinite-Scroll Exhaustion** contributes fewer contacts without blocking the run; its unused soft share is redistributed to other phrases
+- After every phrase completes its first pass, productive phrases are revisited in original order until the review pool is full or all phrases are exhausted
 - A **Keyword-Driven LinkedIn Search** requires a writable task workspace for durable run state, candidate cards, the shared contact ledger, and rolling invitation counts, but it does not require or read a knowledge-base Agent interface
 - When the **Invitation Note Decision** enables a note, an **AI Invitation Note Draft** must become fixed operator-confirmed text before it enters the brief
 - An **AI Invitation Note Draft** may summarize a clear common topic across the confirmed keyword phrases; when no reliable common topic exists, it uses generic industry-connection language instead of inventing a product description
@@ -1440,7 +1505,10 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. Use **Company Contact Resolution** to select at most one prioritized member from that company in the current run."
 
 > **Dev:** "May the workflow pick any employee when none of the prioritized roles exist?"
-> **Domain expert:** "No. Skip that company; changing the eligible role set belongs to a later version or newly scoped run."
+> **Domain expert:** "Not arbitrarily. It may choose one visibly relevant responsible manager when Codex can explain the role-to-business relationship and ordinary Connect eligibility."
+
+> **Dev:** "Should two connectable employees from the same company occupy two positions in the fifty-person review pool?"
+> **Domain expert:** "No. Keep one company opportunity represented by one prioritized contact; use the next eligible employee only when the preferred contact cannot be connected."
 
 > **Dev:** "Can tomorrow's run process the same profile under a different keyword?"
 > **Domain expert:** "No. Consult the **Prospecting Contact Ledger**; skip successful and pending invitations across runs, and retry only when no invitation was actually submitted."
@@ -1461,10 +1529,10 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "Yes. Put them in an **Ordered Content Keyword List**, search them sequentially, and retain the source keyword on every discovered candidate."
 
 > **Dev:** "If a run has three keywords and a limit of ten, may it send thirty invitations?"
-> **Domain expert:** "No. The **Successful Invitation Limit** is global; stop after ten confirmed dispatches across all keywords."
+> **Domain expert:** "No. After screening, the operator selects one final subset across all keywords; its **Approved Dispatch Count** is the run-wide ceiling before capacity reconciliation."
 
-> **Dev:** "What invitation limit should the interview recommend when the operator gives none?"
-> **Domain expert:** "Recommend the **Default Run Invitation Limit** of ten, while still enforcing the separate **Seven-Day Invitation Ceiling**."
+> **Dev:** "Should the interview ask how many invitations to send before the operator sees the candidates?"
+> **Domain expert:** "No. Ask how many contacts to find for screening, then derive the **Approved Dispatch Count** from the operator's final selection."
 
 > **Dev:** "Does the one-hundred-invitation ceiling reset every Monday?"
 > **Domain expert:** "No. Recalculate the **Seven-Day Invitation Ceiling** over the rolling one-hundred-sixty-eight hours before each dispatch."
@@ -1474,6 +1542,9 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 
 > **Dev:** "May a requested ten-person run proceed when only four local seven-day slots remain?"
 > **Domain expert:** "Only after the brief shows an **Effective Run Invitation Limit** of four and the operator confirms that explicit reduction."
+
+> **Dev:** "Should search stop entirely when the account has zero remaining seven-day dispatch capacity?"
+> **Domain expert:** "No. Continue discovery and workbook review, but block Connect until capacity returns and a fresh exact dispatch snapshot is authorized."
 
 > **Dev:** "Must the workflow loosen filters until it fills the invitation limit?"
 > **Domain expert:** "No. Use **Search Exhaustion Completion** and report the actual dispatch count; broader criteria require a newly authorized run."
@@ -1487,6 +1558,24 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Dev:** "Can the Agent present a plausible installer as a confirmed potential customer?"
 > **Domain expert:** "No. Record only **Provisional Candidate Fit**, print the complete source post and identity evidence, and let the operator make the final batch decision."
 
+> **Dev:** "Should Codex merely copy fifty profiles for the boss without judging them?"
+> **Domain expert:** "No. Produce a **Codex Preliminary Prospect Assessment** for every review card, but keep plausible uncertain contacts in the pool and leave the final decision to the boss."
+
+> **Dev:** "Must the boss review fifty long cards one by one in chat?"
+> **Domain expert:** "No. Append them to the cumulative **Prospect Review Workbook**, let the boss mark Send, Exclude, or Pending, then reprint the selected **Final Dispatch Snapshot** in Codex before authorization."
+
+> **Dev:** "If a new keyword finds someone already present in the workbook, does that fill one of this run's fifty positions?"
+> **Domain expert:** "No. Append the new evidence to the existing row; only a **New Review Contact** counts toward the current human review pool."
+
+> **Dev:** "May the boss include a historical Pending contact in today's dispatch batch?"
+> **Domain expert:** "Yes, through an explicit **Current Dispatch Selection** followed by fresh eligibility reconciliation; historical rows never enter automatically."
+
+> **Dev:** "Should three Exclude decisions silently teach the Agent to reject that whole business type forever?"
+> **Domain expert:** "No. Preserve them as **Prospect Review Feedback**, let Codex propose a pattern, and activate it only as a boss-approved **Confirmed Prospect Screening Rule**."
+
+> **Dev:** "Must the boss type a reason for all fifty contacts?"
+> **Domain expert:** "No. Require a Send, Exclude, or Pending dropdown choice and keep the boss note optional; blank notes never justify a strong inferred rule."
+
 > **Dev:** "Should a relevant company without a verifiable connectable member consume one of ten candidate slots?"
 > **Domain expert:** "No. Record an **Unresolved Relevant Lead** and continue scrolling for an actionable candidate."
 
@@ -1494,7 +1583,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. The **Approved Candidate Batch** is dispatched sequentially, with the confirmed **Invitation Dispatch Interval** between submissions."
 
 > **Dev:** "Is the invitation interval hidden or permanently fixed by the program?"
-> **Domain expert:** "No. The operator confirms it for every run, with five minutes shown as the recommendation in the **Prospecting Interview**."
+> **Domain expert:** "No. The operator confirms it for every run; recommend two minutes, accept whole-minute values of at least one minute, and keep the confirmed value fixed during dispatch."
 
 > **Dev:** "If the operator rejects three of ten candidates, should the run find three replacements?"
 > **Domain expert:** "No. Use a **Closed Candidate Batch**, dispatch only the approved remainder, and create a new run for further discovery."
@@ -1506,7 +1595,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. Confirm one **Bound LinkedIn Account** by name and profile URL, and block if authentication is missing or the account changes."
 
 > **Dev:** "Should the workflow scroll indefinitely until it fills the candidate batch?"
-> **Domain expert:** "No. Apply the **Keyword Post Inspection Limit** of fifty opened posts, then advance to the next keyword or finish with the candidates found."
+> **Domain expert:** "Continue while the review pool is below fifty, but stop each keyword at **Verified Infinite-Scroll Exhaustion** and finish at actual size when all confirmed keywords are exhausted."
 
 > **Dev:** "Does a matching hashtag automatically make the post a prospect source?"
 > **Domain expert:** "No. Record a **Post Relevance Decision** from the visible content and continue only when the post concerns commercial activity around the target category."
@@ -1545,7 +1634,16 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 > **Domain expert:** "No. Search only the exact phrases in the confirmed **Ordered Content Keyword List**."
 
 > **Dev:** "Should every confirmed phrase still be searched after the candidate pool reaches the run limit?"
-> **Domain expert:** "No. Use **Keyword Fallback Progression**: later phrases supplement earlier ones only while the batch remains below its effective limit."
+> **Domain expert:** "Every phrase gets a soft first-pass share through **Balanced Keyword Sampling**; once the **Human Review Pool** is full, no further search is needed."
+
+> **Dev:** "May the first broad keyword fill all fifty review positions before a more specific phrase is searched?"
+> **Domain expert:** "No. Give every phrase a soft first-pass share, then redistribute unused capacity and revisit productive phrases in the original order."
+
+> **Dev:** "If the run may send only ten invitations, should discovery stop after finding ten people?"
+> **Domain expert:** "No. Build a **Human Review Pool** of up to fifty deduplicated connectable members so the operator can choose the final dispatch subset."
+
+> **Dev:** "Is fifty a mandatory review-pool size for every task?"
+> **Domain expert:** "No. Recommend fifty, accept one through one hundred, and start another run for additional new contacts while continuing the same account workbook."
 
 > **Dev:** "May the Agent personalize the invitation note while dispatching each candidate?"
 > **Domain expert:** "No. Confirm or edit one **AI Invitation Note Draft** before the brief is finalized, then use that fixed text for the whole approved batch."
@@ -2009,34 +2107,42 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - “关键词搜索” could mean searching posts, people, or companies. Resolved for the first release: use **Post-First Prospect Discovery** with content keywords; direct people search is not the primary discovery entrypoint.
 - “同行”和“潜在客户” were previously allowed to overlap without distinguishing business models. Resolved: a **Direct Category Manufacturer** is skipped; a **Same-Category Channel Prospect** or **Downstream Material User** may continue provisionally, with unclear make-versus-source evidence left for human review.
 - “贴文作者” could be either a member or a company page. Resolved: a company-authored match must use **Company Contact Resolution** to find one prioritized personal account before invitation dispatch.
-- Company contact fallback was undefined. Resolved: if **Company Contact Resolution** finds none of the confirmed priority roles, skip the company instead of choosing another employee.
+- Company contact fallback was previously restricted to four role groups. Superseded: **Company Contact Resolution** still keeps one member per company, but may use another visibly relevant responsible manager when Codex records an explicit evidence-based selection reason.
 - “重复处理” could mean only duplicates inside the current search page. Resolved: the **Prospecting Contact Ledger** provides cross-run deduplication for posts, companies, members, invitation state, and retry eligibility.
 - Invitation-note behavior was considered a fixed first-release rule. Resolved: it is an **Invitation Note Decision** made by the actual operator for each run together with supported search criteria and the invitation limit.
 - Invitation-note personalization was unspecified. Resolved: one run uses no note or one fixed confirmed note for every approved candidate; per-candidate generation is out of scope.
 - “目标地区” was proposed as an interview field even though standard post search cannot apply it. Resolved for the first release: remove it and restrict discovery decisions to **Supported Post Search Criteria**.
 - “基于搜索条件访谈” could mean forcing every visible filter into a fixed form. Resolved: always collect the three **Core Post Search Criteria** and add other supported filters only when relevant.
 - “组合关键词” could mean one merged query, Boolean composition, or multiple phrases. Resolved: use an **Ordered Content Keyword List** in which every comma- or line-separated **Search Keyword Phrase** is searched independently and intact, while preserving per-candidate phrase provenance.
-- “关键词数量” could be confused with the number of Posts returned for one phrase. Resolved: the operator's phrase list has no fixed count ceiling, while each phrase independently follows candidate, inspection, and verified-exhaustion stop conditions.
+- “关键词数量” could be confused with the number of Posts returned for one phrase. Resolved: the operator's phrase list has no fixed count ceiling, while each phrase continues until the human review pool is full or **Verified Infinite-Scroll Exhaustion** is established.
 - “主词” could imply a separate required field or special query behavior. Resolved: it is only the **Primary Search Keyword**, meaning the first phrase searched; it is not collected separately and duplicate occurrences are removed.
-- “每天加多少个” could mean a quota per keyword or one authorization ceiling. Resolved: use one run-wide **Successful Invitation Limit** counted only by confirmed invitation dispatches.
-- The default run size and weekly pacing policy were unspecified. Resolved: recommend the **Default Run Invitation Limit** of ten and enforce a local **Seven-Day Invitation Ceiling** of one hundred per bound account.
+- “每天加多少个” could mean a discovery-pool size, a quota per keyword, or one authorization ceiling. Resolved: ask how many contacts to find for screening, then derive one run-wide **Successful Invitation Limit** from the operator's final selected subset.
+- The previous default of ten invitations was conflated with discovery volume. Superseded: the interview recommends a **Human Review Pool Limit** of fifty, while the final **Approved Dispatch Count** is chosen after screening and remains subject to the **Seven-Day Invitation Ceiling**.
 - “7 天” could mean a calendar week or a rolling duration. Resolved: use the rolling one-hundred-sixty-eight hours before each dispatch.
 - The seven-day ceiling could imply complete account-wide activity tracking. Resolved: count only skill-recorded successes and disclose that manual invitations are not included.
-- A requested run limit could exceed remaining seven-day capacity. Resolved: compute and confirm the **Effective Run Invitation Limit**, and block before discovery when it is zero.
+- An approved dispatch count could exceed remaining seven-day capacity. Resolved: compute and confirm the **Effective Run Invitation Limit** for the final dispatch snapshot and block Connect—not discovery—when it is zero.
+- The previous capacity rule blocked discovery when seven-day dispatch capacity was zero. Superseded: capacity gates only final dispatch; discovery, Codex assessment, cumulative workbook updates, and boss review remain allowed.
 - An invitation limit could be mistaken for a quota the system must fill. Resolved: it is a ceiling, and **Search Exhaustion Completion** is a valid result below that ceiling.
-- Multiple keyword phrases could imply that all phrases must always be searched. Resolved: use **Keyword Fallback Progression** and stop discovery once the candidate pool reaches the effective run limit.
+- Multiple keyword phrases could allow the first broad phrase to monopolize the review pool. Resolved: use **Balanced Keyword Sampling** with soft first-pass shares, redistribution from exhausted phrases, and ordered refill until the **Human Review Pool** is full.
 - Post ordering was unspecified. Resolved: make it a per-run **Post Sort Decision**, recommend Latest, and preserve the operator's ability to choose Most Relevant.
 - Run authorization could be interpreted as approval to contact candidates the operator has never seen. Resolved: require a **Candidate Review Card** and **Pre-Dispatch Candidate Review** before invitation submission.
 - AI screening could be mistaken for final prospect qualification. Resolved: every included member has only **Provisional Candidate Fit** until the operator reviews the complete visible post and identity evidence in the **Candidate Review Card**.
-- A relevant post without a resolvable personal account could be counted as a candidate. Resolved: record an **Unresolved Relevant Lead** without consuming the candidate limit, and continue discovery.
+- “交给老板筛选” could be interpreted as skipping AI judgment entirely. Resolved: Codex must produce a **Codex Preliminary Prospect Assessment** with evidence, likely role, doubts, and a recommendation before human review, while only four hard-exclusion categories are removed automatically.
+- A fifty-person pool could make direct chat-only review impractical. Resolved: maintain one cumulative **Prospect Review Workbook** for comparison and boss decisions, then generate an immutable **Final Dispatch Snapshot** from Send rows for Codex-visible authorization.
+- “本轮找到 50 人” could include old workbook contacts rediscovered under new keywords. Resolved: only **New Review Contacts** consume the current run's review-pool positions; repeated contacts update their existing rows without inflating the new-contact count.
+- A cumulative workbook could imply that historical Pending contacts are either unusable or automatically reused. Resolved: the boss may explicitly include them through a **Current Dispatch Selection**, followed by current eligibility reconciliation and a new final authorization snapshot.
+- “根据老板筛选自动学习” could mean silent permanent behavior changes. Resolved: later Codex reasoning may cite **Prospect Review Feedback**, but only a boss-approved **Confirmed Prospect Screening Rule** may alter future screening policy.
+- Free-form review decisions could produce inconsistent workbook values, while mandatory explanations would burden the boss. Resolved: use a required Send/Exclude/Pending Excel dropdown and an optional boss-note field.
+- A relevant post without a resolvable personal account could be counted as a review contact. Resolved: record an **Unresolved Relevant Lead** without consuming the human review pool limit, and continue discovery.
 - Candidate review mode was briefly considered one-at-a-time. Resolved: review an **Approved Candidate Batch** in Codex, then dispatch its invitations sequentially with an **Invitation Dispatch Interval**.
-- Invitation pacing was unspecified. Resolved: include one operator-confirmed **Invitation Dispatch Interval** in every run brief and recommend five minutes without claiming it prevents platform restrictions.
+- Invitation pacing was previously fixed or recommended at five minutes. Superseded: recommend two minutes, accept whole-minute intervals of at least one minute, and keep the confirmed **Invitation Dispatch Interval** fixed throughout the batch without claiming it prevents platform restrictions.
 - Batch approval could trigger automatic replacement discovery for rejected candidates. Resolved: the reviewed list is a **Closed Candidate Batch** and further discovery requires a new task.
-- “找够 10 个” could mean refilling after human rejection. Resolved: discovery may produce up to ten reviewable cards, but operator removals are not backfilled and the final approved batch may be smaller.
+- “找够 10 个” previously conflated discovery volume with invitation volume. Resolved: discovery may produce a **Human Review Pool** of up to fifty deduplicated connectable members, while the final approved dispatch subset is decided separately and removals are not backfilled.
+- “最多找 50 个联系人” could be read as a fixed system constant. Resolved: fifty is the recommended **Human Review Pool Limit**; the operator may choose any whole number from one through one hundred for the run.
 - Candidate approval and final send permission were treated as separate possible prompts. Resolved: the explicit batch confirmation is the **Final Batch Dispatch Authorization**, after which no per-member prompt is required.
 - “账号必须已登录” did not identify which member account was authorized. Resolved: bind each run to one displayed **Bound LinkedIn Account** and block on missing, unknown, or changed identity.
-- Search exhaustion had no finite inspection boundary. Resolved: inspect at most fifty posts per keyword through the fixed **Keyword Post Inspection Limit**, which is not an interview question.
-- LinkedIn's infinite result stream could be mistaken for six total results after one stalled load or a visible footer. Resolved: neither a footer, advertisement, nor discarded `page=2` parameter proves exhaustion; require **Verified Infinite-Scroll Exhaustion** before ending a keyword below its candidate and inspection limits.
+- The fixed fifty-post inspection boundary prevented the workflow from producing a fifty-person review pool. Superseded: no per-keyword raw-post cap; continue until the pool is full or every confirmed keyword reaches **Verified Infinite-Scroll Exhaustion**.
+- LinkedIn's infinite result stream could be mistaken for six total results after one stalled load or a visible footer. Resolved: neither a footer, advertisement, nor discarded `page=2` parameter proves exhaustion; require **Verified Infinite-Scroll Exhaustion** before ending a keyword while the human review pool remains below its limit.
 - A keyword match could be mistaken for sufficient candidate evidence. Resolved: require a binary **Post Relevance Decision** with one reason before inspecting the author or company.
 - Removing product binding could leave relevance dependent on hidden product knowledge. Resolved: judge relevance only from the source **Search Keyword Phrase** and visible LinkedIn content, skipping incidental mentions, reposted news, ordinary consumer content, homonyms, and spam.
 - Candidate resolution for personal and company-authored posts was conflated. Resolved: keep a verified **Individual Post Author Candidate** directly, and use **Company Contact Resolution** only for company-authored posts.

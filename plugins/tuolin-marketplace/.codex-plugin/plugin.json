@@ -1,6 +1,6 @@
 {
   "name": "tuolin-marketplace",
-  "version": "1.53.0",
+  "version": "1.54.0",
   "description": "Tuolin Agent marketplace for Codex, including the local knowledge base agent, confirmation-gated LinkedIn content and prospect-search workflows, and evidence-driven YouTube Shorts video creation.",
   "author": {
     "name": "Tianjin Tuolin"
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Tuolin Agent 2.0",
     "shortDescription": "Tuolin business agents for knowledge, LinkedIn content and prospecting, and video workflows.",
-    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, a keyword-driven LinkedIn Posts prospect-search workflow with full-post candidate review and explicit connection-invitation authorization, and an evidence-driven YouTube Shorts video workflow. LinkedIn prospecting uses operator-supplied keyword phrases without requiring a product knowledge base, the official Codex Chrome extension, verified infinite scrolling, account-scoped deduplication, closed candidate batches, fixed intervals, and durable stop/recovery state. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
+    "longDescription": "Codex-installed Tuolin business agent marketplace. Includes the local knowledge-base Agent, controlled LinkedIn campaign workflows, a keyword-driven LinkedIn Posts prospect-search workflow with balanced multi-keyword discovery, a per-account cumulative Excel review workbook, boss-selected immutable invitation snapshots, and an evidence-driven YouTube Shorts video workflow. LinkedIn prospecting uses operator-supplied keyword phrases without requiring a product knowledge base, the official Codex Chrome extension, verified infinite scrolling, broad preliminary assessment, cross-task deduplication, fixed whole-minute intervals, and durable stop/recovery state. Video creation reads formal product knowledge, challenges one business decision at a time, incorporates current YouTube and inspected-image evidence, shows plan and storyboard content directly in Codex, locks a standard SRT with the storyboard, and preserves confirmation-gated Dreamina handoff and assembly.",
     "developerName": "Tianjin Tuolin",
     "category": "Productivity",
     "capabilities": [

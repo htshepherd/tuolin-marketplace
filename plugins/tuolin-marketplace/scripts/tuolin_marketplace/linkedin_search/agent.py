@@ -98,7 +98,7 @@ def create_linkedin_search_run(
     requirements = {"request_text": request_text, "interview": interview, "confirmed_search_brief": brief}
     state = {
         "workflow": "tuolin-linkedin-search",
-        "schema_version": 2,
+        "schema_version": 3,
         "run_id": run_dir.name,
         "status": status,
         "phase": phase,
@@ -109,6 +109,8 @@ def create_linkedin_search_run(
         "interview": interview,
         "confirmed_search_brief": brief,
         "candidate_ids": [],
+        "new_review_contact_ids": [],
+        "repeated_contact_ids": [],
         "unresolved_lead_ids": [],
         "files": {
             "requirements": str(requirements_path),
@@ -177,7 +179,7 @@ def _render_requirements(requirements: dict[str, Any]) -> str:
     lines = ["# LinkedIn 搜索任务需求", "", f"- 原始请求：{requirements.get('request_text') or ''}", "- 产品知识库：不读取", "- 关键词来源：操作员输入"]
     brief = requirements.get("confirmed_search_brief")
     if brief:
-        lines.extend(["", "## Confirmed Search Brief", "", f"- 关键词数量：{len(brief.get('keywords') or [])}", f"- 关键词（按序原样搜索）：{'、'.join(brief.get('keywords') or [])}", f"- 排序：{brief.get('sort_order')}", f"- 发布日期：{brief.get('publication_range')}", f"- 使用留言：{str(bool(brief.get('invitation_note'))).lower()}", f"- 固定间隔秒数：{brief.get('interval_seconds')}", f"- 本次上限：{brief.get('requested_limit')}"])
+        lines.extend(["", "## Confirmed Search Brief", "", f"- 关键词数量：{len(brief.get('keywords') or [])}", f"- 关键词（按序原样搜索）：{'、'.join(brief.get('keywords') or [])}", f"- 排序：{brief.get('sort_order')}", f"- 发布日期：{brief.get('publication_range')}", f"- 使用留言：{str(bool(brief.get('invitation_note'))).lower()}", f"- 固定间隔秒数：{brief.get('interval_seconds')}", f"- 本次最多找给老板筛选的联系人：{brief.get('human_review_pool_limit')}"])
     else:
         pending = (requirements.get("interview") or {}).get("pending_question") or {}
         lines.extend(["", "当前尚未形成 Confirmed Search Brief。", f"当前待回答字段：{pending.get('field') or '无'}"])

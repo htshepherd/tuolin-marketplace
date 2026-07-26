@@ -52,6 +52,7 @@ from scripts.tuolin_marketplace.linkedin_search.dispatch import (
     resolve_note_unavailable,
 )
 from scripts.tuolin_marketplace.linkedin_search.evidence import record_browser_evidence
+from scripts.tuolin_marketplace.linkedin_search.workbook import load_contact_index, set_boss_decision
 from scripts.tuolin_marketplace.natural_language import route_natural_language
 from scripts.tuolin_marketplace.project_layout import resolve_paths
 from tests.test_downstream_context import _create_fixture
@@ -86,7 +87,10 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     root / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
                     root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "linkedin_search" / filename,
                 )
-                for filename in ("__init__.py", "browser_contract.py", "discovery.py", "interview.py", "ledger.py", "review.py")
+                for filename in (
+                    "__init__.py", "browser_contract.py", "discovery.py", "feedback.py", "interview.py",
+                    "ledger.py", "review.py", "review_pool.py", "workbook.py",
+                )
             ],
             (
                 root / "scripts" / "tuolin_marketplace" / "linkedin_search" / "dispatch.py",
@@ -118,7 +122,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(root_manifest, plugin_manifest)
-        self.assertEqual(root_manifest["version"], "1.53.0")
+        self.assertEqual(root_manifest["version"], "1.54.0")
 
     def test_request_detection_is_separate_from_linkedin_content_planning(self) -> None:
         self.assertTrue(is_linkedin_search_request("在领英通过贴文搜索石英纤维隔热带潜在客户"))
@@ -141,7 +145,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertEqual(run_dir.name, "20260721_093000_keywords")
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
             self.assertEqual(state["workflow"], "tuolin-linkedin-search")
-            self.assertEqual(state["schema_version"], 2)
+            self.assertEqual(state["schema_version"], 3)
             self.assertNotIn("product", state)
             self.assertNotIn("knowledge_context", state)
             self.assertIsNone(state["account_binding"])
@@ -288,7 +292,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertEqual(state["confirmed_search_brief"]["keywords"], ["exhaust wrap", "heat wrap"])
             self.assertNotIn("geography", state["confirmed_search_brief"])
             self.assertEqual(state["confirmed_search_brief"]["interval_seconds"], 300)
-            self.assertEqual(state["confirmed_search_brief"]["requested_limit"], 10)
+            self.assertEqual(state["confirmed_search_brief"]["human_review_pool_limit"], 10)
 
     def test_interview_rejects_bulk_remaining_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -322,7 +326,8 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 [{"term": "exhaust wrap", "source": "operator_supplied", "formal_knowledge": False}],
             )
             self.assertEqual(state["confirmed_search_brief"]["search_surface"], "linkedin_posts")
-            self.assertEqual(state["confirmed_search_brief"]["opened_post_limit_per_keyword"], 50)
+            self.assertNotIn("opened_post_limit_per_keyword", state["confirmed_search_brief"])
+            self.assertEqual(state["confirmed_search_brief"]["discovery_policy"], "balanced_keyword_sampling")
 
     def test_readonly_browser_contract_binds_account_and_records_posts_search(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -429,7 +434,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertEqual(capacity["recorded_successes"], 1)
             self.assertEqual(capacity["remaining_capacity"], 99)
 
-    def test_reduced_rolling_capacity_requires_confirmation_before_discovery(self) -> None:
+    def test_reduced_rolling_capacity_does_not_block_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
@@ -461,12 +466,12 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 browser_authorized=True,
                 now=current,
             )
-            self.assertEqual(bound.phase, "awaiting_effective_limit_confirmation")
-            self.assertIn("有效上限 5", bound.message)
-            confirmed = confirm_effective_limit(Path(result.run_dir), confirmed=True, now=current)
-            self.assertEqual(confirmed.phase, "awaiting_first_posts_search")
+            self.assertEqual(bound.phase, "awaiting_first_posts_search")
+            self.assertIn("剩余发送容量为 5", bound.message)
+            with self.assertRaisesRegex(ValueError, "不再需要"):
+                confirm_effective_limit(Path(result.run_dir), confirmed=True, now=current)
 
-    def test_effective_capacity_stops_candidate_discovery_at_reduced_limit(self) -> None:
+    def test_effective_capacity_does_not_reduce_review_pool(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
             _create_fixture(paths)
@@ -499,15 +504,14 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                 browser_authorized=True,
                 now=current,
             )
-            confirm_effective_limit(Path(result.run_dir), confirmed=True, now=current)
             record_first_posts_search(
                 Path(result.run_dir),
                 LinkedInPostSearchObservation("exhaust wrap", "posts", "latest", "past_month", 20, True, {}),
                 now=current,
             )
-            for index in range(5):
+            for index in range(10):
                 _record_demo_candidate(Path(result.run_dir), suffix=f"capacity-{index}")
-            with self.assertRaisesRegex(ValueError, "有效上限 5"):
+            with self.assertRaisesRegex(ValueError, "目标 10"):
                 _record_demo_candidate(Path(result.run_dir), suffix="capacity-overflow")
 
     def test_posts_search_rejects_people_surface_and_geography_filter(self) -> None:
@@ -613,7 +617,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             self.assertEqual(completed.phase, "completed")
             state = json.loads(Path(completed.workflow_state_path).read_text(encoding="utf-8"))
             self.assertEqual([item["keyword"] for item in state["completed_keywords"]], ["exhaust wrap", "heat wrap"])
-            self.assertEqual(state["discovery_stop_reason"], "all_keywords_exhausted")
+            self.assertEqual(state["discovery_stop_reason"], "all_keywords_verified_exhausted")
             self.assertEqual(state["status"], "completed_no_candidates")
 
     def test_infinite_scroll_requires_three_consecutive_bottom_wait_cycles(self) -> None:
@@ -628,7 +632,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
                     reached_bottom=True,
                     waited_for_load=True,
                 )
-                with self.assertRaisesRegex(ValueError, "尚未满足停止条件"):
+                with self.assertRaisesRegex(ValueError, "尚未达到软份额"):
                     finish_current_keyword(run_dir)
             growth = record_infinite_scroll_cycle(
                 run_dir,
@@ -751,6 +755,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             _record_demo_candidate(Path(result.run_dir), suffix="one")
             _record_demo_candidate(Path(result.run_dir), suffix="two")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepared = prepare_candidate_batch_review(Path(result.run_dir))
             self.assertIn("候选人数：2", prepared.message)
             state = json.loads(Path(prepared.workflow_state_path).read_text(encoding="utf-8"))
@@ -770,6 +775,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="auth")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             brief = prepare_dispatch_authorization(Path(result.run_dir))
@@ -793,6 +799,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths, note="使用留言")
             _record_demo_candidate(Path(result.run_dir), suffix="note")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             with self.assertRaisesRegex(ValueError, "必须先由用户确认"):
@@ -1037,6 +1044,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="tamper")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
@@ -1055,6 +1063,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="content-tamper")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             state = json.loads(Path(result.workflow_state_path).read_text(encoding="utf-8"))
@@ -1073,6 +1082,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             result = _create_discovering_run(paths)
             _record_demo_candidate(Path(result.run_dir), suffix="batch-tamper")
             _finish_verified(Path(result.run_dir))
+            _mark_all_send(Path(result.run_dir))
             prepare_candidate_batch_review(Path(result.run_dir))
             confirm_candidate_batch(Path(result.run_dir))
             closed_path = Path(result.run_dir) / "batch" / "closed-candidate-batch.json"
@@ -1212,6 +1222,13 @@ def _record_demo_candidate(run_dir: Path, *, suffix: str) -> None:
     )
 
 
+def _mark_all_send(run_dir: Path) -> None:
+    state = json.loads((run_dir / "workflow_state.json").read_text(encoding="utf-8"))
+    account = state["account_binding"]["profile_url"]
+    for profile_url in load_contact_index(run_dir, account):
+        set_boss_decision(run_dir, account, profile_url, "发送")
+
+
 def _finish_verified(run_dir: Path):
     for _ in range(3):
         record_infinite_scroll_cycle(
@@ -1230,6 +1247,7 @@ def _create_authorized_run(paths, *, candidate_count: int, note: bool = False):
         suffix = f"dispatch-{index}"
         _record_demo_candidate(Path(result.run_dir), suffix=suffix)
     _finish_verified(Path(result.run_dir))
+    _mark_all_send(Path(result.run_dir))
     prepare_candidate_batch_review(Path(result.run_dir))
     confirm_candidate_batch(Path(result.run_dir))
     prepare_dispatch_authorization(

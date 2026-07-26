@@ -25,7 +25,7 @@ codex plugin list
 
 ## LinkedIn prospect search
 
-Version 1.53.0 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts workflow. It requires:
+Version 1.54.0 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts review-pool workflow. It requires:
 
 - a writable Tuolin operational workspace; no product knowledge base is required;
 - the official `chrome@openai-bundled` plugin;
@@ -38,7 +38,7 @@ Recommended first request on the business computer:
 $tuolin-linkedin-search 关键词：Exhaust Wrap, Exhaust Heat Wrap。通过 LinkedIn Posts 搜索潜在客户，先做只读候选测试，不发送连接邀请。
 ```
 
-The workflow keeps scrolling until a proven stop condition, then prints and persists the complete visible source post, author, company, selected contact, AI evidence, and material doubts before human review. Real invitation tests use a preflight-before-click contract, a fixed interval, account-scoped cross-task deduplication, and a local maximum of 100 recorded successes in a rolling 168-hour window. The local limit is a workflow rule, not an official LinkedIn limit, and it does not count manual activity.
+The workflow uses balanced sampling across every supplied phrase and keeps scrolling until the requested human-review pool is full or every phrase has proven exhaustion. It writes complete posts, contact identity, Codex reasoning, doubts, and a `发送/排除/待定` dropdown into one cumulative Excel workbook per LinkedIn account. Discovery is independent of dispatch capacity. The boss's exact workbook selection becomes an immutable final snapshot; there is no fixed ten-person batch ceiling, and the default fixed interval is two minutes with a one-minute minimum. Dispatch still uses preflight-before-click, account-scoped deduplication, and a local maximum of 100 recorded successes in a rolling 168-hour window. The local limit is a workflow rule, not an official LinkedIn limit, and it does not count manual activity.
 
 Remote installation and acceptance details: `docs/operations/linkedin-search-install-and-remote-test.md`.
 
