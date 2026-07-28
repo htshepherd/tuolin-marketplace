@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tuolin_marketplace.local_tools import prepare_pdf_text
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -18,7 +18,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
-    config = load_config(config_path)
+    config = load_project_config(Path(args.project_dir), config_path)
     paths = resolve_paths(Path(args.project_dir), config)
     mineru_command = args.mineru_command or config.get("mineru_command", "mineru")
     result = prepare_pdf_text(Path(args.pdf_path), paths, mineru_command=mineru_command)

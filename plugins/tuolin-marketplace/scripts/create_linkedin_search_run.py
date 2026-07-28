@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tuolin_marketplace.linkedin_search_agent import create_linkedin_search_run
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -17,7 +17,7 @@ def main() -> int:
     parser.add_argument("--timestamp", help="Optional YYYYMMDD_HHMMSS timestamp for deterministic tests.")
     args = parser.parse_args()
 
-    paths = resolve_paths(Path(args.project_dir), load_config(Path(args.config) if args.config else None))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), Path(args.config) if args.config else None))
     now = datetime.strptime(args.timestamp, "%Y%m%d_%H%M%S") if args.timestamp else None
     result = create_linkedin_search_run(paths, args.text, now=now)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))

@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tuolin_marketplace.linkedin_agent import create_linkedin_campaign_plan
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -19,7 +19,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(Path(args.project_dir), load_config(config_path))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), config_path))
     output_root = Path(args.output_root) if args.output_root else None
     now = datetime.strptime(args.timestamp, "%Y%m%d_%H%M") if args.timestamp else None
     result = create_linkedin_campaign_plan(paths, args.text, output_root=output_root, now=now)

@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 from tuolin_marketplace.video_planning_agent import extract_video_planning_preview
 
 
@@ -20,7 +20,7 @@ def main() -> int:
     parser.add_argument("--config")
     parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
-    paths = resolve_paths(Path(args.project_dir), load_config(Path(args.config) if args.config else None))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), Path(args.config) if args.config else None))
     result = extract_video_planning_preview(
         paths,
         run_id=args.run_id,

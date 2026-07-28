@@ -12,7 +12,7 @@ from tuolin_marketplace.agent_interface import (
     read_cards_by_type,
     search_cards,
 )
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -44,7 +44,7 @@ def main() -> int:
 
     args = parser.parse_args()
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(Path(args.project_dir), load_config(config_path))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), config_path))
 
     if args.command == "status":
         payload = knowledge_status(paths)

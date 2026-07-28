@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 from tuolin_marketplace.video_creation_agent import create_video_creation_run
 
 
@@ -28,7 +28,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(Path(args.project_dir), load_config(config_path))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), config_path))
     now = datetime.strptime(args.timestamp, "%Y%m%d_%H%M%S") if args.timestamp else None
     result = create_video_creation_run(
         paths,

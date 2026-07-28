@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_PROJECT_CONFIG = Path("config") / "tuolin-kb.config.json"
+
+
 KNOWLEDGE_DIRS = [
     "产品",
     "应用场景",
@@ -126,6 +129,17 @@ def load_config(config_path: Path | None) -> dict[str, Any]:
         }
     with config_path.open("r", encoding="utf-8-sig") as handle:
         return json.load(handle)
+
+
+def load_project_config(project_dir: Path, config_path: Path | None = None) -> dict[str, Any]:
+    """Load an explicit config or discover the standard config under a project root."""
+    root = project_dir.expanduser().resolve()
+    selected = config_path.expanduser() if config_path is not None else root / DEFAULT_PROJECT_CONFIG
+    if config_path is not None and not selected.exists():
+        raise FileNotFoundError(f"configured project file does not exist: {selected}")
+    if not selected.exists():
+        return load_config(None)
+    return load_config(selected)
 
 
 def resolve_paths(project_dir: Path, config: dict[str, Any]) -> ProjectPaths:

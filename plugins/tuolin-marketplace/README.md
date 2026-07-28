@@ -15,6 +15,8 @@ codex plugin list
 
 Open a new Codex conversation after installation. Use the plugin with Chinese natural-language requests; end users do not need to invoke its internal scripts.
 
+Version 1.56.0 automatically discovers `<project-dir>/config/tuolin-kb.config.json` for every internal entry point. Configured absolute MinerU and ffmpeg paths are reused directly; knowledge workflows do not create replacement Python environments or reinstall MinerU implicitly.
+
 To upgrade an existing installation:
 
 ```powershell

@@ -70,12 +70,22 @@ def prepare_pdf_text(
         "-l",
         "ch",
     )
-    completed = runner(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = runner(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return PdfTextResult(
+            source_pdf=pdf_path,
+            status="conversion_failed",
+            markdown_path=None,
+            cache_dir=cache_dir,
+            command=command,
+            error=f"configured MinerU command is unavailable: {mineru_command}: {exc}",
+        )
     if completed.returncode != 0:
         return PdfTextResult(
             source_pdf=pdf_path,
@@ -192,4 +202,3 @@ def _tool_error(completed: subprocess.CompletedProcess[str]) -> str:
     if stdout:
         return stdout
     return f"command failed with exit code {completed.returncode}"
-

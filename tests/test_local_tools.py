@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,6 +82,54 @@ class LocalToolBoundaryTests(unittest.TestCase):
             self.assertEqual(result.error, "mineru failed")
             self.assertTrue(str(result.cache_dir).startswith(str(paths.generated_dir)))
             self.assertFalse(pdf.with_suffix(".md").exists())
+
+    def test_missing_absolute_mineru_command_reports_configuration_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            pdf = paths.raw_dir / "03_标准法规" / "01_中国标准" / "missing-tool.pdf"
+            pdf.write_text("fake pdf", encoding="utf-8")
+            missing_mineru = Path(tmp) / "tools" / "mineru.exe"
+
+            result = prepare_pdf_text(pdf, paths, mineru_command=str(missing_mineru))
+
+            self.assertEqual(result.status, "conversion_failed")
+            self.assertIn("configured MinerU command is unavailable", result.error or "")
+            self.assertIn(str(missing_mineru), result.error or "")
+
+    def test_prepare_pdf_cli_discovers_project_mineru_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "tuolin-kb.config.json").write_text(
+                json.dumps({"mineru_command": sys.executable}),
+                encoding="utf-8",
+            )
+            pdf = root / "raw" / "03_标准法规" / "01_中国标准" / "configured.pdf"
+            pdf.parent.mkdir(parents=True)
+            pdf.write_text("fake pdf", encoding="utf-8")
+            repository_root = Path(__file__).resolve().parents[1]
+            environment = dict(os.environ)
+            environment["PYTHONPATH"] = str(repository_root / "scripts")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(repository_root / "scripts" / "prepare_pdf_text.py"),
+                    str(pdf),
+                    "--project-dir",
+                    str(root),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=environment,
+            )
+            payload = json.loads(completed.stdout)
+
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(payload["command"][0], sys.executable)
+            self.assertEqual(payload["status"], "conversion_failed")
 
     def test_pdf_outside_raw_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

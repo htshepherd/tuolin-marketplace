@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import inspect_project, load_config, resolve_paths
+from tuolin_marketplace.project_layout import inspect_project, load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -15,7 +15,7 @@ def main() -> int:
 
     project_dir = Path(args.project_dir)
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(project_dir, load_config(config_path))
+    paths = resolve_paths(project_dir, load_project_config(Path(args.project_dir), config_path))
     report = inspect_project(paths)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0

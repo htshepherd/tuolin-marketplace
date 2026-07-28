@@ -5,7 +5,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 from tuolin_marketplace.review_workflow import list_review_items
 
 
@@ -17,7 +17,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(Path(args.project_dir), load_config(config_path))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), config_path))
     reviews = list_review_items(paths, args.partition)
     print(json.dumps([asdict(item) for item in reviews], ensure_ascii=False, indent=2))
     return 0

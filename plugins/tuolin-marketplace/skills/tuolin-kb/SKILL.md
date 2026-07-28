@@ -20,7 +20,9 @@ This skill is part of `tuolin-marketplace`. The marketplace may contain multiple
 - Use Chinese business titles for card filenames, the `title` field, and user-visible summaries. English names belong in `id` or `aliases`, not as the main title.
 - Treat `knowledge/okf/首页.md` and `knowledge/okf/变更记录.md` as rebuildable navigation files, not fact sources.
 - MinerU and ffmpeg may be called as internal local tools by Codex.
-- On Windows, check local dependencies before first use.
+- Every internal entry point must discover `<project-dir>/config/tuolin-kb.config.json` automatically when `--config` is omitted. An explicit `--config` remains authoritative.
+- Use the configured absolute `mineru_command` when present. Do not replace it with a bare `mineru`, create another Python environment, or install MinerU during a knowledge workflow. If that command is unavailable, report the configured path as the blocker.
+- On Windows, check local dependencies against the knowledge project before first use.
 
 ## Natural Language Entry Points
 
@@ -72,7 +74,7 @@ python3 scripts/answer_question.py "石英纤维隔热带适合哪些客户场�
 On Windows:
 
 ```powershell
-.\scripts\windows_check_dependencies.ps1
+.\scripts\windows_check_dependencies.ps1 -ProjectDir <project-dir>
 ```
 
 ## First-Run Behavior
@@ -89,7 +91,8 @@ When the user asks to set up the knowledge base:
 ## PDF And Video Boundary
 
 - If a PDF has a same-name Markdown file beside it in `raw/`, read that Markdown.
-- If not, use local MinerU CLI and write conversion output to `generated/cache/pdf-markdown/`.
+- If not, use the automatically discovered project config's `mineru_command` and write conversion output to `generated/cache/pdf-markdown/`.
+- Do not bootstrap pip, create a replacement virtual environment, or reinstall MinerU as an implicit recovery step.
 - Use ffmpeg for video keyframes and write frames to `generated/cache/video-frames/`.
 - Report MinerU or ffmpeg failures with the failed file and error message.
 - Do not use filenames, OS previews, browser screenshots, or temporary scripts as substitutes for PDF text extraction or video keyframe extraction.

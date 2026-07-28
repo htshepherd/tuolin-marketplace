@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 from tuolin_marketplace.video_planning_agent import create_video_planning_run
 
 
@@ -22,7 +22,7 @@ def main() -> int:
     args = parser.parse_args()
     decisions = json.loads(Path(args.initial_decisions).read_text(encoding="utf-8")) if args.initial_decisions else None
     evidence = json.loads(Path(args.initial_decision_evidence).read_text(encoding="utf-8")) if args.initial_decision_evidence else None
-    paths = resolve_paths(Path(args.project_dir), load_config(Path(args.config) if args.config else None))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), Path(args.config) if args.config else None))
     result = create_video_planning_run(
         paths,
         args.text,

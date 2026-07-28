@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 from tuolin_marketplace.video_planning_agent import authorize_video_profile_for_planning_run
 
 
@@ -15,7 +15,7 @@ def main() -> int:
     parser.add_argument("--project-dir", default=".")
     parser.add_argument("--config")
     args = parser.parse_args()
-    paths = resolve_paths(Path(args.project_dir), load_config(Path(args.config) if args.config else None))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), Path(args.config) if args.config else None))
     print(json.dumps(authorize_video_profile_for_planning_run(paths, args.run_id, args.profile_id), ensure_ascii=False, indent=2))
     return 0
 

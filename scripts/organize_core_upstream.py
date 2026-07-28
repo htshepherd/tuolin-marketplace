@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from tuolin_marketplace.core_upstream import organize_core_upstream, preview_core_upstream
-from tuolin_marketplace.project_layout import load_config, resolve_paths
+from tuolin_marketplace.project_layout import load_project_config, resolve_paths
 
 
 def main() -> int:
@@ -17,7 +17,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config_path = Path(args.config) if args.config else None
-    paths = resolve_paths(Path(args.project_dir), load_config(config_path))
+    paths = resolve_paths(Path(args.project_dir), load_project_config(Path(args.project_dir), config_path))
     result = preview_core_upstream(paths) if args.preview_only else organize_core_upstream(paths)
     print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     return 0
