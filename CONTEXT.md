@@ -368,6 +368,10 @@ _Avoid_: passive compliance, taste-based rejection, silently overriding the user
 An explicitly identified creative judgment about audience motivation, viewing behavior, or content treatment derived from industrial-audience knowledge, platform patterns, public research when needed, and the current video context rather than from formal product facts.
 _Avoid_: presenting an inference as a verified customer preference, using creative knowledge to invent product claims
 
+**Video Planning Inference**:
+A disclosed model judgment about the hook, narrative order, shot expression, or likely audience interest derived from formal product knowledge, inspected official materials, user goals, and general industrial B2B planning experience without public trend research.
+_Avoid_: current-trend evidence, a verified customer preference, an inferred product fact or performance claim
+
 **Video Interview Decision Sufficiency**:
 The point at which all ambiguities that could materially change the video's audience value, business outcome, evidence use, or creative direction have been resolved, while professional execution choices remain owned by the Agent.
 _Avoid_: completing a fixed question count, exploring every imaginable creative branch, asking the user to make shot-level decisions
@@ -448,6 +452,18 @@ _Avoid_: TikTok, standard horizontal YouTube videos, workshop videos, other prod
 The Tuolin knowledge-base agent that publishes approved product knowledge and content-asset references through the Agent interface.
 _Avoid_: a marketing or video deliverable generator
 
+**Agent-Specific Knowledge Read Interface**:
+An independently generated and verified projection of the shared formal knowledge base owned by exactly one downstream agent, with its own manifest, revision, card indexes, selection policy, and validation result.
+_Avoid_: one shared downstream catalog, a separately maintained knowledge copy, an agent reading another agent's projection
+
+**Knowledge Interface Refresh Transaction**:
+The automatic post-write operation that rebuilds and verifies every registered agent-specific knowledge interface before a knowledge-base organization, update, or review write-back may report completion.
+_Avoid_: a user-run refresh command, best-effort background refresh, reporting success while any required projection is stale
+
+**Legacy Shared Knowledge Interface**:
+The existing `generated/agent-interface/` projection temporarily retained for unmigrated agents during the phased transition to agent-specific interfaces.
+_Avoid_: a compliant agent-specific interface, evidence that project-wide isolation is complete, a data source for the new video planning agent
+
 **Video Creation Consumer**:
 An application-layer agent that consumes the Agent interface to produce product-video deliverables without owning or redefining product knowledge.
 _Avoid_: knowledge producer, LinkedIn consumer, hard-coded product facts
@@ -455,6 +471,94 @@ _Avoid_: knowledge producer, LinkedIn consumer, hard-coded product facts
 **Video Workflow Entrypoint**:
 The user-facing `tuolin-video-workflow` skill that orchestrates the complete video-creation run through natural-language confirmations.
 _Avoid_: requiring users to invoke internal runners or copy run-directory paths
+
+**Video Planning Consumer**:
+An independent application-layer agent that interviews the user and delivers a provider-neutral, production-ready shot plan without generating, downloading, or assembling video.
+_Avoid_: a reduced mode of the complete video workflow, a Dreamina handoff agent, a knowledge producer
+
+**Video Planning Entrypoint**:
+The user-facing `$tuolin-video-planner` skill that owns one video planning run from goal discovery through shot-plan confirmation and automatic SRT delivery.
+_Avoid_: `$tuolin-video-workflow`, an internal script name, a mode flag on the complete production workflow
+
+**Explicit Video Agent Invocation**:
+The requirement that a user name either `$tuolin-video-planner` or `$tuolin-video-workflow` before any video planning or production run is created.
+_Avoid_: intent-based automatic routing, a “which video agent?” fallback question, treating “make a video” as sufficient selection
+
+**Video Planning Knowledge Interface**:
+The agent-specific knowledge read interface that exposes only the verified multi-product facts, evidence, risks, and official visual materials needed by the video planning consumer.
+_Avoid_: the `video_creation` interface, raw-material browsing, a second manually maintained product knowledge base
+
+**Video Planning Platform Scope**:
+The controlled set of publishing platforms supported by the video planning consumer: YouTube Shorts and TikTok.
+_Avoid_: standard horizontal YouTube, LinkedIn video, internal sales displays, an unrestricted platform list
+
+**Video Planning Canvas**:
+The fixed 9:16 vertical frame used for every production-ready shot plan without platform-specific safe-area layout rules in the first release.
+_Avoid_: per-platform layouts, horizontal or square variants, subtitle-safe or CTA-safe overlays
+
+**Video Planning Duration**:
+A user-specified whole-number target from 15 through 90 seconds, with 30 seconds recommended when the request does not state a duration.
+_Avoid_: durations above 90 seconds, a fixed five-second-per-shot template, asking the user to choose the shot count
+
+**Video Planning Language Version**:
+A single Chinese or English output version whose product wording, verbatim narration, and narration-derived SRT remain in the chosen target language even when the operator interviews and reviews in Chinese.
+_Avoid_: one mixed-language plan, translating narration after timing is locked, generating two languages inside one run
+
+**Production-Ready Shot Plan**:
+The final user-confirmed planning deliverable containing total duration and each shot's timing, purpose, visible action, source-material path and preview, narration content, transition, and editing guidance.
+_Avoid_: an abstract shot outline, subtitle or CTA overlay copy, provider-specific generation prompts, generated clips, a finished edited video
+
+**Confirmed Planning Narration**:
+The user-confirmed verbatim voiceover script aligned to the shot timeline and validated to fit each time range at a normal speaking pace.
+_Avoid_: per-shot talking points, subtitle styling, text inferred after the visual plan is locked
+
+**Planning Viewer Action**:
+The user-confirmed outcome the audience should take after watching, which may shape the ending but creates spoken CTA copy only when the user explicitly requests an inquiry, contact, or learn-more action.
+_Avoid_: an automatic sales CTA, screen-button design, hard-coded contact details
+
+**Narration-Derived SRT**:
+The `.srt` companion artifact generated only after narration confirmation, containing the exact confirmed narration text and its aligned shot timing without subtitle styling or burn-in instructions.
+_Avoid_: a second writing pass or confirmation gate, paraphrased subtitles, an independently editable creative source, subtitle layout
+
+**Shot Plan Confirmation**:
+The single post-interview review gate in which the user accepts or revises the complete shot sequence, selected materials, and verbatim narration before automatic SRT generation.
+_Avoid_: a separate high-level plan confirmation, an SRT confirmation, approval of generation or editing work
+
+**Video Planning Run**:
+One product-, language-, and brief-specific planning record stored under `generated/reports/video-planning/` with resumable interview state, selected-material inspections, shot-plan artifacts, confirmed narration, SRT, and a change log.
+_Avoid_: a video-creation run, chat-only state, Prompt or generation-job storage, reusing one directory for separate planning tasks
+
+**Pinned Planning Interface Revision**:
+The exact video-planner knowledge-interface revision recorded when a planning run is created and used consistently throughout that run.
+_Avoid_: silently adopting a refreshed interface mid-run, mixing facts or assets from different revisions
+
+**Planning Deliverable Revision**:
+An immutable numbered version of the shot plan and its narration-derived SRT retained inside one planning run when the user revises an already delivered plan.
+_Avoid_: overwriting the prior confirmed files, silently editing SRT text, entering a video-generation phase
+
+**Planning AI Simulation**:
+A shot-level proposal to generate a clearly identified synthetic depiction of a formally confirmed application when suitable real scene material is unavailable.
+_Avoid_: a real customer case, test evidence, an unsupported application, a product depiction without a real product identity reference
+
+**Planning Source Material**:
+An official image or authorized time-ranged source-video segment selected by the video planning consumer for a specific shot with its type, original path, preview, and intended role made visible to the user.
+_Avoid_: raw-directory discovery, an uninspected filename, an extracted final clip, an untraceable generated reference
+
+**Asset-First Video Planning Retrieval**:
+The three-stage material-selection path that searches the planning agent's lightweight video-profile catalog, opens details and representative media only for shortlisted assets, and performs bounded runtime inspection only inside an authorized key segment when needed.
+_Avoid_: opening source videos first, scanning a raw video directory, loading every profile detail, treating representative frames as exact final clips
+
+**Planning Inspection Preview**:
+A task-local frame or low-resolution clip generated from an authorized key segment solely to validate subject, action, composition, and timing for one planning decision.
+_Avoid_: delivery footage, an unrestricted source extraction, a reusable formal knowledge asset
+
+**Confirmable Planning Asset**:
+A planning source material whose active interface revision and intended visual use have no unresolved product-identity, privacy, test-meaning, rights, or external-claim risk.
+_Avoid_: every catalog match, an asset approved only for internal inspection, a review-required asset silently entering the final plan
+
+**Visual-Only Source Segment**:
+An authorized source-video range selected solely for its picture while its original audio is explicitly excluded from the production-ready shot plan.
+_Avoid_: preserved ambient sound, source dialogue, a mixed-audio recommendation
 
 **Video Creation Context**:
 The `video_creation` downstream task context used by the complete quartz-fiber-tape video workflow.
@@ -1468,6 +1572,50 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - A **Video Creation Run** persists its current workflow phase and confirmations in `workflow_state.json`.
 - Resuming a run restores the latest valid phase and asks only for the current pending confirmation instead of restarting or repeating locked work.
 - Automated checks may inspect Dreamina shot planning and generated-shot availability, but they do not replace the user's **Shot Review** confirmation.
+- The **Video Planning Consumer** is a separate user-facing entrypoint from the **Video Workflow Entrypoint**; adding it does not remove or narrow the complete video workflow.
+- The **Video Planning Entrypoint** is named `$tuolin-video-planner`; it owns planning runs only, while `$tuolin-video-workflow` remains the complete generation-and-assembly entrypoint.
+- **Explicit Video Agent Invocation** is mandatory: generic video language never routes automatically and does not create a run until the user names one of the two video agents.
+- The two video agents own separate skills, knowledge-interface contracts, state machines, run schemas, and terminal phases; they may share only business-neutral media inspection, asset-access, atomic-file, and SRT-validation primitives.
+- The planning agent must not import or expose the complete workflow's trend-research, Dreamina, submission, download, retry, or assembly stages, and the complete workflow must not gain a planning-only mode flag.
+- The **Video Planning Consumer** ends after the user confirms one **Production-Ready Shot Plan** and never continues into provider-specific prompts, paid generation, result download, or video assembly.
+- A **Production-Ready Shot Plan** gives the user enough shot, source-material, narration, transition, and editing detail to generate footage with a provider of their choice and finish it in their own editing software.
+- The **Video Planning Consumer** does not perform public trend research; it may use **Video Planning Inference** to recommend a hook, narrative, and shot treatment while keeping every product fact inside the formal knowledge boundary.
+- Every downstream agent reads exactly its own **Agent-Specific Knowledge Read Interface**; agents may share formal source knowledge but never a downstream projection or another agent's interface contract.
+- A successful formal knowledge write triggers one **Knowledge Interface Refresh Transaction** without requiring a user command; failure to rebuild or verify any registered required interface makes the knowledge operation incomplete and keeps the stale interface unavailable to its consumer.
+- The **Video Planning Consumer** reads only the **Video Planning Knowledge Interface**, supports any product validly published through that interface, and never falls back to the complete workflow's `video_creation` projection or to raw materials.
+- Agent-specific interface adoption is phased: this release introduces the registry and refresh transaction and migrates only `$tuolin-video-planner`; unmigrated agents may temporarily retain the **Legacy Shared Knowledge Interface** without weakening the new planner's isolation.
+- Until every existing consumer is migrated, project status must report partial migration and must not claim that all agents already have independent interfaces.
+- Every **Production-Ready Shot Plan** stays within the **Video Planning Platform Scope**; requests for other publishing formats are unsupported in the first release.
+- Every **Production-Ready Shot Plan** uses the **Video Planning Canvas** and excludes platform-specific safe-area design, subtitle overlays, and CTA overlay copy; those are post-production concerns outside the planning agent.
+- A **Production-Ready Shot Plan** uses one **Video Planning Duration**; the model derives shot count and timing dynamically from narration, narrative structure, and available materials.
+- Every planning run produces exactly one **Video Planning Language Version**; a second language requires a separate run so narration length and shot timing are recalculated rather than copied blindly.
+- The first-release planning agent assumes the published material library is sufficient and does not implement a material-shortage interview, duration-reduction negotiation, or deliberate-repetition approval branch; the complete video workflow keeps its existing material-capacity gate.
+- This planning simplification does not permit uninspected or broken selections: every chosen image and video segment still requires subject, composition, path, authorization, and duplication checks before **Shot Plan Confirmation**.
+- Narration remains part of the **Production-Ready Shot Plan** because its information density and timing shape the visual shot sequence; it becomes **Confirmed Planning Narration** before any subtitle file is produced.
+- A **Narration-Derived SRT** is generated after **Confirmed Planning Narration** and mirrors its wording and timing exactly; subtitle styling, screen-text design, and subtitle burn-in remain outside the planning agent.
+- **Confirmed Planning Narration** authorizes automatic generation and validation of the **Narration-Derived SRT** without a second confirmation; changing SRT wording is a narration revision that must be revalidated against the shot timeline.
+- Once the planning interview is decision-sufficient, the **Video Planning Consumer** generates the complete **Production-Ready Shot Plan** directly; it does not create or confirm an intermediate high-level video plan.
+- **Shot Plan Confirmation** covers the visual sequence, source materials, and **Confirmed Planning Narration** together because their timing and meaning are interdependent; confirmation automatically generates the **Narration-Derived SRT** and ends the run.
+- Every new planning request creates an isolated **Video Planning Run** at `generated/reports/video-planning/{timestamp}_{product}_{zh|en}/`; interruption resumes from its persisted workflow state without mixing artifacts from another task.
+- A **Video Planning Run** stores requirements and interview decisions, workflow state and change log, selected-material inspections and previews, `shot_plan.md`, `shot_plan.json`, and—after confirmation—`storyboard.srt`; it never stores provider prompts, generation jobs, generated shots, or assembly output.
+- A delivered **Video Planning Run** may reopen for natural-language changes by creating a new **Planning Deliverable Revision** while retaining every prior confirmed revision.
+- Any revision that changes shot timing or narration invalidates the current SRT, returns the new revision to **Shot Plan Confirmation**, and regenerates a matching SRT only after reconfirmation.
+- Every **Video Planning Run** owns one **Pinned Planning Interface Revision**; automatic knowledge-interface refreshes never switch an active run to a newer revision.
+- Before **Shot Plan Confirmation**, the agent rechecks selected knowledge and assets for revocation or material change; a conflict blocks confirmation and requires a new planning run against the current interface rather than silently rewriting the active run.
+- The **Video Planning Consumer** may propose **Planning AI Simulation** only for applications confirmed by the **Video Planning Knowledge Interface** and must label the simulated status in the shot plan.
+- Any simulated shot depicting the specific product requires a real product image as an identity reference; without a reliable reference, that product shot blocks delivery rather than inventing its appearance.
+- **Planning AI Simulation** must never be described as a real customer site, real test record, or product-performance evidence.
+- A **Production-Ready Shot Plan** may use official images and authorized source-video segments as **Planning Source Materials**, recording the exact source path and video time range where applicable.
+- Material selection prefers a suitable real video segment, then a suitable real image used directly or as a generation reference, and only then bounded **Planning AI Simulation**.
+- Selecting a source-video segment does not make the **Video Planning Consumer** responsible for delivering extracted footage, generated shots, or an assembled video.
+- The **Video Planning Consumer** follows **Asset-First Video Planning Retrieval** and never starts by opening or scanning the source-video collection.
+- Representative media is used to shortlist processed video assets; only when it cannot settle a concrete shot decision may the agent create a bounded **Planning Inspection Preview** from an authorized key segment.
+- A **Planning Inspection Preview** is generated automatically inside the current planning run, never modifies source files, and is not delivered or represented as final editing footage.
+- Review-required video assets may be inspected and shown as blocked candidates, but only a **Confirmable Planning Asset** may enter a user-confirmable shot plan.
+- An unresolved original-audio risk does not block visual use when the shot plan explicitly excludes the source audio; unresolved product identity, privacy, test meaning, rights, or claim risk still blocks confirmation and must return to the knowledge producer.
+- Every source-video material in the first-release planning workflow is a **Visual-Only Source Segment**; the agent neither selects nor mixes original audio, music, or ambient sound.
+- **Confirmed Planning Narration** is the only audio content authored by the **Video Planning Consumer**; all other sound design remains a post-production responsibility.
+- Every planning interview resolves the **Planning Viewer Action**, but the narration includes a spoken CTA only when the user explicitly confirms that action; the agent never adds a default sales CTA or designs on-screen CTA content.
 
 ## Example Dialogue
 
@@ -2178,6 +2326,32 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - "审阅" was used for both marketing campaign quality review and knowledge-base fact review. Resolved: use **Marketing Plan Review** for LinkedIn campaign planning and **Knowledge Review** for formal knowledge-base review items.
 - “母版” previously referred inconsistently to silent and narrated outputs. Resolved: remove the term and use **Video Language Version**.
 - “创意方向” was previously modeled as 16 fixed categories with primary and supporting selections. Resolved: remove that taxonomy and use a **Video Creation Interview** to produce a **Confirmed Video Brief**.
+- “镜头策划” could mean an abstract outline, the existing Dreamina-oriented storyboard, or a complete edited result. Resolved for the new planning agent: use **Production-Ready Shot Plan**, a provider-neutral final deliverable that stops before generation and editing execution.
+- “视频策划 agent” now refers canonically to the **Video Planning Entrypoint** `$tuolin-video-planner`, not to a mode of `$tuolin-video-workflow`.
+- An unqualified request to “make a video” could have triggered intent-based routing between the two video agents. Rejected: require **Explicit Video Agent Invocation** and never choose or ask the routing question on the user's behalf.
+- “基于旧 agent” could mean copying its large state machine or running it in a reduced mode. Resolved: create an independent planning state machine and share only business-neutral technical primitives with the complete workflow.
+- “不搜索趋势” could be interpreted as forbidding the model from making creative judgments. Resolved: the new planning agent may make disclosed **Video Planning Inferences**, but it must not present them as current trends or use them to invent product facts.
+- “独立知识读取接口” could mean duplicating and separately maintaining product knowledge. Resolved: use an **Agent-Specific Knowledge Read Interface**—an independent generated projection with its own contract and revision, built automatically from the one formal knowledge source.
+- “整理后刷新接口” could be interpreted as a separate user operation. Resolved: every successful knowledge write includes a verified **Knowledge Interface Refresh Transaction**; the user does not run refresh commands.
+- “每个 agent 都有独立接口” is the target architecture, not a false claim about current legacy consumers. Resolved: migrate `$tuolin-video-planner` now, retain the **Legacy Shared Knowledge Interface** for old agents temporarily, and report project-wide isolation as incomplete until later migrations finish.
+- The new planning agent's platform scope was considered open-ended. Resolved: **Video Planning Platform Scope** includes only YouTube Shorts and TikTok.
+- A shared YouTube Shorts/TikTok safe-area design was briefly considered. Superseded: use one fixed 9:16 **Video Planning Canvas** and leave subtitles, CTA overlays, and platform-specific layout adaptation to post-production.
+- The complete video workflow's controlled duration list was considered for reuse. Resolved for the planning agent: accept any whole-number **Video Planning Duration** from 15 through 90 seconds, recommend 30 seconds when omitted, and derive shot timing dynamically.
+- Output language scope was unspecified. Resolved: support Chinese and English **Video Planning Language Versions**, one per run, while allowing the operator to conduct and review an English task in Chinese.
+- A material-capacity negotiation was considered for the planning agent. Rejected for the first release because the available library is expected to be ample; retain selected-asset inspection but do not add shortage, shortening, or repetition-approval interview branches.
+- “字幕等内容后期添加” could be read as excluding all spoken content from planning. Resolved: narration stays in the **Production-Ready Shot Plan**, while subtitles, screen text, and CTA overlays stay outside it.
+- “旁白” could mean loose talking points or a recordable script. Resolved: use **Confirmed Planning Narration**, a verbatim time-fitted voiceover script; after confirmation, generate a matching **Narration-Derived SRT** without taking ownership of subtitle styling or burn-in.
+- SRT delivery could introduce a duplicate confirmation of the already reviewed narration. Resolved: narration confirmation automatically produces the **Narration-Derived SRT**; SRT has no separate content-approval gate.
+- A separate overall video-plan checkpoint was considered before shot planning. Resolved: the planning interview proceeds directly to one complete **Production-Ready Shot Plan**, followed by a single **Shot Plan Confirmation** and automatic SRT delivery.
+- Planning artifacts could have been stored in the complete workflow's `video-creation` directory. Resolved: each task owns a separate resumable **Video Planning Run** under `generated/reports/video-planning/` and never creates provider or assembly artifacts.
+- Delivery completion could have made a planning run permanently immutable. Resolved: allow versioned **Planning Deliverable Revisions** in the same run, preserve prior confirmed versions, and require reconfirmation before regenerating any timing- or narration-affected SRT.
+- Automatic interface refresh could have silently changed an active plan's facts. Resolved: pin one **Pinned Planning Interface Revision** per run and require a new run when final revalidation detects a material knowledge or asset change.
+- Missing real application footage could either block every plan or invite unrestricted invention. Resolved: allow bounded **Planning AI Simulation** for formally confirmed applications, require real product identity references, and forbid presenting simulation as real evidence.
+- “使用视频素材” could mean either selecting a real source segment or producing an edited clip. Resolved: the planning agent may select an authorized time-ranged segment as **Planning Source Material**, but video extraction delivery, generation, and assembly remain outside its final output.
+- “查看视频素材” could mean opening large raw source files before knowing what is relevant. Resolved: use **Asset-First Video Planning Retrieval** and create a bounded **Planning Inspection Preview** only after catalog and profile evidence identify a concrete candidate segment.
+- A processed video asset could be mistaken for an externally usable one regardless of review state. Resolved: only a **Confirmable Planning Asset** may enter the final shot plan; risk-affected candidates remain visibly blocked until knowledge review, except that an audio-only risk may be avoided by excluding source audio.
+- Source-video selection could imply reuse of its recorded sound. Resolved for the first release: every selected clip is a **Visual-Only Source Segment**, and only the confirmed narration is authored by the planning agent.
+- “希望观众采取的行动” could be mistaken for a mandatory sales line. Resolved: use **Planning Viewer Action** to shape the ending, and add spoken CTA wording only when the user explicitly requests it.
 - Product external names were considered as video-workflow constants. Resolved: they are knowledge owned by the **Knowledge Producer**, not by the video consumer.
 - `video_script` was initially retained as the video task-context name. Resolved: rename it to `video_creation` to match the complete production responsibility.
 - “下游反向从 raw 实时截帧” could mean unrestricted raw access. Resolved: use **Runtime Frame Extraction** from an **Authorized Video Reference**; the consumer still cannot browse or scan raw.

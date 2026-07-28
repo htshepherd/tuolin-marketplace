@@ -8,6 +8,7 @@ from typing import Any
 
 from .card_validator import PROFILE
 from .generated_index import rebuild_generated_indexes
+from .agent_specific_interfaces import refresh_registered_agent_interfaces
 from ..shared.project_layout import ProjectPaths
 
 
@@ -40,6 +41,13 @@ def refresh_agent_interface_after_write(
             f"Agent interface refresh verification failed after {action}: missing expected cards: {', '.join(missing)}"
         )
 
+    agent_specific_refresh = refresh_registered_agent_interfaces(
+        paths,
+        source_interface_revision=str(interface_revision),
+        action=action,
+        expected_card_ids=expected,
+    )
+
     verified_summary = dict(summary)
     verified_summary["agent_interface_refresh"] = {
         "verified": True,
@@ -47,6 +55,7 @@ def refresh_agent_interface_after_write(
         "interface_revision": interface_revision,
         "generated_at": manifest.get("generated_at"),
         "verified_card_ids": list(expected),
+        "agent_specific_interfaces": agent_specific_refresh,
     }
     return verified_summary
 

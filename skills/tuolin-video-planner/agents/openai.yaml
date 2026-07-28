@@ -1,0 +1,6 @@
+interface:
+  display_name: "拓霖视频策划"
+  short_description: "访谈生成逐镜头方案、逐字旁白和确认后的 SRT"
+  default_prompt: "使用 $tuolin-video-planner 为正式产品创建 YouTube Shorts 或 TikTok 的 9:16 镜头策划；不搜索公开趋势，不进入视频生成。"
+policy:
+  allow_implicit_invocation: false

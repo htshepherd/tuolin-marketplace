@@ -50,10 +50,16 @@ LinkedIn publishing image requests are controlled by the Tuolin LinkedIn agent. 
 
 The first response must be a Day image selection sheet and a question asking the user to choose a source image and image style category. Codex must not directly generate or save a publishing image for this initial request.
 
-Quartz-fiber-tape video creation requests are controlled by the Tuolin video workflow agent. For example:
+Planning-only video requests must explicitly use the independent planner. It supports formally published products, YouTube Shorts and TikTok, and stops after the confirmed shot plan, narration, and SRT:
 
 ```text
-$tuolin-video-workflow 做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts 和 TikTok。
+$tuolin-video-planner 为石英纤维隔热带做一个30秒英文镜头策划，面向欧美工业采购商，用于 YouTube Shorts 和 TikTok。
+```
+
+Full video creation remains controlled by the existing workflow agent:
+
+```text
+$tuolin-video-workflow 做一个60秒石英纤维隔热带产品介绍视频，面向欧美工业采购商，用在 YouTube Shorts。
 ```
 
 Local documentation:

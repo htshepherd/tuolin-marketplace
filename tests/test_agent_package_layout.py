@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 
 class AgentPackageLayoutTests(unittest.TestCase):
@@ -36,6 +37,31 @@ class AgentPackageLayoutTests(unittest.TestCase):
         self.assertTrue(callable(generate_video_plan))
         self.assertTrue(callable(generate_storyboard))
         self.assertTrue(callable(generate_dreamina_jobs))
+
+    def test_agent_specific_interface_import_paths_are_available(self) -> None:
+        from scripts.tuolin_marketplace.agent_specific_interfaces import (
+            read_video_planner_products as legacy_read,
+        )
+        from scripts.tuolin_marketplace.kb.agent_specific_interfaces import (
+            read_video_planner_products as new_read,
+        )
+
+        self.assertIs(legacy_read, new_read)
+
+    def test_video_planner_skill_is_explicit_and_packaged_without_replacing_video_workflow(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = root / "skills" / "tuolin-video-planner"
+        packaged = root / "plugins" / "tuolin-marketplace" / "skills" / "tuolin-video-planner"
+        self.assertEqual(
+            (source / "SKILL.md").read_text(encoding="utf-8"),
+            (packaged / "SKILL.md").read_text(encoding="utf-8"),
+        )
+        metadata = (source / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        self.assertIn("allow_implicit_invocation: false", metadata)
+        self.assertIn("$tuolin-video-planner", metadata)
+        legacy = (root / "skills" / "tuolin-video-workflow" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Dreamina", legacy)
+        self.assertIn("public YouTube scan", legacy)
 
 
 if __name__ == "__main__":

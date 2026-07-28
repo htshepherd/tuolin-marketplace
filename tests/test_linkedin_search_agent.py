@@ -122,7 +122,7 @@ class LinkedInSearchAgentTests(unittest.TestCase):
             (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(root_manifest, plugin_manifest)
-        self.assertEqual(root_manifest["version"], "1.54.0")
+        self.assertEqual(root_manifest["version"], "1.55.0")
 
     def test_request_detection_is_separate_from_linkedin_content_planning(self) -> None:
         self.assertTrue(is_linkedin_search_request("在领英通过贴文搜索石英纤维隔热带潜在客户"))
