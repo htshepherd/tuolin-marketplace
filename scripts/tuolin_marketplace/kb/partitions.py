@@ -181,16 +181,34 @@ PARTITIONS: tuple[PartitionDefinition, ...] = (
 
 
 def scan_all_partitions(paths: ProjectPaths) -> list[PartitionSummary]:
-    return [scan_partition(paths, definition) for definition in PARTITIONS]
+    video_registry = _load_video_registry_by_path(paths)
+    return [
+        scan_partition(paths, definition, _video_registry=video_registry)
+        for definition in PARTITIONS
+    ]
 
 
-def scan_partition(paths: ProjectPaths, definition: PartitionDefinition) -> PartitionSummary:
+def scan_partition(
+    paths: ProjectPaths,
+    definition: PartitionDefinition,
+    *,
+    _video_registry: dict[str, dict] | None = None,
+) -> PartitionSummary:
+    video_registry = (
+        _load_video_registry_by_path(paths)
+        if _video_registry is None
+        else _video_registry
+    )
     primary_raw_dir = paths.raw_dir / definition.primary_raw_path
     primary_files = list(_iter_files(primary_raw_dir)) if primary_raw_dir.exists() else []
     fingerprint = build_fingerprint(paths, definition) if primary_raw_dir.exists() else None
     previous = load_partition_snapshot(paths, definition.slug)
-    processing = _processing_counts(paths, primary_files)
-    product_progress = _product_material_progress(paths, definition) if definition.partition_type == "product" else ()
+    processing = _processing_counts(paths, primary_files, video_registry)
+    product_progress = (
+        _product_material_progress(paths, definition, video_registry)
+        if definition.partition_type == "product"
+        else ()
+    )
     product_pending_registration_count = sum(item.pending_registration_count for item in product_progress)
     product_pending_subfolder_count = sum(1 for item in product_progress if item.status != "complete")
     product_material_status = _product_material_status(product_progress)
@@ -352,11 +370,19 @@ def _iter_files(directory: Path) -> Iterable[Path]:
             yield path
 
 
-def _processing_counts(paths: ProjectPaths, primary_files: list[Path]) -> dict[str, int]:
+def _processing_counts(
+    paths: ProjectPaths,
+    primary_files: list[Path],
+    video_registry: dict[str, dict],
+) -> dict[str, int]:
     pdf_files = [path for path in primary_files if path.suffix.lower() in PDF_SUFFIXES]
     video_files = [path for path in primary_files if path.suffix.lower() in VIDEO_SUFFIXES]
     pdf_processed = sum(1 for path in pdf_files if _pdf_text_available(paths, path))
-    video_processed = sum(1 for path in video_files if _valid_video_profile_available(paths, path))
+    video_processed = sum(
+        1
+        for path in video_files
+        if _valid_video_profile_available(paths, path, video_registry)
+    )
     pdf_pending = len(pdf_files) - pdf_processed
     video_pending = len(video_files) - video_processed
     return {
@@ -373,6 +399,7 @@ def _processing_counts(paths: ProjectPaths, primary_files: list[Path]) -> dict[s
 def _product_material_progress(
     paths: ProjectPaths,
     definition: PartitionDefinition,
+    video_registry: dict[str, dict],
 ) -> tuple[ProductMaterialProgress, ...]:
     product_dir = paths.raw_dir / definition.primary_raw_path
     registered_sources = _registered_source_paths(paths, definition)
@@ -380,7 +407,7 @@ def _product_material_progress(
     for subfolder in PRODUCT_MATERIAL_SUBFOLDERS:
         subfolder_dir = product_dir / subfolder
         files = list(_iter_files(subfolder_dir)) if subfolder_dir.exists() else []
-        processing = _processing_counts(paths, files)
+        processing = _processing_counts(paths, files, video_registry)
         registered_count = sum(1 for path in files if _raw_relative(path, paths) in registered_sources)
         pending_registration_count = len(files) - registered_count
         if not files:
@@ -451,29 +478,29 @@ def _pdf_text_available(paths: ProjectPaths, pdf_path: Path) -> bool:
     return cache_dir.exists() and any(path.is_file() and path.suffix.lower() == ".md" for path in cache_dir.rglob("*"))
 
 
-def _valid_video_profile_available(paths: ProjectPaths, video_path: Path) -> bool:
+def _valid_video_profile_available(
+    paths: ProjectPaths,
+    video_path: Path,
+    video_registry: dict[str, dict],
+) -> bool:
     try:
         relative = video_path.resolve().relative_to(paths.raw_dir).as_posix()
     except ValueError:
         return False
-    registry_path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
-    if not registry_path.is_file():
+    asset = video_registry.get(relative)
+    if asset is None or asset.get("source_identity_state") != "verified":
         return False
     try:
-        registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        stat = video_path.stat()
+    except OSError:
         return False
-    source_fingerprint = _file_sha256(video_path)
-    asset = next(
-        (
-            item
-            for item in registry.get("assets", [])
-            if item.get("source_relative_path") == relative
-            and item.get("source_fingerprint") == source_fingerprint
-        ),
-        None,
-    )
-    if asset is None:
+    if (
+        asset.get("source_size_bytes") != stat.st_size
+        or asset.get("source_mtime_ns") != stat.st_mtime_ns
+    ):
+        return False
+    source_fingerprint = str(asset.get("source_fingerprint") or "")
+    if not source_fingerprint:
         return False
     product_id = str(asset.get("product_id", ""))
     if "/" not in product_id:
@@ -496,12 +523,19 @@ def _valid_video_profile_available(paths: ProjectPaths, video_path: Path) -> boo
     )
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _load_video_registry_by_path(paths: ProjectPaths) -> dict[str, dict]:
+    registry_path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
+    if not registry_path.is_file():
+        return {}
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {
+        str(item["source_relative_path"]): item
+        for item in registry.get("assets", [])
+        if item.get("source_relative_path")
+    }
 
 
 def _count_json_files(directory: Path) -> int:

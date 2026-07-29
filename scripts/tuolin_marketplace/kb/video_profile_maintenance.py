@@ -16,6 +16,7 @@ PROTECTED_CACHE_STATES = {
     "review_required",
 }
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
+VIDEO_ASSET_REGISTRY_SCHEMA_VERSION = "1.1"
 
 
 class ReanalysisRequired(RuntimeError):
@@ -93,14 +94,14 @@ def reconcile_video_asset_identity(
     if not source.is_file() or source.suffix.lower() not in VIDEO_SUFFIXES:
         raise FileNotFoundError(source)
     relative = source.relative_to(paths.raw_dir.resolve()).as_posix()
-    fingerprint = _sha256(source)
-    registry_path = (
-        paths.generated_dir / "cache" / "video-assets" / "registry.json"
-    )
+    registry_path = _video_asset_registry_path(paths)
     if registry_path.is_file():
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
     else:
-        registry = {"schema_version": "1.0", "assets": []}
+        registry = {
+            "schema_version": VIDEO_ASSET_REGISTRY_SCHEMA_VERSION,
+            "assets": [],
+        }
     assets = registry.setdefault("assets", [])
     same_path = [
         item
@@ -110,7 +111,16 @@ def reconcile_video_asset_identity(
     ]
     if same_path:
         current = same_path[-1]
+        if _verified_quick_signature_matches(current, source):
+            return {
+                "status": "unchanged",
+                **current,
+                "registry_path": registry_path,
+            }
+        fingerprint, signature = _sha256_with_stable_signature(source)
         if current.get("source_fingerprint") == fingerprint:
+            _record_verified_quick_signature(current, signature)
+            _write_json_atomic(registry_path, registry)
             return {
                 "status": "unchanged",
                 **current,
@@ -122,6 +132,7 @@ def reconcile_video_asset_identity(
             history.append(prior_revision)
         current["source_fingerprint"] = fingerprint
         current["source_revision_history"] = history
+        _record_verified_quick_signature(current, signature)
         current["source_revised_at"] = datetime.now(
             timezone.utc
         ).isoformat()
@@ -133,6 +144,7 @@ def reconcile_video_asset_identity(
             "registry_path": registry_path,
         }
 
+    fingerprint, signature = _sha256_with_stable_signature(source)
     exact_matches = [
         item
         for item in assets
@@ -153,6 +165,7 @@ def reconcile_video_asset_identity(
         moved["source_relative_path"] = relative
         moved["moved_from"] = prior_path
         moved["moved_at"] = datetime.now(timezone.utc).isoformat()
+        _record_verified_quick_signature(moved, signature)
         _write_json_atomic(registry_path, registry)
         return {
             "status": "verified_move",
@@ -177,6 +190,8 @@ def reconcile_video_asset_identity(
         "product_id": product_id,
         "source_relative_path": relative,
         "source_fingerprint": fingerprint,
+        **signature,
+        "source_identity_state": "verified",
         "registered_at": datetime.now(timezone.utc).isoformat(),
     }
     status = "registered"
@@ -203,6 +218,100 @@ def reconcile_video_asset_identity(
         **item,
         "registry_path": registry_path,
     }
+
+
+def migrate_video_asset_registry_quick_signatures(
+    paths: ProjectPaths,
+) -> dict:
+    """Upgrade legacy video hashes once without making routine scans read media."""
+    registry_path = _video_asset_registry_path(paths)
+    if not registry_path.is_file():
+        return {
+            "status": "no_registry",
+            "verified_count": 0,
+            "changed_count": 0,
+            "missing_count": 0,
+            "registry_path": registry_path,
+        }
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    if registry.get("schema_version") == VIDEO_ASSET_REGISTRY_SCHEMA_VERSION:
+        return {
+            "status": "already_current",
+            "verified_count": 0,
+            "changed_count": 0,
+            "missing_count": 0,
+            "registry_path": registry_path,
+        }
+
+    verified_count = 0
+    changed_count = 0
+    missing_count = 0
+    raw_root = paths.raw_dir.resolve()
+    for item in registry.setdefault("assets", []):
+        relative = str(item.get("source_relative_path") or "")
+        source = (paths.raw_dir / relative).resolve()
+        try:
+            source.relative_to(raw_root)
+        except ValueError:
+            item["source_identity_state"] = "invalid_path"
+            missing_count += 1
+            continue
+        if not source.is_file():
+            item["source_identity_state"] = "missing"
+            missing_count += 1
+            continue
+
+        fingerprint, signature = _sha256_with_stable_signature(source)
+        if fingerprint == item.get("source_fingerprint"):
+            _record_verified_quick_signature(item, signature)
+            verified_count += 1
+            continue
+        item["source_identity_state"] = "source_changed"
+        item["observed_source_size_bytes"] = signature["source_size_bytes"]
+        item["observed_source_mtime_ns"] = signature["source_mtime_ns"]
+        item["source_change_detected_at"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        changed_count += 1
+
+    registry["schema_version"] = VIDEO_ASSET_REGISTRY_SCHEMA_VERSION
+    registry["quick_signature_migrated_at"] = datetime.now(
+        timezone.utc
+    ).isoformat()
+    _write_json_atomic(registry_path, registry)
+    return {
+        "status": "migrated",
+        "verified_count": verified_count,
+        "changed_count": changed_count,
+        "missing_count": missing_count,
+        "registry_path": registry_path,
+    }
+
+
+def verified_video_source_revisions(
+    paths: ProjectPaths,
+) -> tuple[bool, dict[str, str]]:
+    """Return only registry revisions whose local files match cached metadata."""
+    registry_path = _video_asset_registry_path(paths)
+    if not registry_path.is_file():
+        return False, {}
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    revisions: dict[str, str] = {}
+    raw_root = paths.raw_dir.resolve()
+    for item in registry.get("assets", []):
+        asset_id = str(item.get("asset_id") or "")
+        fingerprint = str(item.get("source_fingerprint") or "")
+        relative = str(item.get("source_relative_path") or "")
+        if not asset_id or not fingerprint:
+            continue
+        source = (paths.raw_dir / relative).resolve()
+        try:
+            source.relative_to(raw_root)
+        except ValueError:
+            continue
+        if source.is_file() and _verified_quick_signature_matches(item, source):
+            revisions[asset_id] = fingerprint
+    return True, revisions
 
 
 def migrate_video_profile_schema(
@@ -397,12 +506,54 @@ def _parse_datetime(value: str) -> datetime:
     return parsed
 
 
-def _sha256(path: Path) -> str:
+def _video_asset_registry_path(paths: ProjectPaths) -> Path:
+    return paths.generated_dir / "cache" / "video-assets" / "registry.json"
+
+
+def _quick_signature(path: Path) -> dict[str, int]:
+    stat = path.stat()
+    return {
+        "source_size_bytes": stat.st_size,
+        "source_mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def _verified_quick_signature_matches(item: dict, path: Path) -> bool:
+    if item.get("source_identity_state") != "verified":
+        return False
+    signature = _quick_signature(path)
+    return (
+        item.get("source_size_bytes") == signature["source_size_bytes"]
+        and item.get("source_mtime_ns") == signature["source_mtime_ns"]
+        and bool(item.get("source_fingerprint"))
+    )
+
+
+def _record_verified_quick_signature(
+    item: dict,
+    signature: dict[str, int],
+) -> None:
+    item["source_size_bytes"] = signature["source_size_bytes"]
+    item["source_mtime_ns"] = signature["source_mtime_ns"]
+    item["source_identity_state"] = "verified"
+    for key in (
+        "observed_source_size_bytes",
+        "observed_source_mtime_ns",
+        "source_change_detected_at",
+    ):
+        item.pop(key, None)
+
+
+def _sha256_with_stable_signature(path: Path) -> tuple[str, dict[str, int]]:
+    before = _quick_signature(path)
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    return digest.hexdigest()
+    after = _quick_signature(path)
+    if before != after:
+        raise RuntimeError("video source changed while its fingerprint was being calculated")
+    return digest.hexdigest(), after
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:

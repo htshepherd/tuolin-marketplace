@@ -14,6 +14,7 @@ from ..shared.project_layout import ProjectPaths
 from .video_audio_policy import build_downstream_audio_summary, redact_transcript_for_downstream
 from .video_test_evidence import build_downstream_test_summary
 from .video_usage_policy import evaluate_video_usage_policy
+from .video_profile_maintenance import verified_video_source_revisions
 
 
 VIDEO_PLANNER_AGENT_ID = "tuolin-video-planner"
@@ -584,7 +585,7 @@ def _write_video_profile_projection(
     details_dir.mkdir(parents=True, exist_ok=True)
     for stale in details_dir.glob("*.json"):
         stale.unlink()
-    registry_available, active_revisions = _active_video_revisions(paths)
+    registry_available, active_revisions = verified_video_source_revisions(paths)
     catalog = []
     private_media = []
     for profile in sorted(profiles, key=lambda item: str(item.get("profile_id") or "")):
@@ -748,18 +749,6 @@ def _projection_revision(cards: list[dict[str, Any]], profiles: list[dict[str, A
             ],
         }
     )[:20]
-
-
-def _active_video_revisions(paths: ProjectPaths) -> tuple[bool, dict[str, str]]:
-    path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
-    if not path.is_file():
-        return False, {}
-    registry = _read_json(path)
-    return True, {
-        str(item.get("asset_id")): str(item.get("source_fingerprint"))
-        for item in registry.get("assets", [])
-        if item.get("asset_id") and item.get("source_fingerprint")
-    }
 
 
 def _json_digest(value: Any) -> str:

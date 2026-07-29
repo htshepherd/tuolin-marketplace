@@ -14,6 +14,7 @@ from .video_audio_policy import (
 )
 from .video_test_evidence import build_downstream_test_summary
 from .video_usage_policy import evaluate_video_usage_policy
+from .video_profile_maintenance import verified_video_source_revisions
 from .partitions import scan_all_partitions, summaries_to_json
 from ..shared.project_layout import ProjectPaths
 
@@ -303,9 +304,7 @@ def _write_video_profile_interface(
         stale.unlink()
     catalog = []
     private_media = []
-    registry_available, active_source_revisions = (
-        _active_video_source_revisions(paths)
-    )
+    registry_available, active_source_revisions = verified_video_source_revisions(paths)
     for profile in sorted(profiles, key=lambda item: str(item.get("profile_id") or "")):
         if profile.get("processing_state") == "revoked":
             continue
@@ -424,22 +423,6 @@ def _write_video_profile_interface(
             "media": private_media,
         },
     )
-
-
-def _active_video_source_revisions(
-    paths: ProjectPaths,
-) -> tuple[bool, dict[str, str]]:
-    registry_path = (
-        paths.generated_dir / "cache" / "video-assets" / "registry.json"
-    )
-    if not registry_path.is_file():
-        return False, {}
-    registry = json.loads(registry_path.read_text(encoding="utf-8"))
-    return True, {
-        str(item.get("asset_id")): str(item.get("source_fingerprint"))
-        for item in registry.get("assets", [])
-        if item.get("asset_id") and item.get("source_fingerprint")
-    }
 
 
 def _file_sha256(path: Path) -> str:

@@ -84,6 +84,20 @@ class AgentPackageLayoutTests(unittest.TestCase):
         self.assertIn("不要只向用户显示 `internal_only`", content)
         self.assertIn("最终成片发布前仍需再次人工确认", content)
 
+    def test_kb_incremental_video_refresh_runtime_matches_packaged_plugin(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        relative_paths = (
+            "scripts/tuolin_marketplace/kb/agent_interface.py",
+            "scripts/tuolin_marketplace/kb/agent_specific_interfaces.py",
+            "scripts/tuolin_marketplace/kb/generated_index.py",
+            "scripts/tuolin_marketplace/kb/partitions.py",
+            "scripts/tuolin_marketplace/kb/video_profile_maintenance.py",
+        )
+        for relative in relative_paths:
+            source = root / relative
+            packaged = root / "plugins" / "tuolin-marketplace" / relative
+            self.assertEqual(source.read_bytes(), packaged.read_bytes(), source)
+
     def test_avatar_video_skill_runtime_and_plugin_mirror_are_explicit_and_identical(self) -> None:
         root = Path(__file__).resolve().parents[1]
         pairs = [

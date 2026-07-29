@@ -1,6 +1,6 @@
 # LinkedIn 搜索 Skill 安装与远程真实业务测试
 
-适用版本：Tuolin Marketplace `2.0.0`。
+适用版本：Tuolin Marketplace `2.0.1`。
 
 ## 1. 测试边界
 
@@ -19,16 +19,16 @@ codex plugin add chrome@openai-bundled
 codex plugin list
 ```
 
-或解压 `tuolin-marketplace-2.0.0.zip` 后从本地目录安装：
+或解压 `tuolin-marketplace-2.0.1.zip` 后从本地目录安装：
 
 ```powershell
-codex plugin marketplace add C:\Tuolin\tuolin-marketplace-2.0.0
+codex plugin marketplace add C:\Tuolin\tuolin-marketplace-2.0.1
 codex plugin add tuolin-marketplace@tuolin-marketplace
 codex plugin add chrome@openai-bundled
 codex plugin list
 ```
 
-安装或升级后新开 Codex 会话。若界面版本与 `codex plugin list` 不是 `2.0.0`，停止业务测试并先解决版本冲突。
+安装或升级后新开 Codex 会话。若界面版本与 `codex plugin list` 不是 `2.0.1`，停止业务测试并先解决版本冲突。
 
 ## 3. 自动安装预检
 

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts.tuolin_marketplace.kb import video_profile_maintenance as maintenance
 from scripts.tuolin_marketplace.project_layout import (
     initialize_project,
     resolve_paths,
@@ -13,15 +16,123 @@ from scripts.tuolin_marketplace.project_layout import (
 from scripts.tuolin_marketplace.video_profile_maintenance import (
     ReanalysisRequired,
     cleanup_video_profile_cache,
+    migrate_video_asset_registry_quick_signatures,
     migrate_video_profile_schema,
     reconcile_video_asset_identity,
     register_video_cache_entry,
+    verified_video_source_revisions,
     write_video_cache_manifest,
 )
 from scripts.tuolin_marketplace.video_profiles import register_video_asset
 
 
 class VideoProfileMaintenanceTests(unittest.TestCase):
+    def test_legacy_registry_hashes_once_then_persists_quick_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            source = paths.raw_dir / "产品视频" / "demo.mp4"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"legacy registered video")
+            registry_path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
+            registry_path.parent.mkdir(parents=True, exist_ok=True)
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "assets": [
+                            {
+                                "asset_id": "video_asset_legacy",
+                                "product_id": "product/quartz_fiber_tape",
+                                "source_relative_path": source.relative_to(paths.raw_dir).as_posix(),
+                                "source_fingerprint": hashlib.sha256(source.read_bytes()).hexdigest(),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original = maintenance._sha256_with_stable_signature
+
+            with patch.object(
+                maintenance,
+                "_sha256_with_stable_signature",
+                wraps=original,
+            ) as fingerprint:
+                result = migrate_video_asset_registry_quick_signatures(paths)
+
+            self.assertEqual(result["status"], "migrated")
+            self.assertEqual(result["verified_count"], 1)
+            self.assertEqual(fingerprint.call_count, 1)
+            migrated = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(migrated["schema_version"], "1.1")
+            self.assertEqual(migrated["assets"][0]["source_identity_state"], "verified")
+            self.assertEqual(migrated["assets"][0]["source_size_bytes"], source.stat().st_size)
+            self.assertEqual(migrated["assets"][0]["source_mtime_ns"], source.stat().st_mtime_ns)
+
+            with patch.object(
+                maintenance,
+                "_sha256_with_stable_signature",
+                wraps=original,
+            ) as fingerprint:
+                second = migrate_video_asset_registry_quick_signatures(paths)
+
+            self.assertEqual(second["status"], "already_current")
+            self.assertEqual(fingerprint.call_count, 0)
+
+    def test_unchanged_registered_video_reconciliation_skips_full_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            source = paths.raw_dir / "产品视频" / "demo.mp4"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"registered video")
+            registered = register_video_asset(
+                source,
+                paths,
+                product_id="product/quartz_fiber_tape",
+            )
+
+            with patch.object(
+                maintenance,
+                "_sha256_with_stable_signature",
+                side_effect=AssertionError("unchanged video must not be rehashed"),
+            ):
+                reconciled = reconcile_video_asset_identity(
+                    source,
+                    paths,
+                    product_id="product/quartz_fiber_tape",
+                )
+
+            self.assertEqual(reconciled["status"], "unchanged")
+            self.assertEqual(reconciled["asset_id"], registered.asset_id)
+
+    def test_changed_video_is_excluded_from_active_revisions_without_rehash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            source = paths.raw_dir / "产品视频" / "demo.mp4"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"registered video")
+            registered = register_video_asset(
+                source,
+                paths,
+                product_id="product/quartz_fiber_tape",
+            )
+            source.write_bytes(b"changed video revision")
+            original_open = Path.open
+
+            def guarded_open(path, *args, **kwargs):
+                if path == source:
+                    raise AssertionError("active revision lookup must not rehash video bytes")
+                return original_open(path, *args, **kwargs)
+
+            with patch.object(Path, "open", guarded_open):
+                available, revisions = verified_video_source_revisions(paths)
+
+            self.assertTrue(available)
+            self.assertNotIn(registered.asset_id, revisions)
+
     def test_cache_cleanup_uses_manifest_and_live_references(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts.tuolin_marketplace.kb import video_profile_maintenance as maintenance
 from scripts.tuolin_marketplace.agent_interface import (
     evidence_for_card,
     generate_task_context,
@@ -20,9 +23,65 @@ from scripts.tuolin_marketplace.card_validator import PROFILE
 from scripts.tuolin_marketplace.product_organizer import organize_product_partition
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
 from scripts.tuolin_marketplace.review_workflow import apply_review_decision, create_review_preview
+from scripts.tuolin_marketplace.video_profiles import register_video_asset
 
 
 class AgentInterfaceTests(unittest.TestCase):
+    def test_routine_refresh_does_not_hash_registered_video_even_when_file_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            source = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            source.write_bytes(b"registered video")
+            register_video_asset(
+                source,
+                paths,
+                product_id="product/quartz_fiber_tape",
+            )
+            source.write_bytes(b"changed video revision")
+
+            with patch.object(
+                maintenance,
+                "_sha256_with_stable_signature",
+                side_effect=AssertionError("routine interface refresh must not hash video bytes"),
+            ):
+                summary = rebuild_agent_interface(paths)
+
+            self.assertTrue(summary["agent_interface_refresh"]["verified"])
+            self.assertEqual(summary["partition_totals"]["video_pending_count"], 1)
+
+    def test_refresh_automatically_migrates_legacy_video_hash_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            source = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            source.write_bytes(b"legacy video")
+            registry_path = paths.generated_dir / "cache" / "video-assets" / "registry.json"
+            registry_path.parent.mkdir(parents=True, exist_ok=True)
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "assets": [
+                            {
+                                "asset_id": "video_asset_legacy",
+                                "product_id": "product/quartz_fiber_tape",
+                                "source_relative_path": source.relative_to(paths.raw_dir).as_posix(),
+                                "source_fingerprint": hashlib.sha256(source.read_bytes()).hexdigest(),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = rebuild_agent_interface(paths)
+
+            self.assertEqual(summary["video_asset_registry_migration"]["status"], "migrated")
+            migrated = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(migrated["schema_version"], "1.1")
+            self.assertEqual(migrated["assets"][0]["source_identity_state"], "verified")
+
     def test_rebuild_generated_exports_manifest_partitions_and_ten_card_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})

@@ -9,6 +9,7 @@ from typing import Any
 from .card_validator import PROFILE
 from .generated_index import rebuild_generated_indexes
 from .agent_specific_interfaces import refresh_registered_agent_interfaces
+from .video_profile_maintenance import migrate_video_asset_registry_quick_signatures
 from ..shared.project_layout import ProjectPaths
 
 
@@ -25,6 +26,7 @@ def refresh_agent_interface_after_write(
     action: str,
     expected_card_ids: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
+    video_registry_migration = migrate_video_asset_registry_quick_signatures(paths)
     summary = rebuild_generated_indexes(paths)
     manifest = _read_json(paths.generated_dir / "agent-interface" / "manifest.json")
     persisted_summary = _read_json(paths.generated_dir / "agent-interface" / "manifest_summary.json")
@@ -49,6 +51,11 @@ def refresh_agent_interface_after_write(
     )
 
     verified_summary = dict(summary)
+    verified_summary["video_asset_registry_migration"] = {
+        key: value
+        for key, value in video_registry_migration.items()
+        if key != "registry_path"
+    }
     verified_summary["agent_interface_refresh"] = {
         "verified": True,
         "action": action,

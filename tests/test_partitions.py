@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.tuolin_marketplace.partitions import (
     PARTITIONS,
@@ -14,6 +16,7 @@ from scripts.tuolin_marketplace.partitions import (
     scan_partition,
 )
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
+from scripts.tuolin_marketplace.video_profiles import register_video_asset
 
 
 class PartitionScanTests(unittest.TestCase):
@@ -31,6 +34,21 @@ class PartitionScanTests(unittest.TestCase):
                     "# evidence",
                     "",
                 ]
+            ),
+            encoding="utf-8",
+        )
+
+    def _write_valid_video_profile(self, paths, asset) -> None:
+        profile_dir = paths.knowledge_dir / "视频档案" / "quartz_fiber_tape"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        (profile_dir / f"{asset.asset_id}.md").write_text("profile", encoding="utf-8")
+        (profile_dir / f"{asset.asset_id}.json").write_text(
+            json.dumps(
+                {
+                    "video_asset_id": asset.asset_id,
+                    "source_revision": asset.source_fingerprint,
+                    "processing_state": "valid",
+                }
             ),
             encoding="utf-8",
         )
@@ -192,6 +210,79 @@ class PartitionScanTests(unittest.TestCase):
             self.assertEqual(summary.video_pending_count, 1)
             self.assertEqual(summary.product_pending_registration_count, 0)
             self.assertEqual(summary.recommended_next_action, "continue_reading")
+
+    def test_unregistered_video_status_scan_never_reads_video_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            video.write_bytes(b"unregistered video")
+            original_open = Path.open
+
+            def guarded_open(path, *args, **kwargs):
+                if path == video:
+                    raise AssertionError("status scan must not read unregistered video bytes")
+                return original_open(path, *args, **kwargs)
+
+            with patch.object(Path, "open", guarded_open):
+                summary = scan_partition(paths, quartz)
+
+            self.assertEqual(summary.video_processed_count, 0)
+            self.assertEqual(summary.video_pending_count, 1)
+
+    def test_registered_unchanged_video_uses_quick_signature_without_reading_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            video.write_bytes(b"registered video")
+            asset = register_video_asset(
+                video,
+                paths,
+                product_id="product/quartz_fiber_tape",
+            )
+            self._write_valid_video_profile(paths, asset)
+            original_open = Path.open
+
+            def guarded_open(path, *args, **kwargs):
+                if path == video:
+                    raise AssertionError("status scan must reuse the registered quick signature")
+                return original_open(path, *args, **kwargs)
+
+            with patch.object(Path, "open", guarded_open):
+                summary = scan_partition(paths, quartz)
+
+            self.assertEqual(summary.video_processed_count, 1)
+            self.assertEqual(summary.video_pending_count, 0)
+
+    def test_changed_registered_video_is_pending_without_refresh_rehash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            quartz = next(partition for partition in PARTITIONS if partition.slug == "quartz_fiber_tape")
+            video = paths.raw_dir / "01_产品" / "02_石英纤维隔热带" / "03_产品视频" / "demo.mp4"
+            video.write_bytes(b"old video")
+            asset = register_video_asset(
+                video,
+                paths,
+                product_id="product/quartz_fiber_tape",
+            )
+            self._write_valid_video_profile(paths, asset)
+            video.write_bytes(b"new video revision")
+            original_open = Path.open
+
+            def guarded_open(path, *args, **kwargs):
+                if path == video:
+                    raise AssertionError("refresh must not rehash a changed video")
+                return original_open(path, *args, **kwargs)
+
+            with patch.object(Path, "open", guarded_open):
+                summary = scan_partition(paths, quartz)
+
+            self.assertEqual(summary.video_processed_count, 0)
+            self.assertEqual(summary.video_pending_count, 1)
 
     def test_raw_change_after_snapshot_sets_needs_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
