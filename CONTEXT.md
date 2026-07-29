@@ -442,7 +442,7 @@ _Avoid_: automatic creative approval, platform-restricted-word module detached f
 
 **Frame Continuity Upgrade**:
 A video-quality upgrade that improves shot-to-shot flow by planning stable reference frames, transition intent, and continuity checks before Dreamina generation.
-_Avoid_: audio automation, Jianying automation, treating "Hyperframes" as a confirmed installed provider
+_Avoid_: audio automation, Jianying automation, adding the `$tuolin-avatar-video` HyperFrames composition provider to `$tuolin-video-workflow`
 
 **Quartz Fiber Tape Video Scope**:
 The initial YouTube Shorts-only video workflow scope covering product videos for the internally identified product 石英纤维隔热带.
@@ -455,6 +455,10 @@ _Avoid_: a marketing or video deliverable generator
 **Agent-Specific Knowledge Read Interface**:
 An independently generated and verified projection of the shared formal knowledge base owned by exactly one downstream agent, with its own manifest, revision, card indexes, selection policy, and validation result.
 _Avoid_: one shared downstream catalog, a separately maintained knowledge copy, an agent reading another agent's projection
+
+**Downstream Interface Ownership Granularity**:
+The rule that one downstream agent responsibility owns one dedicated knowledge interface while product, platform, language, and individual-run scope are selected within that interface at task time.
+_Avoid_: one interface per product, platform, language, or video run; one interface shared by several downstream agents
 
 **Knowledge Interface Refresh Transaction**:
 The automatic post-write operation that rebuilds and verifies every registered agent-specific knowledge interface before a knowledge-base organization, update, or review write-back may report completion.
@@ -476,12 +480,132 @@ _Avoid_: requiring users to invoke internal runners or copy run-directory paths
 An independent application-layer agent that interviews the user and delivers a provider-neutral, production-ready shot plan without generating, downloading, or assembling video.
 _Avoid_: a reduced mode of the complete video workflow, a Dreamina handoff agent, a knowledge producer
 
+**Digital Avatar Video Consumer**:
+An independent application-layer agent that turns product-grounded, user-confirmed narration into a finished presenter-led video with authorized digital-avatar, voice, product-material, and post-production inputs.
+_Avoid_: a mode of the video planning or Dreamina workflow, a knowledge producer, an unreviewed one-click video generator
+
+**Digital Avatar Video Entrypoint**:
+The user-facing `$tuolin-avatar-video` skill that owns one digital-avatar video run without changing the state machines or deliverables of the existing video agents.
+_Avoid_: `$tuolin-video-planner`, `$tuolin-video-workflow`, a packaging option inside another video run
+
+**Digital Avatar Video Knowledge Interface**:
+The agent-specific read interface that exposes only the verified product facts, claim boundaries, risks, and authorized visual materials required by the digital-avatar video consumer.
+_Avoid_: the video-planning interface, the `video_creation` interface, the legacy shared interface, raw-material browsing
+
+**Presenter Presence Policy**:
+The confirmed visual rule that narration may remain continuous while the digital presenter temporarily leaves the frame so product evidence, parameters, or application materials can take over the full canvas.
+_Avoid_: requiring an always-visible avatar, interrupting narration for every cutaway, treating a cutaway as permission to use unverified material
+
+**Confirmed Digital Avatar Production Plan**:
+The single versioned pre-production and first-execution contract jointly confirmed by the user after the interview and material inspection, containing the audience and communication strategy, complete verbatim narration, target duration, presenter-presence intervals, product-evidence timeline, selected visual materials, bounded support-image batch, Fish Audio and HeyGen settings, surfaced high-risk claim notes, and estimated combined consumption; its confirmation authorizes exactly one initial attempt for every disclosed paid provider operation.
+_Avoid_: separate plan, script, image-batch, or first-provider approvals; confirming only an outline; generating Fish Audio before visual timing and costs are agreed; allowing one component to change while the joint approval remains valid
+
+**Digital Avatar Evidence Visual**:
+A visually inspected official image or knowledge-grounded information treatment used to substantiate product identity, a parameter, test result, certification, or real application claim in a digital-avatar video.
+_Avoid_: an AI-generated substitute for evidence, an unverified customer case, a decorative image presented as proof, a raw asset outside the dedicated interface
+
+**Generated Digital Avatar Support Visual**:
+An internally traceable illustrative asset generated to improve comprehension or pacing—such as an abstract background, explanatory diagram, parameter layout, or transition—whose content cannot establish product facts; if it depicts the product, it must be conditioned on an inspected real product image, while the published video receives no visible AI-generated or simulation label unless the participating user explicitly requests one.
+_Avoid_: synthetic product evidence, an invented product shape, losing internal generation provenance, an Agent-added viewer disclaimer the user did not request, generated certification or test imagery, replacing an available official evidence visual
+
+**Authorized Support-Visual Generation Batch**:
+The bounded paid image-generation scope embedded in a **Confirmed Digital Avatar Production Plan**, listing the provider, exact image count, purpose of each image, required inspected product references, and estimated credit or monetary consumption; confirmation of the complete plan authorizes its initial submission without another prompt.
+_Avoid_: a separate first-submission confirmation, one authorization for unlimited images, per-image confirmation when the batch is unchanged, adding images after approval, retrying a rejected image under the original authorization
+
+**Confirmed Digital Avatar Support-Visual Set**:
+The exact versioned collection of generated support images accepted together with the complete Fish Audio output through one **Digital Avatar Combined Input Review** before HeyGen and HyperFrames may consume their respective inputs, with rejected outputs and reasons retained in the run.
+_Avoid_: provider completion as approval, approving from filenames or prompts, silently replacing one accepted image, allowing a rejected or unreviewed image into composition
+
+**Digital Avatar Combined Input Review**:
+The single post-generation checkpoint in which the user listens to the complete Fish Audio result and visually inspects every generated support image, establishing both **Confirmed Digital Avatar Narration Audio** and the **Confirmed Digital Avatar Support-Visual Set** with one explicit response.
+_Avoid_: separate audio and image confirmation prompts, partial listening, prompt-only image review, allowing one rejected input to pass with the other
+
+**Confirmed Digital Avatar Narration**:
+The verbatim narration component locked inside the user-approved **Confirmed Digital Avatar Production Plan** after lightweight high-risk claim review; it drives Fish Audio, presenter timing, evidence cutaways, captions, and final packaging in one digital-avatar video run.
+_Avoid_: a separately approved script, unreviewed AI copy, an unchecked user script, talking points, a second provider-generated script
+
+**User-Supplied Avatar Narration**:
+A verbatim script supplied by the operator that remains blocked from production only until high-risk conflicts are surfaced and the user confirms the resulting narration contract.
+_Avoid_: pre-approved copy, permission to bypass knowledge review, a script read from another agent's knowledge projection
+
+**Digital Avatar High-Risk Claim Review**:
+A lightweight pre-confirmation check limited to clear knowledge conflicts and externally consequential parameters, certifications, test results, absolute performance statements, and safety promises, with final ordinary-language judgment retained by the user.
+_Avoid_: sentence-by-sentence fact approval, automatic marketing-style rejection, replacing user confirmation, treating all creative language as formal knowledge
+
+**Digital Avatar Platform Scope**:
+The supported publishing destinations in which English runs target 9:16 YouTube Shorts and Chinese runs target Kuaishou and Douyin.
+_Avoid_: unrestricted platform selection, assuming one language version targets every platform, treating platform choice as a new knowledge interface
+
+**Chinese Digital Avatar Content Master**:
+The single user-confirmed 9:16 Chinese narration, presenter, evidence, and creative-timeline contract from which both Kuaishou and Douyin delivery variants are rendered in one run.
+_Avoid_: a final platform upload, separate narration or HeyGen generation per Chinese platform, a cross-language master
+
+**Digital Avatar Platform Delivery Variant**:
+A platform-targeted output derived from one confirmed content master whose permitted differences are limited to packaging, safe-area treatment, ending treatment, and technical encoding requirements.
+_Avoid_: rewriting confirmed narration, regenerating the presenter, changing product claims, a new knowledge interface
+
+**Accepted Digital Avatar Delivery Pack**:
+The local, versioned final-video handoff accepted by the user after full playback, containing one English 9:16 YouTube Shorts delivery file or the paired Chinese Kuaishou and Douyin delivery variants together with validation and production-provenance summaries, and ending the `$tuolin-avatar-video` run without publishing.
+_Avoid_: an uploaded platform post, publication authorization, an unreviewed render, a draft mistaken for delivery, platform credentials inside the production run
+
+**Digital Avatar Same-Language Burned Captions**:
+The default time-synchronized captions rendered into the video pixels in the narration language—English captions for an English run and Chinese captions for a Chinese run—with styling and platform-safe placement handled by the Agent; they are omitted only when the user explicitly requests a caption-free result before production-plan confirmation.
+_Avoid_: default bilingual captions, platform-side captions as the only readable copy, asking the user to design subtitle styling, silently omitting captions, adding captions in a language different from the narration
+
+**Authorized Brand Presenter**:
+The single versioned HeyGen avatar identity selected for Tuolin's English and Chinese digital-avatar videos under a paid plan, using a fixed public avatar in the first release and recording any required rights or consent if later replaced by a custom identity.
+_Avoid_: changing avatars per run, treating subscription payment as third-party consent, an unversioned avatar ID, an unauthorized likeness
+
+**First-Release Public Presenter**:
+The one fixed public HeyGen avatar ID used to validate the first digital-avatar production workflow before any optional migration to a custom digital twin.
+_Avoid_: a different public avatar per run, a custom-avatar prerequisite, an irreversible brand identity decision
+
+**Digital Avatar Video Interview**:
+A one-question-at-a-time business and creative discovery conversation owned by `$tuolin-avatar-video` that resolves only the decisions still needed for a presenter-led product video before any plan is generated.
+_Avoid_: reusing another video agent's run, a fixed questionnaire, generating a plan before interview completion, asking the user to make editing decisions
+
+**Digital Avatar Interview Decision Sufficiency**:
+The point at which audience, reason to watch, intended takeaway and action, priority information, exclusions, presenter-versus-evidence treatment, platform, language, and duration are confirmed and no unresolved business choice can materially change the plan.
+_Avoid_: finishing after a fixed question count, treating one confirmation as approval of later questions, delaying the plan for professional execution details
+
+**Digital Avatar Video Duration**:
+A user-confirmed whole-number target from 30 through 90 seconds resolved during the digital-avatar interview before planning begins.
+_Avoid_: an Agent-selected default that bypasses confirmation, durations below 30 or above 90 seconds, choosing shot count instead of duration
+
+**Digital Avatar Trend-Research Exclusion**:
+The boundary that `$tuolin-avatar-video` performs no public platform-trend scan and plans from its dedicated knowledge interface, user decisions, inspected materials, and disclosed general creative judgment.
+_Avoid_: mandatory trend research, optional hidden trend research, claiming current popularity, importing another video agent's trend evidence
+
+**Confirmed Digital Avatar Narration Audio**:
+The exact Fish Audio output version that the user has listened to and accepted for pronunciation, pacing, pauses, tone, and overall delivery through the **Digital Avatar Combined Input Review** before any HeyGen submission.
+_Avoid_: text-only approval, a short sample substituted for the full track, automatic approval after synthesis, a later regenerated audio file inheriting approval
+
+**Confirmed Digital Presenter Footage**:
+The exact HeyGen output version that the user has watched in full and accepted for lip synchronization, expression, motion, framing, identity, and visual stability before post-production begins.
+_Avoid_: task completion status as approval, partial preview, packaging an unreviewed render, a regenerated presenter video inheriting approval
+
+**Deterministic Digital Avatar Composition Fallback**:
+The automatic switch from unavailable or failed HyperFrames composition to an FFmpeg template implementation of the same confirmed narration, presenter, evidence, support-visual, timing, caption, and delivery contract without reopening the interview or plan confirmation, with the actual composition path disclosed at final delivery.
+_Avoid_: blocking solely because HyperFrames is unavailable, silently changing the confirmed creative contract, adding unconfirmed assets or claims, promising HyperFrames-specific effects in the fallback output
+
+**Packaging-Only Digital Avatar Revision**:
+A natural-language change to captions, title or parameter layout, BGM, transitions, or the timing and placement of already accepted presenter and visual inputs that creates a new local render version in the same run without regenerating Fish Audio or HeyGen footage.
+_Avoid_: restarting the interview, overwriting the rejected render, changing narration or facts under a packaging label, calling a paid provider without renewed authorization
+
+**Digital Avatar Provider Attempt**:
+An immutable versioned Fish Audio or HeyGen generation record containing its confirmed input versions, provider settings, external task identity where applicable, output, cost evidence, review outcome, and rejection reason.
+_Avoid_: overwriting a rejected result, an unrecorded retry, treating provider completion as acceptance
+
+**Authorized Digital Avatar Retry**:
+A user-approved paid regeneration inside the same digital-avatar run that creates a new provider attempt and invalidates every downstream confirmation derived from the replaced output.
+_Avoid_: silent retry, automatic resubmission, inheriting approval, deleting rejected attempts
+
 **Video Planning Entrypoint**:
 The user-facing `$tuolin-video-planner` skill that owns one video planning run from goal discovery through shot-plan confirmation and automatic SRT delivery.
 _Avoid_: `$tuolin-video-workflow`, an internal script name, a mode flag on the complete production workflow
 
 **Explicit Video Agent Invocation**:
-The requirement that a user name either `$tuolin-video-planner` or `$tuolin-video-workflow` before any video planning or production run is created.
+The requirement that a user name `$tuolin-video-planner`, `$tuolin-video-workflow`, or `$tuolin-avatar-video` before the corresponding video run is created.
 _Avoid_: intent-based automatic routing, a “which video agent?” fallback question, treating “make a video” as sufficient selection
 
 **Video Planning Knowledge Interface**:
@@ -1143,7 +1267,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - `dexhunter/seedance2-skill` is internalized as Seedance/Dreamina prompt grammar and structure, not as a business taxonomy source.
 - The **Video Planning Quality Criteria** must be applied to the **Confirmed Video Brief** and carried through plan, storyboard, prompt generation, Dreamina job planning, and quality checks.
 - The current upgrade focuses on **Frame Continuity Upgrade** and **Confirmed Storyboard SRT** generation; it intentionally does not add TTS, BGM, subtitle burn-in, or Jianying automation.
-- The term "Hyperframes" is treated as a possible implementation inspiration for frame continuity, not as a confirmed dependency, until a specific open-source/free project is selected.
+- Within `$tuolin-video-workflow`, frame continuity remains a Tuolin-owned planning method and does not depend on HyperFrames; the confirmed HyperFrames composition dependency belongs only to the separate `$tuolin-avatar-video` consumer.
 - The workflow order is: identify a quartz-fiber-tape video request; load the current product's published knowledge card and official images; complete the **Video Creation Interview**; convert the confirmed interview decisions into and confirm the formal video plan; generate and confirm the **Visual Storyboard** and **Confirmed Storyboard SRT**; generate the **Dreamina Shot Plan**; hand off paid Dreamina submission; let the operator monitor completion in the Dreamina web interface; then assemble the locally available shot files.
 - A formal video plan must not be generated before the **Video Creation Interview** produces a complete **Confirmed Video Brief**.
 - After the interview is complete, the workflow generates the formal video plan automatically; the user should not have to issue a separate "生成策划" command unless they explicitly want manual control.
@@ -1170,7 +1294,7 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - The **Video Creation Consumer** must read Chinese and English external product names from published knowledge cards instead of defining them itself.
 - The **Video Creation Consumer** uses **Video Creation Context** as its only task-specific knowledge entrypoint.
 - **Video Creation Context** supports the full workflow from the **Video Creation Interview** through Dreamina shot generation and shot review.
-- **Video Workflow Entrypoint** is the only user-facing video skill.
+- **Video Workflow Entrypoint** is the user-facing entrypoint for complete Dreamina generation-and-assembly runs; it does not own planning-only or digital-avatar runs.
 - The one-question-at-a-time interview method is owned by **Video Workflow Entrypoint** itself; users do not install or invoke a separate `grill-me` skill, and no second Agent owns the video run.
 - Dreamina submission is represented as a safe manual handoff when the Agent environment cannot perform paid external submission directly.
 - The user should not need to copy internal script parameters; when manual execution is required, the workflow provides a single PowerShell command.
@@ -1573,14 +1697,76 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Resuming a run restores the latest valid phase and asks only for the current pending confirmation instead of restarting or repeating locked work.
 - Automated checks may inspect Dreamina shot planning and generated-shot availability, but they do not replace the user's **Shot Review** confirmation.
 - The **Video Planning Consumer** is a separate user-facing entrypoint from the **Video Workflow Entrypoint**; adding it does not remove or narrow the complete video workflow.
+- The **Digital Avatar Video Consumer** is a third independent video consumer; it is not a mode or post-production stage of either existing video agent.
+- The **Digital Avatar Video Entrypoint** is named `$tuolin-avatar-video` and owns its own run, confirmation flow, provider actions, and finished-video acceptance boundary.
+- The **Digital Avatar Video Consumer** reads only the **Digital Avatar Video Knowledge Interface**; it does not read another agent's projection, the legacy shared projection, or raw materials directly.
+- A missing, stale, or failed **Digital Avatar Video Knowledge Interface** blocks creation and continuation of a digital-avatar video run.
+- The **Digital Avatar Video Consumer** follows the **Presenter Presence Policy**: the confirmed narration can continue across presenter shots and full-screen evidence cutaways without forcing the avatar to remain visible.
+- The **Digital Avatar Video Consumer** normally drafts narration from the **Digital Avatar Video Knowledge Interface**, but it may instead accept **User-Supplied Avatar Narration**.
+- AI-drafted and user-supplied scripts converge on one **Confirmed Digital Avatar Narration** contract after **Digital Avatar High-Risk Claim Review** and explicit user confirmation.
+- User confirmation is the primary narration approval; the digital-avatar consumer does not perform sentence-by-sentence fact validation or block ordinary creative and marketing language.
+- A detected high-risk conflict must be shown clearly for the user to resolve, but the review does not expand into a general knowledge-base review workflow.
+- After interview sufficiency and candidate-image inspection, the Agent presents one complete **Confirmed Digital Avatar Production Plan** candidate containing the communication strategy, full verbatim narration, target duration, presenter-versus-evidence timeline, selected product visuals, caption treatment, bounded support-image batch, Fish Audio and HeyGen settings, surfaced high-risk claim notes, and estimated combined consumption.
+- The user confirms that plan as one joint content-and-first-execution gate rather than approving the plan, script, image batch, and initial provider submissions separately; the confirmation authorizes exactly one initial attempt for each disclosed paid provider operation.
+- Changing the strategy, narration, duration, presenter-presence intervals, evidence timeline, selected visuals, or surfaced claim resolution invalidates the complete **Confirmed Digital Avatar Production Plan** and every dependent provider confirmation.
+- Product identity, parameters, test results, certifications, and real application or customer claims may be shown only through a **Digital Avatar Evidence Visual** sourced from the dedicated interface and inspected before plan confirmation.
+- A **Generated Digital Avatar Support Visual** may provide abstract backgrounds, explanatory diagrams, parameter layout, and transitions, but it cannot substantiate or replace product evidence.
+- Any generated support visual that depicts the product must use an inspected real product image as its visual constraint and retain generation provenance in the run record; because the user reviews and confirms the joint plan, the Agent adds no viewer-facing AI-generated or simulation label unless the user explicitly requests one. The visual must not invent product geometry, performance, certification, test, customer, or application evidence.
+- Paid support-image generation may begin only under the **Authorized Support-Visual Generation Batch** disclosed inside the confirmed production plan; it receives no separate first-submission prompt.
+- Confirmation of the complete plan covers every listed image without per-image confirmation, but increasing the count, changing a purpose or product reference, switching provider, or regenerating any output requires a new explicit authorization for the changed scope.
+- After plan confirmation, Fish Audio and the authorized support-image batch run in parallel when support images are required.
+- When both finish, the Agent performs one **Digital Avatar Combined Input Review**: the user listens to the complete Fish Audio result and inspects every generated support image in one visual overview and gives one response.
+- HyperFrames may consume generated support images only from the exact **Confirmed Digital Avatar Support-Visual Set** explicitly accepted by the user.
+- Rejected images and their rejection reasons remain in the run; replacing or regenerating an image requires a new paid batch authorization, a new output version, and renewed confirmation of the resulting support-visual set.
+- The confirmed production plan authorizes exactly one initial Fish Audio attempt and, after combined input acceptance, one initial HeyGen attempt using its disclosed versions and settings; there is no additional first-attempt payment prompt.
+- Plan confirmation authorizes execution but does not approve provider outputs or bypass the combined input review and complete-presenter review.
+- Fish Audio, HeyGen, and final packaging may consume only **Confirmed Digital Avatar Narration**; no provider may silently rewrite or replace it.
+- Fish Audio first renders the complete narration track from **Confirmed Digital Avatar Narration**; HeyGen may consume only **Confirmed Digital Avatar Narration Audio**.
+- The user must listen to and explicitly confirm the complete Fish Audio output before HeyGen submission; changing or regenerating that audio clears the confirmation.
+- HyperFrames may consume only **Confirmed Digital Presenter Footage**; a completed HeyGen task is not itself approval to begin packaging.
+- The user must watch the complete HeyGen output and explicitly confirm it before post-production; changing or regenerating presenter footage clears the confirmation.
+- HyperFrames is the preferred creative composition layer, but its unavailability or execution failure automatically activates the **Deterministic Digital Avatar Composition Fallback** rather than blocking or reopening the confirmed plan.
+- The FFmpeg fallback must preserve the confirmed script, timing, presenter footage, evidence visuals, accepted support visuals, captions, and delivery specifications; it may simplify unsupported motion or layout effects but cannot introduce new facts, assets, or creative direction.
+- Switching to the FFmpeg fallback requires no additional user confirmation because final-video acceptance remains mandatory; the delivery report must state whether HyperFrames or the fallback produced the composition.
+- If a final render is rejected for captions, title or parameter layout, BGM, transitions, or the timing and placement of already accepted inputs, the user may request a **Packaging-Only Digital Avatar Revision** in natural language and receive a new render inside the same run.
+- A packaging-only revision preserves the confirmed narration audio, presenter footage, evidence visuals, and support-visual set; it clears only final-render acceptance and requires no repeated interview, plan approval, or paid-provider generation.
+- A requested change to the verbatim narration, Fish Audio, HeyGen footage, product facts, or selected evidence is not packaging-only and invalidates only the affected upstream contract and its dependants; any new paid generation follows the existing retry or changed-scope authorization rule.
+- Rejected composition renders remain versioned with their rejection reasons instead of being overwritten.
+- A rejected Fish Audio or HeyGen result remains as a **Digital Avatar Provider Attempt** in the current run together with its rejection reason.
+- Regeneration requires an **Authorized Digital Avatar Retry** for the exact provider stage; it never silently reuses a prior paid-action confirmation.
+- Every retry creates a new immutable attempt version and invalidates dependent audio, presenter, packaging, and delivery confirmations as applicable without deleting prior evidence.
+- Every digital-avatar run stays inside the **Digital Avatar Platform Scope**; platform selection is task filtering inside the one digital-avatar knowledge interface.
+- One Chinese run owns exactly one **Chinese Digital Avatar Content Master** and produces Kuaishou and Douyin **Digital Avatar Platform Delivery Variants** from it.
+- Kuaishou and Douyin variants reuse the same confirmed narration audio, HeyGen presenter footage, product evidence, and creative timeline; only platform packaging and encoding may differ.
+- Every run defaults to **Digital Avatar Same-Language Burned Captions**: English narration receives English captions and Chinese narration receives Chinese captions; bilingual captions are not generated by default.
+- The Agent owns caption timing, line breaking, styling, and platform-safe placement without asking the user for professional editing choices; Kuaishou and Douyin delivery variants may reposition the same Chinese caption content for their safe areas.
+- A caption-free deliverable is allowed only when the user explicitly opts out before confirming the production plan; silence or omission in the initial request retains the burned-caption default.
+- Digital-avatar delivery defaults to no BGM, and the interview does not ask the user to choose music.
+- The Agent does not search, download, license, or select music; it uses BGM only when the user explicitly supplies a local track and requests its inclusion as a packaging input.
+- `$tuolin-avatar-video` ends only after the user watches the complete final render or renders and explicitly accepts the **Accepted Digital Avatar Delivery Pack**.
+- An English run delivers one validated 9:16 YouTube Shorts file; a Chinese run delivers the validated Kuaishou and Douyin variants together in one accepted pack.
+- The digital-avatar video consumer never logs into or uploads to YouTube, Kuaishou, or Douyin, and final-video acceptance is not publication authorization.
+- Any later publication workflow must be owned by a separate publisher consumer and may consume only the accepted local delivery pack through its own interface and publication confirmation gates.
+- Every digital-avatar run uses exactly one locked **Authorized Brand Presenter** version across its language and platform variants.
+- The first release uses one **First-Release Public Presenter** selected inside the paid HeyGen account; changing to a custom digital twin later replaces the controlled avatar version without changing the production workflow.
+- A paid HeyGen account establishes service and public-avatar entitlement but does not replace required consent or rights for any user-uploaded likeness, source image, or cloned voice.
+- Every digital-avatar run completes its own **Digital Avatar Video Interview** before generating a video plan; another video agent's brief or run state cannot satisfy this gate.
+- The interview adapts the existing video-creation reasoning method: ask one load-bearing business question at a time, provide one recommendation with a concrete reason, and recompute the next question after each answer.
+- The interview ends only at **Digital Avatar Interview Decision Sufficiency**; shot count, timing, motion, layout, caption styling, and provider translation remain professional Agent decisions reviewed in later artifacts.
+- Every run confirms one **Digital Avatar Video Duration** during the interview and cannot enter planning with an implicit or unconfirmed duration.
+- Every run follows **Digital Avatar Trend-Research Exclusion**; public YouTube, Douyin, or Kuaishou trend research is not a stage or optional branch of the digital-avatar workflow.
+- Before a digital-avatar plan is shown, every candidate official image considered for that plan must become a **Visually Inspected Candidate Image**; filename or metadata review alone is insufficient.
+- If inspected evidence cannot support the confirmed **Digital Avatar Video Duration** without filler, accidental duplication, or invented product appearance, planning remains blocked until the user approves a shorter duration, deliberate repetition, or a bounded simulation treatment.
 - The **Video Planning Entrypoint** is named `$tuolin-video-planner`; it owns planning runs only, while `$tuolin-video-workflow` remains the complete generation-and-assembly entrypoint.
-- **Explicit Video Agent Invocation** is mandatory: generic video language never routes automatically and does not create a run until the user names one of the two video agents.
-- The two video agents own separate skills, knowledge-interface contracts, state machines, run schemas, and terminal phases; they may share only business-neutral media inspection, asset-access, atomic-file, and SRT-validation primitives.
+- **Explicit Video Agent Invocation** is mandatory: generic video language never routes automatically and does not create a run until the user names one of the three video agents.
+- The three video agents own separate skills, knowledge-interface contracts, state machines, run schemas, and terminal phases; they may share only business-neutral media inspection, asset-access, atomic-file, and SRT-validation primitives.
 - The planning agent must not import or expose the complete workflow's trend-research, Dreamina, submission, download, retry, or assembly stages, and the complete workflow must not gain a planning-only mode flag.
 - The **Video Planning Consumer** ends after the user confirms one **Production-Ready Shot Plan** and never continues into provider-specific prompts, paid generation, result download, or video assembly.
 - A **Production-Ready Shot Plan** gives the user enough shot, source-material, narration, transition, and editing detail to generate footage with a provider of their choice and finish it in their own editing software.
 - The **Video Planning Consumer** does not perform public trend research; it may use **Video Planning Inference** to recommend a hook, narrative, and shot treatment while keeping every product fact inside the formal knowledge boundary.
 - Every downstream agent reads exactly its own **Agent-Specific Knowledge Read Interface**; agents may share formal source knowledge but never a downstream projection or another agent's interface contract.
+- **Downstream Interface Ownership Granularity** follows agent responsibility rather than product, platform, language, or run identity; task-specific filters never create another knowledge interface.
+- Every newly introduced downstream agent must register and verify its own interface in its first release; the **Legacy Shared Knowledge Interface** exception applies only to pre-existing unmigrated consumers and may not be extended to new consumers.
 - A successful formal knowledge write triggers one **Knowledge Interface Refresh Transaction** without requiring a user command; failure to rebuild or verify any registered required interface makes the knowledge operation incomplete and keeps the stale interface unavailable to its consumer.
 - The **Video Planning Consumer** reads only the **Video Planning Knowledge Interface**, supports any product validly published through that interface, and never falls back to the complete workflow's `video_creation` projection or to raw materials.
 - Agent-specific interface adoption is phased: this release introduces the registry and refresh transaction and migrates only `$tuolin-video-planner`; unmigrated agents may temporarily retain the **Legacy Shared Knowledge Interface** without weakening the new planner's isolation.
@@ -1618,6 +1804,78 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - Every planning interview resolves the **Planning Viewer Action**, but the narration includes a spoken CTA only when the user explicitly confirms that action; the agent never adds a default sales CTA or designs on-screen CTA content.
 
 ## Example Dialogue
+
+> **Dev:** "Should digital-avatar narration be added as the final stage of a Dreamina video run?"
+> **Domain expert:** "No. Start a separate **Digital Avatar Video Consumer** run through `$tuolin-avatar-video`; it owns presenter generation and finished-video packaging without changing either existing workflow."
+
+> **Dev:** "Must the digital presenter remain on screen while a product parameter is explained?"
+> **Domain expert:** "No. Under the **Presenter Presence Policy**, keep the narration continuous and let the verified product evidence use the full canvas when readability requires it."
+
+> **Dev:** "Can `$tuolin-avatar-video` reuse the video planner's catalog because both need product images?"
+> **Domain expert:** "No. It reads only the **Digital Avatar Video Knowledge Interface**; both projections derive from the same formal knowledge but remain independently filtered, versioned, and verified."
+
+> **Dev:** "Does an English YouTube run need a new knowledge interface separate from a Chinese TikTok run?"
+> **Domain expert:** "No. **Downstream Interface Ownership Granularity** gives `$tuolin-avatar-video` one interface; product, platform, language, and run scope are filters inside it."
+
+> **Dev:** "Can a customer-supplied script go directly to Fish Audio because the wording is already final?"
+> **Domain expert:** "Not immediately. Treat it as **User-Supplied Avatar Narration**, surface only high-risk conflicts, and let the user confirm the **Confirmed Digital Avatar Narration** before any provider action."
+
+> **Dev:** "Should the Agent verify every sentence after the user has reviewed the complete narration?"
+> **Domain expert:** "No. Apply **Digital Avatar High-Risk Claim Review** to consequential conflicts and keep ordinary wording under user confirmation."
+
+> **Dev:** "Should a Chinese run pay for separate Fish Audio and HeyGen generations for Kuaishou and Douyin?"
+> **Domain expert:** "No. Confirm one **Chinese Digital Avatar Content Master** and derive two **Digital Avatar Platform Delivery Variants** in the packaging layer."
+
+> **Dev:** "Does purchasing a HeyGen membership authorize any face we upload as the brand presenter?"
+> **Domain expert:** "No. An **Authorized Brand Presenter** requires both the paid service entitlement and the applicable likeness rights or consent."
+
+> **Dev:** "Must the first release create a custom digital twin before the pipeline can be tested?"
+> **Domain expert:** "No. Lock one **First-Release Public Presenter** from the paid HeyGen account and preserve the ability to replace its avatar ID later."
+
+> **Dev:** "Can `$tuolin-avatar-video` generate a plan as soon as the user names a product and platform?"
+> **Domain expert:** "No. Complete the **Digital Avatar Video Interview** until **Digital Avatar Interview Decision Sufficiency**, including a confirmed 30–90 second **Digital Avatar Video Duration**."
+
+> **Dev:** "Should the digital-avatar interview scan current platform trends before recommending a hook?"
+> **Domain expert:** "No. Apply **Digital Avatar Trend-Research Exclusion** and use the confirmed audience problem, dedicated knowledge, inspected materials, and general creative judgment."
+
+> **Dev:** "Can confirmed narration text authorize HeyGen as soon as Fish Audio finishes?"
+> **Domain expert:** "No. The user must first listen to and approve the exact **Confirmed Digital Avatar Narration Audio** version."
+
+> **Dev:** "Can HyperFrames begin as soon as the HeyGen task reports completion?"
+> **Domain expert:** "No. The user must watch and approve the exact **Confirmed Digital Presenter Footage** version before packaging."
+
+> **Dev:** "Should a rejected HeyGen render be overwritten when the user asks for another attempt?"
+> **Domain expert:** "No. Preserve it as a **Digital Avatar Provider Attempt** and create a new version only after an **Authorized Digital Avatar Retry**."
+
+> **Dev:** "Can we confirm the creative outline first and approve the verbatim narration after Fish Audio has already been generated?"
+> **Domain expert:** "No. The complete script, presenter-presence intervals, and product-evidence timeline belong to one **Confirmed Digital Avatar Production Plan**; Fish Audio starts only after the user approves that joint version."
+
+> **Dev:** "Must every AI-generated product support visual display a visible 'illustration' label?"
+> **Domain expert:** "No. The user participates in and confirms the joint plan, so add no on-screen AI-generated or simulation label unless the user explicitly asks for one. Preserve internal provenance; the visual still cannot independently prove a product fact."
+
+> **Dev:** "Does the user need to confirm every planned support image as a separate paid action?"
+> **Domain expert:** "No. Put one bounded **Authorized Support-Visual Generation Batch** with count, purposes, references, provider, and estimated consumption inside the complete plan confirmation; any added image or retry needs a new authorization."
+
+> **Dev:** "Can HyperFrames start when the image provider reports that the authorized batch is complete?"
+> **Domain expert:** "No. Perform one **Digital Avatar Combined Input Review** covering the complete Fish Audio result and every generated image, then wait for the user's single response."
+
+> **Dev:** "Must the user approve the first Fish Audio charge and then answer another payment question before the first HeyGen submission?"
+> **Domain expert:** "No. Confirmation of the complete production plan authorizes the disclosed first attempts. Ask again only for changed scope or a retry; still review the full generated inputs and presenter output at their quality gates."
+
+> **Dev:** "Should a HyperFrames outage force the user to repeat the interview or reconfirm the production plan?"
+> **Domain expert:** "No. Activate the **Deterministic Digital Avatar Composition Fallback**, preserve the confirmed content and timeline, simplify only unsupported effects, and disclose the actual composition path at final delivery."
+
+> **Dev:** "Should the Agent ask whether every English or Chinese short needs captions and what style to use?"
+> **Domain expert:** "No. Default to **Digital Avatar Same-Language Burned Captions**, let the Agent handle styling and safe placement, and ask no subtitle-design question unless the user explicitly requests a caption-free result."
+
+> **Dev:** "Should the workflow search for a commercially usable BGM track to make the result feel more complete?"
+> **Domain expert:** "No. Default to no BGM and ask no music question; use a track only when the user explicitly supplies it for packaging."
+
+> **Dev:** "Does approving the final digital-avatar video also authorize uploading it to YouTube, Kuaishou, or Douyin?"
+> **Domain expert:** "No. Approval creates an **Accepted Digital Avatar Delivery Pack** and ends the production run; a separate publisher Agent owns platform access and publication authorization."
+
+> **Dev:** "Must a subtitle-layout or transition complaint restart Fish Audio and HeyGen?"
+> **Domain expert:** "No. Create a **Packaging-Only Digital Avatar Revision** in the same run and rerender locally; return upstream only when the requested change actually affects narration, provider output, facts, or evidence."
 
 > **Dev:** "When the search finds someone whose profile mentions exhaust wrap, have we found a customer?"
 > **Domain expert:** "No. We have a **LinkedIn Discovery Candidate**; the workflow still needs evidence-based relevance checks before considering a **Connection Invitation**."
@@ -2328,7 +2586,33 @@ _Avoid_: rewinding the initial planning state, silently replacing accepted gener
 - “创意方向” was previously modeled as 16 fixed categories with primary and supporting selections. Resolved: remove that taxonomy and use a **Video Creation Interview** to produce a **Confirmed Video Brief**.
 - “镜头策划” could mean an abstract outline, the existing Dreamina-oriented storyboard, or a complete edited result. Resolved for the new planning agent: use **Production-Ready Shot Plan**, a provider-neutral final deliverable that stops before generation and editing execution.
 - “视频策划 agent” now refers canonically to the **Video Planning Entrypoint** `$tuolin-video-planner`, not to a mode of `$tuolin-video-workflow`.
-- An unqualified request to “make a video” could have triggered intent-based routing between the two video agents. Rejected: require **Explicit Video Agent Invocation** and never choose or ask the routing question on the user's behalf.
+- “数字人口播视频” could mean a final-editing extension of an existing video run or a distinct production workflow. Resolved: use the independent **Digital Avatar Video Consumer** through `$tuolin-avatar-video`; neither existing video agent gains a digital-avatar or final-packaging mode.
+- “口播为主” could mean either continuous narration or an always-visible avatar. Resolved: the **Presenter Presence Policy** keeps narration continuous while allowing the presenter to leave the frame for full-screen verified product evidence.
+- A new downstream agent could have treated phased legacy-interface migration as permission to reuse `generated/agent-interface/`. Rejected: every new consumer, including `$tuolin-avatar-video`, must ship with its own verified **Agent-Specific Knowledge Read Interface** and may never inherit the legacy exception.
+- “不同场景专用接口” could mean one projection per agent responsibility or one projection per product, platform, language, and run. Resolved: **Downstream Interface Ownership Granularity** is one interface per downstream agent responsibility, with task-specific filtering inside that interface.
+- “已有口播稿” could mean production-ready text or merely operator-authored text. Resolved: it is **User-Supplied Avatar Narration** until lightweight high-risk review and explicit confirmation produce **Confirmed Digital Avatar Narration**.
+- “事实校验” was initially modeled as validation of every product statement. Superseded: **Digital Avatar High-Risk Claim Review** checks only consequential conflicts, while the deeply involved user owns final narration approval.
+- “数字人口播发布平台” was open-ended. Resolved: **Digital Avatar Platform Scope** maps English runs to 9:16 YouTube Shorts and Chinese runs to Kuaishou and Douyin.
+- “快手版和抖音版” could mean two independently generated videos. Resolved: one **Chinese Digital Avatar Content Master** produces two packaging-and-encoding **Digital Avatar Platform Delivery Variants** without repeating narration or presenter generation.
+- “开通 HeyGen 会员” could be mistaken for authorization to use any person's likeness. Resolved: membership covers service entitlement; an **Authorized Brand Presenter** separately records the avatar identity, version, commercial-use basis, and required consent.
+- “固定品牌数字人” could imply that a custom digital twin is required before the first release. Resolved: start with one **First-Release Public Presenter** and treat a later custom digital twin as a replaceable avatar-version upgrade.
+- “参考视频创作 Agent 访谈” could mean sharing its run state or copying a fixed question list. Resolved: `$tuolin-avatar-video` owns an independent **Digital Avatar Video Interview** that reuses the one-question reasoning method but reads only its own interface and creates its own confirmed brief.
+- “支持 30–90 秒” could mean an Agent-selected default or a user-confirmed range. Resolved: every run confirms one whole-number **Digital Avatar Video Duration** from 30 through 90 seconds during the interview before planning.
+- “参考视频创作 Agent” could imply inheriting its mandatory YouTube trend scan. Rejected: **Digital Avatar Trend-Research Exclusion** removes all platform-trend research from `$tuolin-avatar-video` while leaving the existing complete video workflow unchanged.
+- “口播稿已确认” could be mistaken for approval of any synthesized delivery. Resolved: HeyGen remains blocked until the user listens to and approves one exact **Confirmed Digital Avatar Narration Audio** version; regeneration invalidates that approval.
+- “HeyGen 已生成” could be mistaken for approval to start packaging. Resolved: HyperFrames remains blocked until the user watches and approves one exact **Confirmed Digital Presenter Footage** version; regeneration invalidates that approval.
+- “重新生成” could mean silently rerunning a paid provider or replacing the previous file. Resolved: require an **Authorized Digital Avatar Retry**, preserve every **Digital Avatar Provider Attempt**, and invalidate all dependent confirmations.
+- “确认口播策划” could mean approving only an outline while leaving the verbatim narration and visual timing mutable. Resolved: approve one **Confirmed Digital Avatar Production Plan** containing the strategy, full script, and presenter-versus-evidence timeline before Fish Audio; changing any component invalidates the joint approval.
+- “可以生成产品画面” could mean allowing synthetic imagery to establish product facts or automatically adding a visible disclaimer. Resolved: generated material is a **Generated Digital Avatar Support Visual** only; product identity and consequential claims require a **Digital Avatar Evidence Visual**, generated product depictions are constrained by real inspected product imagery, internal provenance is retained, and no viewer-facing AI-generated or simulation label is added unless the participating user explicitly requests one.
+- “确认生成辅助图片” could mean approving each image separately, granting unlimited generation, or adding a separate first-submission prompt. Resolved: embed one bounded **Authorized Support-Visual Generation Batch** in the complete production-plan confirmation; any scope increase or regeneration requires new authorization.
+- “辅助图片和声音都要确认” could create two serial prompts. Resolved: run Fish Audio and the support-image batch in parallel, then use one **Digital Avatar Combined Input Review** to establish the confirmed audio and support-visual set with one response.
+- “每个付费服务都要确认” could create redundant first-attempt prompts for Fish Audio and HeyGen. Resolved: confirmation of the **Confirmed Digital Avatar Production Plan** authorizes all disclosed initial provider attempts; ask again only for changed scope or retries, while keeping required output-quality reviews.
+- “HyperFrames 是首选” could make plugin failure block the entire run or trigger repeated planning. Resolved: automatically use the **Deterministic Digital Avatar Composition Fallback** through FFmpeg, preserve the confirmed contract, simplify only unsupported effects, and disclose the composition path during final delivery without adding another confirmation gate.
+- “口播视频字幕” could mean optional platform captions, bilingual text, or another interview decision. Resolved: default to **Digital Avatar Same-Language Burned Captions**, keep English and Chinese runs monolingual, let the Agent handle style and safe-area placement, and omit them only after an explicit pre-plan user request.
+- “自动包装” could imply searching, selecting, or licensing background music. Rejected for simplicity: default to no BGM, ask no interview question about it, and use music only when the user explicitly supplies a local track.
+- “确认最终成片” could be mistaken for authorization to publish externally. Rejected: it creates an **Accepted Digital Avatar Delivery Pack** of local validated files and ends `$tuolin-avatar-video`; platform login, upload, and publication confirmation belong to a separate publisher Agent.
+- “成片不满意” could force an expensive restart even when only local presentation needs adjustment. Resolved: allow a **Packaging-Only Digital Avatar Revision** for captions, layout, BGM, transitions, and accepted-input timing; invalidate upstream stages only when their actual contracts change.
+- An unqualified request to “make a video” could trigger intent-based routing among the three video agents. Rejected: require **Explicit Video Agent Invocation** and never choose or ask the routing question on the user's behalf.
 - “基于旧 agent” could mean copying its large state machine or running it in a reduced mode. Resolved: create an independent planning state machine and share only business-neutral technical primitives with the complete workflow.
 - “不搜索趋势” could be interpreted as forbidding the model from making creative judgments. Resolved: the new planning agent may make disclosed **Video Planning Inferences**, but it must not present them as current trends or use them to invent product facts.
 - “独立知识读取接口” could mean duplicating and separately maintaining product knowledge. Resolved: use an **Agent-Specific Knowledge Read Interface**—an independent generated projection with its own contract and revision, built automatically from the one formal knowledge source.

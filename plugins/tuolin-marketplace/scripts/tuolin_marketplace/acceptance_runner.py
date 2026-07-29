@@ -201,6 +201,29 @@ def run_acceptance(project_dir: Path | None = None, write_report: bool = True) -
         )
     )
 
+    avatar_skill = plugin_root / "skills" / "tuolin-avatar-video" / "SKILL.md"
+    avatar_metadata = plugin_root / "skills" / "tuolin-avatar-video" / "agents" / "openai.yaml"
+    avatar_runtime = plugin_root / "scripts" / "tuolin_marketplace" / "avatar_video" / "agent.py"
+    avatar_cli = plugin_root / "scripts" / "avatar_video_workflow.py"
+    checks.append(
+        _check(
+            "AC-AVATAR-AFK",
+            "数字人口播独立入口与AFK实现已打包，真实付费HITL仍单独待验收",
+            (),
+            all(path.is_file() for path in (avatar_skill, avatar_metadata, avatar_runtime, avatar_cli))
+            and "allow_implicit_invocation: false" in avatar_metadata.read_text(encoding="utf-8")
+            and "$tuolin-avatar-video" in avatar_skill.read_text(encoding="utf-8"),
+            {
+                "afk_status": "implemented_and_tested",
+                "real_paid_hitl": False,
+                "real_paid_hitl_status": "pending_explicit_user_authorization_and_review",
+                "skill": str(avatar_skill),
+                "runtime": str(avatar_runtime),
+                "cli": str(avatar_cli),
+            },
+        )
+    )
+
     report = _report(paths, checks)
     if write_report:
         report_path = paths.generated_dir / "reports" / "ACCEPTANCE_REPORT.md"

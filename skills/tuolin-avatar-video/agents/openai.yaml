@@ -1,0 +1,6 @@
+interface:
+  display_name: "拓霖数字人口播"
+  short_description: "Fish Audio、HeyGen 与自动包装生成竖屏产品口播"
+  default_prompt: "使用 $tuolin-avatar-video 为正式产品创建30–90秒数字人口播；英文用于 YouTube Shorts，中文用于快手和抖音。"
+policy:
+  allow_implicit_invocation: false

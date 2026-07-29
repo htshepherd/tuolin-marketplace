@@ -15,7 +15,7 @@ codex plugin list
 
 Open a new Codex conversation after installation. Use the plugin with Chinese natural-language requests; end users do not need to invoke its internal scripts.
 
-Version 1.56.0 automatically discovers `<project-dir>/config/tuolin-kb.config.json` for every internal entry point. Configured absolute MinerU and ffmpeg paths are reused directly; knowledge workflows do not create replacement Python environments or reinstall MinerU implicitly.
+Version 2.0.0 automatically discovers `<project-dir>/config/tuolin-kb.config.json` for every internal entry point. Configured absolute MinerU and ffmpeg paths are reused directly; knowledge workflows do not create replacement Python environments or reinstall MinerU implicitly.
 
 To upgrade an existing installation:
 
@@ -27,7 +27,7 @@ codex plugin list
 
 ## LinkedIn prospect search
 
-Version 1.54.0 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts review-pool workflow. It requires:
+Version 2.0.0 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts review-pool workflow. It requires:
 
 - a writable Tuolin operational workspace; no product knowledge base is required;
 - the official `chrome@openai-bundled` plugin;

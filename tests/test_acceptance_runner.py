@@ -13,8 +13,8 @@ class AcceptanceRunnerTests(unittest.TestCase):
             report = run_acceptance(Path(tmp), write_report=True)
 
             self.assertTrue(report["passed"])
-            self.assertEqual(report["check_count"], 11)
-            self.assertEqual(report["passed_count"], 11)
+            self.assertEqual(report["check_count"], 12)
+            self.assertEqual(report["passed_count"], 12)
             self.assertTrue(all(report["prd_use_case_coverage"].values()))
             self.assertTrue(Path(report["report_path"]).is_file())
 
@@ -27,6 +27,8 @@ class AcceptanceRunnerTests(unittest.TestCase):
             self.assertTrue(checks["AC-011"]["passed"])
             self.assertEqual(checks["AC-001"]["details"]["plugin_manifest_exists"], True)
             self.assertEqual(checks["AC-001"]["details"]["windows_dependency_check_exists"], True)
+            self.assertTrue(checks["AC-AVATAR-AFK"]["passed"])
+            self.assertFalse(checks["AC-AVATAR-AFK"]["details"]["real_paid_hitl"])
 
 
 if __name__ == "__main__":

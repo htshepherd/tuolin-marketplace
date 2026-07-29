@@ -33,6 +33,8 @@ GENERATED_DIRS = [
     "agent-interfaces/tuolin-video-planner",
     "agent-interfaces/tuolin-video-planner/cards",
     "agent-interfaces/tuolin-video-planner/video-profiles/details",
+    "agent-interfaces/tuolin-avatar-video",
+    "agent-interfaces/tuolin-avatar-video/cards",
     "reports",
     "cache",
     "cache/pdf-markdown",

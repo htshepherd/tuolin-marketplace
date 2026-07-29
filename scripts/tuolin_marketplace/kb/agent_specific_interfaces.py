@@ -17,6 +17,7 @@ from .video_usage_policy import evaluate_video_usage_policy
 
 
 VIDEO_PLANNER_AGENT_ID = "tuolin-video-planner"
+AVATAR_VIDEO_AGENT_ID = "tuolin-avatar-video"
 VIDEO_PLANNER_CARD_TYPES = (
     "product",
     "application_scenario",
@@ -26,6 +27,8 @@ VIDEO_PLANNER_CARD_TYPES = (
     "video_profile",
 )
 VIDEO_PLANNER_ALLOWED_SCOPES = {"external_allowed", "review_before_external", "evidence_only"}
+AVATAR_VIDEO_CARD_TYPES = VIDEO_PLANNER_CARD_TYPES
+AVATAR_VIDEO_ALLOWED_SCOPES = VIDEO_PLANNER_ALLOWED_SCOPES
 
 
 @dataclass(frozen=True)
@@ -215,17 +218,196 @@ def verify_video_planner_interface(paths: ProjectPaths, built: dict[str, Any]) -
     }
 
 
+def rebuild_avatar_video_interface(
+    paths: ProjectPaths,
+    *,
+    source_interface_revision: str,
+    action: str,
+    expected_card_ids: list[str] | tuple[str, ...] = (),
+) -> dict[str, Any]:
+    source_cards = _read_json(paths.generated_dir / "indexes" / "cards.json")
+    selected = [_project_card(card) for card in source_cards if _avatar_video_card_allowed(card)]
+    selected.sort(key=lambda item: (str(item.get("type")), str(item.get("id"))))
+    selected_ids = {str(card["id"]) for card in selected}
+    root = agent_interface_root(paths, AVATAR_VIDEO_AGENT_ID)
+    root.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = root.parent / f".{AVATAR_VIDEO_AGENT_ID}.staging-{uuid.uuid4().hex}"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    interface_revision = "avatar_video_" + _json_digest(
+        [(item.get("id"), item.get("projection_fingerprint")) for item in selected]
+    )[:20]
+
+    try:
+        cards_dir = staging_root / "cards"
+        cards_dir.mkdir(parents=True, exist_ok=False)
+        by_type = {card_type: [] for card_type in AVATAR_VIDEO_CARD_TYPES}
+        for card in selected:
+            by_type[str(card["type"])].append(card)
+        for card_type, cards in by_type.items():
+            _write_json(cards_dir / f"{card_type}.json", cards)
+        products = [
+            {
+                "id": card["id"],
+                "title": card["title"],
+                "aliases": card.get("aliases", []),
+                "tags": card.get("tags", []),
+                "projection_fingerprint": card["projection_fingerprint"],
+            }
+            for card in by_type["product"]
+        ]
+        _write_json(staging_root / "products.json", products)
+        _write_json(staging_root / "search_index.json", _build_search_index(selected))
+        expected = tuple(dict.fromkeys(str(item) for item in expected_card_ids))
+        eligible_expected = [
+            str(card["id"])
+            for card in source_cards
+            if str(card.get("id")) in expected and _avatar_video_card_allowed(card)
+        ]
+        missing_expected = [card_id for card_id in eligible_expected if card_id not in selected_ids]
+        if missing_expected:
+            raise RuntimeError(
+                "Avatar-video interface refresh verification failed after "
+                f"{action}: missing expected cards: {', '.join(missing_expected)}"
+            )
+        manifest = {
+            "schema_version": "tuolin-agent-interface-v1",
+            "agent_id": AVATAR_VIDEO_AGENT_ID,
+            "generated_at": generated_at,
+            "interface_revision": interface_revision,
+            "source_knowledge_revision": source_interface_revision,
+            "raw_access": False,
+            "cards": "cards/",
+            "products": "products.json",
+            "search_index": "search_index.json",
+            "card_types": list(AVATAR_VIDEO_CARD_TYPES),
+            "policy": {
+                "supported_platforms": {
+                    "en": ["youtube_shorts"],
+                    "zh": ["kuaishou", "douyin"],
+                },
+                "supported_languages": ["zh", "en"],
+                "duration_seconds": {"minimum": 30, "maximum": 90},
+                "aspect_ratio": "9:16",
+                "public_trend_search": False,
+                "default_bgm": False,
+                "same_language_burned_captions": True,
+            },
+            "counts": {"cards": len(selected), "products": len(products)},
+            "verification": {
+                "verified": True,
+                "action": action,
+                "eligible_expected_card_ids": eligible_expected,
+                "excluded_expected_card_ids": [item for item in expected if item not in eligible_expected],
+            },
+        }
+        _write_json(staging_root / "manifest.json", manifest)
+        if _read_json(staging_root / "manifest.json").get("interface_revision") != interface_revision:
+            raise RuntimeError("Avatar-video staged manifest revision mismatch")
+        _promote_interface_snapshot(root, staging_root)
+    except Exception:
+        if staging_root.exists():
+            shutil.rmtree(staging_root)
+        raise
+    persisted = read_avatar_video_manifest(paths)
+    if persisted.get("interface_revision") != interface_revision:
+        raise RuntimeError("Avatar-video interface persisted revision mismatch")
+    return {
+        "agent_id": AVATAR_VIDEO_AGENT_ID,
+        "verified": True,
+        "interface_revision": interface_revision,
+        "source_knowledge_revision": source_interface_revision,
+        "generated_at": generated_at,
+        "card_count": len(selected),
+        "product_count": len(products),
+        "verified_card_ids": eligible_expected,
+    }
+
+
+def verify_avatar_video_interface(paths: ProjectPaths, built: dict[str, Any]) -> dict[str, Any]:
+    manifest = read_avatar_video_manifest(paths)
+    products = read_avatar_video_products(paths)
+    if manifest.get("interface_revision") != built.get("interface_revision"):
+        raise RuntimeError("Avatar-video verifier found a manifest revision mismatch")
+    if len(products) != int(manifest.get("counts", {}).get("products", -1)):
+        raise RuntimeError("Avatar-video verifier found a product count mismatch")
+    persisted_ids = {
+        str(card.get("id"))
+        for card_type in AVATAR_VIDEO_CARD_TYPES
+        for card in read_avatar_video_cards(paths, card_type)
+    }
+    missing = [card_id for card_id in built.get("verified_card_ids", []) if card_id not in persisted_ids]
+    if missing:
+        raise RuntimeError("Avatar-video verifier is missing expected cards: " + ", ".join(missing))
+    return {
+        "verified": True,
+        "agent_id": AVATAR_VIDEO_AGENT_ID,
+        "interface_revision": manifest["interface_revision"],
+        "verified_card_ids": list(built.get("verified_card_ids", [])),
+    }
+
+
 REGISTERED_AGENT_INTERFACES = (
     AgentInterfaceRegistration(
         agent_id=VIDEO_PLANNER_AGENT_ID,
         builder=rebuild_video_planner_interface,
         verifier=verify_video_planner_interface,
     ),
+    AgentInterfaceRegistration(
+        agent_id=AVATAR_VIDEO_AGENT_ID,
+        builder=rebuild_avatar_video_interface,
+        verifier=verify_avatar_video_interface,
+    ),
 )
 
 
 def read_video_planner_manifest(paths: ProjectPaths) -> dict[str, Any]:
     return _read_json(agent_interface_root(paths, VIDEO_PLANNER_AGENT_ID) / "manifest.json")
+
+
+def read_avatar_video_manifest(paths: ProjectPaths) -> dict[str, Any]:
+    return _read_json(agent_interface_root(paths, AVATAR_VIDEO_AGENT_ID) / "manifest.json")
+
+
+def read_avatar_video_products(paths: ProjectPaths) -> list[dict[str, Any]]:
+    return _read_json(agent_interface_root(paths, AVATAR_VIDEO_AGENT_ID) / "products.json")
+
+
+def read_avatar_video_cards(paths: ProjectPaths, card_type: str) -> list[dict[str, Any]]:
+    if card_type not in AVATAR_VIDEO_CARD_TYPES:
+        raise ValueError(f"Unsupported avatar-video card type: {card_type}")
+    return _read_json(agent_interface_root(paths, AVATAR_VIDEO_AGENT_ID) / "cards" / f"{card_type}.json")
+
+
+def read_avatar_video_card(paths: ProjectPaths, card_id: str) -> dict[str, Any]:
+    for card_type in AVATAR_VIDEO_CARD_TYPES:
+        for card in read_avatar_video_cards(paths, card_type):
+            if card.get("id") == card_id:
+                return card
+    raise KeyError(f"avatar-video card not found: {card_id}")
+
+
+def search_avatar_video_cards(
+    paths: ProjectPaths,
+    query: str,
+    *,
+    product_id: str | None = None,
+    card_types: tuple[str, ...] | list[str] = (),
+    limit: int = 30,
+) -> list[dict[str, Any]]:
+    terms = [item.casefold() for item in re.split(r"[\s，。；、,.!?！？:：]+", query) if item]
+    required_types = set(card_types)
+    results: list[tuple[int, str, dict[str, Any]]] = []
+    for item in _read_json(agent_interface_root(paths, AVATAR_VIDEO_AGENT_ID) / "search_index.json"):
+        if required_types and item.get("type") not in required_types:
+            continue
+        if product_id and product_id not in item.get("related_product_ids", []):
+            continue
+        text = str(item.get("text") or "").casefold()
+        if terms and not all(term in text for term in terms):
+            continue
+        results.append((sum(text.count(term) for term in terms), str(item.get("id")), item))
+    results.sort(key=lambda row: (-row[0], row[1]))
+    return [row[2] for row in results[:limit]]
 
 
 def read_video_planner_products(paths: ProjectPaths) -> list[dict[str, Any]]:
@@ -353,6 +535,14 @@ def _planner_card_allowed(card: dict[str, Any]) -> bool:
     if card.get("type") == "review_item":
         return card.get("status") != "archived"
     return card.get("status") == "official" and card.get("usage_scope") in VIDEO_PLANNER_ALLOWED_SCOPES
+
+
+def _avatar_video_card_allowed(card: dict[str, Any]) -> bool:
+    if card.get("type") not in AVATAR_VIDEO_CARD_TYPES:
+        return False
+    if card.get("type") == "review_item":
+        return card.get("status") != "archived"
+    return card.get("status") == "official" and card.get("usage_scope") in AVATAR_VIDEO_ALLOWED_SCOPES
 
 
 def _project_card(card: dict[str, Any]) -> dict[str, Any]:

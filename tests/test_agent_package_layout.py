@@ -63,6 +63,60 @@ class AgentPackageLayoutTests(unittest.TestCase):
         self.assertIn("Dreamina", legacy)
         self.assertIn("public YouTube scan", legacy)
 
+    def test_kb_skill_explains_video_visual_permission_in_user_language(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        source = root / "skills" / "tuolin-kb" / "SKILL.md"
+        packaged = (
+            root
+            / "plugins"
+            / "tuolin-marketplace"
+            / "skills"
+            / "tuolin-kb"
+            / "SKILL.md"
+        )
+        content = source.read_text(encoding="utf-8")
+
+        self.assertEqual(content, packaged.read_text(encoding="utf-8"))
+        self.assertIn(
+            "这些视频画面是否允许剪进 YouTube Shorts 和 TikTok 最终成片？",
+            content,
+        )
+        self.assertIn("不要只向用户显示 `internal_only`", content)
+        self.assertIn("最终成片发布前仍需再次人工确认", content)
+
+    def test_avatar_video_skill_runtime_and_plugin_mirror_are_explicit_and_identical(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        pairs = [
+            (root / "skills" / "tuolin-avatar-video" / "SKILL.md", root / "plugins" / "tuolin-marketplace" / "skills" / "tuolin-avatar-video" / "SKILL.md"),
+            (root / "skills" / "tuolin-avatar-video" / "references" / "workflow-contract.md", root / "plugins" / "tuolin-marketplace" / "skills" / "tuolin-avatar-video" / "references" / "workflow-contract.md"),
+            (root / "skills" / "tuolin-avatar-video" / "agents" / "openai.yaml", root / "plugins" / "tuolin-marketplace" / "skills" / "tuolin-avatar-video" / "agents" / "openai.yaml"),
+            (root / "scripts" / "avatar_video_workflow.py", root / "plugins" / "tuolin-marketplace" / "scripts" / "avatar_video_workflow.py"),
+            (root / "scripts" / "tuolin_marketplace" / "avatar_video" / "agent.py", root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "avatar_video" / "agent.py"),
+            (root / "scripts" / "tuolin_marketplace" / "avatar_video" / "provider_adapters.py", root / "plugins" / "tuolin-marketplace" / "scripts" / "tuolin_marketplace" / "avatar_video" / "provider_adapters.py"),
+        ]
+        for source, packaged in pairs:
+            self.assertTrue(source.is_file(), source)
+            self.assertEqual(source.read_bytes(), packaged.read_bytes(), source)
+        metadata = pairs[2][0].read_text(encoding="utf-8")
+        self.assertIn("allow_implicit_invocation: false", metadata)
+        self.assertIn("$tuolin-avatar-video", metadata)
+        self.assertEqual(
+            (root / ".codex-plugin" / "plugin.json").read_bytes(),
+            (root / "plugins" / "tuolin-marketplace" / ".codex-plugin" / "plugin.json").read_bytes(),
+        )
+
+    def test_three_video_agents_keep_separate_explicit_boundaries(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        avatar = (root / "skills" / "tuolin-avatar-video" / "SKILL.md").read_text(encoding="utf-8")
+        planner = (root / "skills" / "tuolin-video-planner" / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (root / "skills" / "tuolin-video-workflow" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("never replaces", avatar)
+        self.assertIn("Do not search trends", avatar)
+        self.assertIn("planning-only", planner)
+        self.assertIn("public YouTube scan", workflow)
+        self.assertNotIn("HyperFrames", planner)
+        self.assertNotIn("HyperFrames", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
