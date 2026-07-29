@@ -2049,4 +2049,20 @@ def _is_partition_organize_request(utterance: str) -> bool:
 
 
 def _looks_like_business_question(utterance: str) -> bool:
-    return any(word in utterance for word in ["适合", "区别", "哪些产品", "产品介绍", "客户场景"])
+    return any(
+        word in utterance
+        for word in [
+            "适合",
+            "区别",
+            "哪些产品",
+            "产品介绍",
+            "客户场景",
+            "最高使用温度",
+            "最大使用温度",
+            "最高工作温度",
+            "最高耐温",
+            "耐温上限",
+            "能耐多少度",
+            "耐多少度",
+        ]
+    )

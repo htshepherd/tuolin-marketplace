@@ -98,6 +98,17 @@ class AgentPackageLayoutTests(unittest.TestCase):
             packaged = root / "plugins" / "tuolin-marketplace" / relative
             self.assertEqual(source.read_bytes(), packaged.read_bytes(), source)
 
+    def test_kb_question_answering_runtime_matches_packaged_plugin(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        relative_paths = (
+            "scripts/tuolin_marketplace/kb/question_answering.py",
+            "scripts/tuolin_marketplace/shared/natural_language.py",
+        )
+        for relative in relative_paths:
+            source = root / relative
+            packaged = root / "plugins" / "tuolin-marketplace" / relative
+            self.assertEqual(source.read_bytes(), packaged.read_bytes(), source)
+
     def test_avatar_video_skill_runtime_and_plugin_mirror_are_explicit_and_identical(self) -> None:
         root = Path(__file__).resolve().parents[1]
         pairs = [

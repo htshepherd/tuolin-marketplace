@@ -51,6 +51,9 @@ def _answer_question(paths: ProjectPaths, question: str, audience: str) -> Answe
         return _answer_products_for_scenario(paths, normalized, audience)
     if "区别" in normalized or "对比" in normalized:
         return _answer_product_difference(paths, normalized, audience)
+    product_attribute = _product_attribute_key(normalized)
+    if product_attribute:
+        return _answer_product_attribute(paths, normalized, audience, product_attribute)
     if _is_product_profile_question(normalized):
         return _answer_product_profile(paths, normalized, audience)
     if "产品介绍" in normalized:
@@ -153,6 +156,49 @@ def _answer_product_intro(paths: ProjectPaths, question: str, audience: str) -> 
         reason=None,
         next_step=None,
         citations=tuple(citations),
+        used_cards=(product["id"],),
+    )
+
+
+def _answer_product_attribute(
+    paths: ProjectPaths,
+    question: str,
+    audience: str,
+    attribute_key: str,
+) -> AnswerResult:
+    product_slug = _first_product_slug(paths, question)
+    if product_slug is None:
+        return _unable(
+            "没有识别到具体产品。",
+            "请在问题中写明产品名称，例如：石英纤维隔热带的最高使用温度是多少？",
+            error_code="product_not_found",
+        )
+    products = _product_cards_by_slugs(paths, [product_slug], audience)
+    if not products:
+        return _unable(
+            "该产品没有已确认且允许用于当前场景的产品卡。",
+            f"建议先检查或复核 {PRODUCT_LABELS[product_slug]} 产品卡。",
+        )
+
+    product = products[0]
+    attribute = PRODUCT_ATTRIBUTES[attribute_key]
+    values = _attribute_values(product, attribute)
+    if not values:
+        return _unable(
+            f"{product['title']}正式产品卡中没有已确认的{attribute['label']}。",
+            f"建议先补充或复核 {product['title']} 的{attribute['label']}。",
+        )
+
+    value = values[0].rstrip("。；; ")
+    scope_note = ""
+    if product.get("usage_scope") == "review_before_external":
+        scope_note = "该结论可用于内部问答，对外使用前仍需复核。"
+    return AnswerResult(
+        answerable=True,
+        answer=f"根据已确认产品卡，{product['title']}的{attribute['label']}为 {value}。{scope_note}",
+        reason=None,
+        next_step=None,
+        citations=tuple(_citations_for_cards(paths, [product])),
         used_cards=(product["id"],),
     )
 
@@ -311,6 +357,32 @@ def _answer_search_based(paths: ProjectPaths, question: str, audience: str) -> A
 def _is_product_profile_question(question: str) -> bool:
     profile_terms = {"所有特点", "全部特点", "优点", "缺点", "卖点", "注意事项", "完整知识", "全面总结"}
     return any(term in question for term in profile_terms)
+
+
+def _product_attribute_key(question: str) -> str | None:
+    for key, attribute in PRODUCT_ATTRIBUTES.items():
+        if any(term in question for term in attribute["question_terms"]):
+            return key
+    return None
+
+
+def _attribute_values(card: dict[str, Any], attribute: dict[str, Any]) -> list[str]:
+    body = card.get("body_markdown") or card.get("body_excerpt", "")
+    values = []
+    for raw_line in body.splitlines():
+        line = _clean_markdown_item(raw_line.strip()).replace("**", "")
+        if not line or line.startswith("#"):
+            continue
+        for term in attribute["line_terms"]:
+            if term not in line:
+                continue
+            value = line.split(term, 1)[1].lstrip("：:为是 \t")
+            if value:
+                values.append(value)
+            break
+    if values:
+        return _unique_items(values)
+    return _unique_items(_section_items(card, set(attribute["headings"])))
 
 
 def _related_profile_cards(
@@ -586,4 +658,34 @@ PRODUCT_ID_ALIASES = {
         "product/quartz_fiber_tape",
         "product/quartz_fiber_exhaust_wrap",
     ),
+}
+
+
+PRODUCT_ATTRIBUTES = {
+    "maximum_usage_temperature": {
+        "label": "最高使用温度",
+        "question_terms": (
+            "最高使用温度",
+            "最大使用温度",
+            "最高工作温度",
+            "最高耐温",
+            "耐温上限",
+            "能耐多少度",
+            "耐多少度",
+        ),
+        "line_terms": (
+            "最高使用温度",
+            "最大使用温度",
+            "最高工作温度",
+            "最高耐温",
+            "耐温上限",
+        ),
+        "headings": (
+            "最高使用温度",
+            "最大使用温度",
+            "最高工作温度",
+            "最高耐温",
+            "耐温上限",
+        ),
+    },
 }

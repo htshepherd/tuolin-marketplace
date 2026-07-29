@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from scripts.tuolin_marketplace.agent_interface import rebuild_agent_interface
+from scripts.tuolin_marketplace.natural_language import route_natural_language
 from scripts.tuolin_marketplace.product_organizer import organize_product_partition
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
 from scripts.tuolin_marketplace.question_answering import answer_question
@@ -76,6 +77,33 @@ class QuestionAnsweringTests(unittest.TestCase):
             self.assertIn("石英纤维隔热带", answer.answer)
             self.assertIn("product/quartz_fiber_tape", answer.used_cards)
             self.assertTrue(any(citation["card_id"].startswith("evidence/quartz_fiber_tape/") for citation in answer.citations))
+
+    def test_answers_confirmed_maximum_usage_temperature_from_product_card(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_official_quartz_fixture(paths)
+            _rewrite_quartz_product_temperature(paths)
+            rebuild_agent_interface(paths)
+
+            answer = answer_question(paths, "石英纤维隔热带的最高使用温度是多少？")
+
+            self.assertTrue(answer.answerable)
+            self.assertEqual(answer.answer, "根据已确认产品卡，石英纤维隔热带的最高使用温度为 1000℃（1832°F）。")
+            self.assertEqual(answer.used_cards, ("product/quartz_fiber_tape",))
+
+    def test_natural_language_routes_temperature_question_to_official_answer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_official_quartz_fixture(paths)
+            _rewrite_quartz_product_temperature(paths)
+            rebuild_agent_interface(paths)
+
+            response = route_natural_language(paths, "石英纤维隔热带的最高使用温度是多少？")
+
+            self.assertEqual(response.intent, "official_answer")
+            self.assertTrue(response.executed)
+            self.assertIn("1000℃（1832°F）", response.message)
+            self.assertEqual(response.details["used_cards"], ("product/quartz_fiber_tape",))
 
     def test_products_for_scenario_uses_official_scenario_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -293,6 +321,20 @@ def _rewrite_quartz_product_body(paths) -> None:
 # 使用与安全注意事项
 
 - 按确认的应用条件使用。
+"""
+    path.write_text(frontmatter + body, encoding="utf-8")
+
+
+def _rewrite_quartz_product_temperature(paths) -> None:
+    path = paths.knowledge_dir / "产品" / "石英纤维隔热带.md"
+    text = path.read_text(encoding="utf-8")
+    closing = text.find("---", 4)
+    frontmatter = text[: closing + 3]
+    body = """
+
+# 关键参数
+
+- 最高使用温度：1000℃（1832°F）。
 """
     path.write_text(frontmatter + body, encoding="utf-8")
 
