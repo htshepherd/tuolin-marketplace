@@ -16,6 +16,7 @@ from .card_validator import parse_frontmatter, validate_card_file
 from .video_audio_policy import refresh_video_profile_audio
 from .video_profile_maintenance import register_video_cache_entry
 from .video_test_evidence import validate_test_video_profile_metadata
+from .video_usage_policy import evaluate_video_usage_policy
 from ..shared.project_layout import ProjectPaths
 
 
@@ -41,6 +42,41 @@ class VideoProfileRevocation:
     interface_revision: str
     affected_run_count: int
     structured_path: Path
+
+
+def confirm_video_visuals_for_external_creation(
+    paths: ProjectPaths,
+    profile_id: str,
+    *,
+    confirmed_by: str,
+    confirmed_at: str | None = None,
+    confirmation_statement: str = (
+        "允许画面用于 YouTube Shorts 和 TikTok 成片；原音强制禁用；"
+        "画面不作为耐温、隔热、安全或认证证据；最终发布仍需人工确认。"
+    ),
+) -> VideoProfilePublication:
+    reviewer = confirmed_by.strip()
+    statement = confirmation_statement.strip()
+    if not reviewer or not statement:
+        raise ValueError("external visual confirmation requires reviewer and statement")
+    timestamp = confirmed_at or datetime.now(timezone.utc).isoformat()
+    return amend_published_video_profile(
+        paths,
+        profile_id,
+        changes={
+            "visual_usage_scope": "external_creative_allowed",
+            "source_audio_use_policy": "mute-required",
+            "claim_use_policy": "visual_observation_only",
+            "publication_gate": "final_human_confirmation_required",
+            "visual_usage_confirmation": {
+                "confirmed_by": reviewer,
+                "confirmed_at": timestamp,
+                "statement": statement,
+            },
+        },
+        amendment_reason="人工确认画面可用于对外视频创作，原音、声明和发布继续受限",
+        amended_by=reviewer,
+    )
 
 
 def exclude_published_video_profile_use(
@@ -208,6 +244,10 @@ def amend_published_video_profile(
         "audio_observations",
         "transcript_detail",
         "source_audio_use_policy",
+        "visual_usage_scope",
+        "claim_use_policy",
+        "publication_gate",
+        "visual_usage_confirmation",
         "observation_confidence",
         "risk_summary",
         "evidence_links",
@@ -400,6 +440,7 @@ def publish_staged_video_profile(
     if not staged_markdown.is_file():
         raise FileNotFoundError(staged_markdown)
     profile = json.loads(staged_json.read_text(encoding="utf-8"))
+    evaluate_video_usage_policy(profile)
     _validate_staged_profile(profile, staged_json, paths)
     _validate_staged_markdown(staged_markdown, profile)
 
@@ -624,6 +665,7 @@ def _validate_staged_markdown(path: Path, profile: dict) -> None:
 
 def _render_formal_markdown(profile: dict) -> str:
     now = datetime.now(timezone.utc).isoformat()
+    usage_policy = evaluate_video_usage_policy(profile)
     raw_partition = "raw/" + "/".join(
         str(item).strip("/")
         for item in profile.get("source_classification", [])
@@ -644,6 +686,9 @@ def _render_formal_markdown(profile: dict) -> str:
         "aliases: []",
         "status: review_required",
         "usage_scope: review_before_external",
+        f"visual_usage_scope: {usage_policy['visual_usage_scope']}",
+        f"claim_use_policy: {usage_policy['claim_use_policy']}",
+        f"publication_gate: {usage_policy['publication_gate']}",
         "raw_partitions:",
         f"  - {raw_partition}",
         "tags:",

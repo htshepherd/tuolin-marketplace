@@ -16,6 +16,7 @@ from ..kb.agent_specific_interfaces import (
     read_video_planner_products,
     read_video_planner_video_detail,
 )
+from ..kb.video_usage_policy import evaluate_video_usage_policy
 from ..shared.project_layout import ProjectPaths
 from .assets import revalidate_video_planning_material
 from .interview import (
@@ -479,6 +480,11 @@ def _validate_shot_material(
         detail = read_video_planner_video_detail(paths, profile_id)
         if detail.get("product_id") != state["product"]["id"]:
             raise ValueError("来源视频档案不属于当前产品。")
+        usage_policy = evaluate_video_usage_policy(detail)
+        if not usage_policy["may_appear_in_external_video"]:
+            raise ValueError(usage_policy["user_message"])
+        if material.get("evidence_use") is True:
+            raise ValueError("来源视频画面不能作为耐温、隔热、安全或认证结论的证据。")
         segment = next((item for item in detail.get("key_segments", []) if item.get("segment_id") == segment_id), None)
         if segment is None or segment.get("use_exclusion", {}).get("status") == "excluded":
             raise ValueError("来源视频片段未获当前专属接口授权。")
@@ -514,6 +520,7 @@ def _validate_shot_material(
         material["video_asset_id"] = detail["video_asset_id"]
         material["profile_revision"] = detail["profile_revision"]
         material["source_revision"] = detail["source_revision"]
+        material["usage_policy"] = usage_policy
     else:
         if not _ai_simulation_permitted(str(brief.get("ai_simulation_scope") or "")):
             raise ValueError("当前已确认的 AI 模拟边界不允许使用模拟镜头。")
@@ -652,6 +659,7 @@ def _render_material_lines(material: dict[str, Any]) -> list[str]:
             f"- 来源范围：{material.get('source_start_seconds')}–{material.get('source_end_seconds')} 秒",
             f"- 静音预览：{material.get('preview_path')}",
             "- 原声策略：visual-only / 不使用来源音频",
+            f"- 对外使用说明：{dict(material.get('usage_policy') or {}).get('user_message', '')}",
         ]
     return [
         "- 模拟标识：simulated",
@@ -781,6 +789,9 @@ def _revalidate_referenced_knowledge(root: Path, state: dict[str, Any], plan: di
                 raise ValueError("已引用视频档案被撤销；必须新建视频策划运行。") from exc
             if detail.get("profile_revision") != material.get("profile_revision"):
                 raise ValueError("已引用视频档案发生实质变更；必须新建视频策划运行。")
+            usage_policy = evaluate_video_usage_policy(detail)
+            if not usage_policy["may_appear_in_external_video"]:
+                raise ValueError(usage_policy["user_message"])
             revalidate_video_planning_material(paths, state["run_id"], material)
         elif mode == "ai_simulation":
             card = _read_current_card_or_new_run(paths, str(material["application_card_id"]), "AI 应用场景")

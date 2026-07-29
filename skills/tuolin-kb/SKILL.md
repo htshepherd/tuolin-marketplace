@@ -97,6 +97,16 @@ When the user asks to set up the knowledge base:
 - Report MinerU or ffmpeg failures with the failed file and error message.
 - Do not use filenames, OS previews, browser screenshots, or temporary scripts as substitutes for PDF text extraction or video keyframe extraction.
 
+## Video Visual Use Confirmation
+
+- Keep four decisions separate: whether pictures may appear in an external video, whether original audio may be used, whether the pictures may support product claims, and whether the final file may be published now.
+- Do not treat “this write step does not publish anything” as `internal_only`. A knowledge write can authorize pictures for later external creation while actual publication remains blocked.
+- 不要只向用户显示 `internal_only`、`external_allowed`、`review_before_external`、“仅内部使用”或“禁止外部发布”；必须在同一条消息中解释对最终视频的具体影响。
+- Ask exactly: “这些视频画面是否允许剪进 YouTube Shorts 和 TikTok 最终成片？”
+- For company-owned video intended for short-video production, recommend: “允许使用画面，强制删除原声；不能用画面证明耐温、隔热、安全或认证；最终成片发布前仍需再次人工确认。”
+- If the user accepts that recommendation, write `visual_usage_scope: external_creative_allowed`, `source_audio_use_policy: mute-required`, `claim_use_policy: visual_observation_only`, and `publication_gate: final_human_confirmation_required`, together with the human confirmation record.
+- Use `internal_only` only when the user means that no frame or clip may appear in YouTube, TikTok, customer communications, or any other external deliverable.
+
 ## Partition Status
 
 Use `scan_partitions.py` when the user asks:

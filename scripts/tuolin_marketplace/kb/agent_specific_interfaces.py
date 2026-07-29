@@ -13,6 +13,7 @@ from typing import Any
 from ..shared.project_layout import ProjectPaths
 from .video_audio_policy import build_downstream_audio_summary, redact_transcript_for_downstream
 from .video_test_evidence import build_downstream_test_summary
+from .video_usage_policy import evaluate_video_usage_policy
 
 
 VIDEO_PLANNER_AGENT_ID = "tuolin-video-planner"
@@ -439,12 +440,14 @@ def _write_video_profile_projection(
                     "content_fingerprint": fingerprint,
                 }
             )
+        usage_policy = evaluate_video_usage_policy(profile)
         detail = {
             **profile,
             "transcript_detail": redact_transcript_for_downstream(dict(profile.get("transcript_detail") or {})),
             "representative_frames": detail_frames,
             "interface_revision": interface_revision,
             "interface_state": "video_planner_active",
+            "usage_policy": usage_policy,
         }
         _write_json(details_dir / f"{asset_id}.json", detail)
         catalog.append(
@@ -471,6 +474,7 @@ def _write_video_profile_projection(
                 "representative_frames": representatives,
                 "audio_summary": build_downstream_audio_summary(profile),
                 "test_summary": build_downstream_test_summary(profile),
+                "usage_policy": usage_policy,
             }
         )
     _write_json(video_root / "catalog.json", catalog)

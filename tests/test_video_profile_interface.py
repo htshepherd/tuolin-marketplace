@@ -386,6 +386,14 @@ class VideoProfileInterfaceTests(unittest.TestCase):
                             }
                         ],
                         "use_capabilities": ["product_detail_reference"],
+                        "visual_usage_scope": "external_creative_allowed",
+                        "source_audio_use_policy": "mute-required",
+                        "claim_use_policy": "visual_observation_only",
+                        "publication_gate": "final_human_confirmation_required",
+                        "visual_usage_confirmation": {
+                            "confirmed_by": "user",
+                            "confirmed_at": "2026-07-29T10:00:00+08:00",
+                        },
                         "risk_summary": [],
                         "processing_state": "review_required",
                     }
@@ -525,6 +533,14 @@ class VideoProfileInterfaceTests(unittest.TestCase):
                         ],
                         "representative_frames": [],
                         "use_capabilities": ["product_detail_reference"],
+                        "visual_usage_scope": "external_creative_allowed",
+                        "source_audio_use_policy": "mute-required",
+                        "claim_use_policy": "visual_observation_only",
+                        "publication_gate": "final_human_confirmation_required",
+                        "visual_usage_confirmation": {
+                            "confirmed_by": "user",
+                            "confirmed_at": "2026-07-29T10:00:00+08:00",
+                        },
                         "risk_summary": [],
                         "processing_state": "review_required",
                         "exclusions": [],
@@ -932,6 +948,26 @@ class VideoProfileInterfaceTests(unittest.TestCase):
 
             self.assertIn("-an", commands[0])
 
+    def test_internal_only_profile_cannot_be_authorized_for_video_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            fixture = _prepare_runtime_fixture(
+                paths,
+                visual_usage_scope="internal_only",
+                authorize=False,
+            )
+
+            with self.assertRaisesRegex(
+                PermissionError,
+                "任何片段都不能剪进 YouTube、TikTok 或发送给客户的视频",
+            ):
+                authorize_video_profile_for_run(
+                    paths,
+                    fixture["run_id"],
+                    fixture["profile_id"],
+                )
+
     def test_runtime_test_clip_enforces_required_test_phases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -1010,6 +1046,8 @@ def _prepare_runtime_fixture(
     source_audio_use_policy="retain",
     test_integrity=None,
     test_profile=None,
+    visual_usage_scope="external_creative_allowed",
+    authorize=True,
 ):
     asset_id = "video_asset_1234567890abcdef1234567890abcdef"
     profile_id = f"video_profile/quartz_fiber_tape/{asset_id}"
@@ -1096,6 +1134,17 @@ def _prepare_runtime_fixture(
                 ),
                 "use_capabilities": ["product_detail_reference"],
                 "source_audio_use_policy": source_audio_use_policy,
+                "visual_usage_scope": visual_usage_scope,
+                "claim_use_policy": "visual_observation_only",
+                "publication_gate": "final_human_confirmation_required",
+                "visual_usage_confirmation": (
+                    {
+                        "confirmed_by": "user",
+                        "confirmed_at": "2026-07-29T10:00:00+08:00",
+                    }
+                    if visual_usage_scope == "external_creative_allowed"
+                    else {}
+                ),
                 "risk_summary": [],
                 "processing_state": "review_required",
                 "exclusions": [],
@@ -1108,7 +1157,8 @@ def _prepare_runtime_fixture(
     run_id = "run-001"
     run_dir = paths.generated_dir / "reports" / "video-creation" / run_id
     run_dir.mkdir(parents=True)
-    authorize_video_profile_for_run(paths, run_id, profile_id)
+    if authorize:
+        authorize_video_profile_for_run(paths, run_id, profile_id)
     return {
         "asset_id": asset_id,
         "profile_id": profile_id,

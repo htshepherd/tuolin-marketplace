@@ -388,9 +388,26 @@ class VideoPlanningAgentTests(unittest.TestCase):
                 "original_audio_used": False,
                 "confirmable": True,
             }
-            write_video_shot_plan(run.run_dir, plan)
+            plan["shots"][0]["material"]["evidence_use"] = True
+            with self.assertRaisesRegex(
+                ValueError,
+                "不能作为耐温、隔热、安全或认证结论的证据",
+            ):
+                write_video_shot_plan(run.run_dir, plan)
+            plan["shots"][0]["material"]["evidence_use"] = False
+            draft = write_video_shot_plan(run.run_dir, plan)
             stored = json.loads((Path(run.run_dir) / "shot_plan.json").read_text(encoding="utf-8"))
             self.assertEqual(stored["shots"][0]["material"]["video_asset_id"], "video_asset_fixture")
+            self.assertFalse(
+                stored["shots"][0]["material"]["usage_policy"][
+                    "may_support_external_claims"
+                ]
+            )
+            self.assertIn(
+                "画面可以剪进 YouTube Shorts 和 TikTok 成片；必须删除原声；"
+                "不能用画面证明耐温、隔热、安全或认证；最终发布前仍需人工确认。",
+                draft.message,
+            )
             Path(result.preview_path).write_bytes(b"tampered-preview")
             with self.assertRaisesRegex(ValueError, "预览内容指纹"):
                 write_video_shot_plan(run.run_dir, plan)
@@ -420,6 +437,35 @@ class VideoPlanningAgentTests(unittest.TestCase):
             rejected = [item for item in audit if item.get("status") == "rejected"]
             self.assertTrue(any("最多生成三个" in str(item.get("reason")) for item in rejected))
             self.assertTrue(any(item.get("segment_id") == "unknown" for item in rejected))
+
+    def test_internal_only_video_cannot_be_authorized_for_external_shot_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, _, _ = _project_with_image(Path(tmp))
+            run = create_video_planning_run(
+                paths,
+                "为 YouTube Shorts 策划公开视频",
+                product_id="product/quartz_fiber_tape",
+                platforms=["youtube_shorts"],
+                language_version="zh",
+                invoked_skill="$tuolin-video-planner",
+                duration_seconds=15,
+                initial_decisions=_complete_decisions(),
+                initial_decision_evidence=_complete_evidence(),
+            )
+            profile_id = _install_video_profile_fixture(
+                paths,
+                visual_usage_scope="internal_only",
+            )
+
+            with self.assertRaisesRegex(
+                PermissionError,
+                "任何片段都不能剪进 YouTube、TikTok 或发送给客户的视频",
+            ):
+                authorize_video_profile_for_planning_run(
+                    paths,
+                    Path(run.run_dir).name,
+                    profile_id,
+                )
 
     def test_unrelated_interface_refresh_does_not_block_final_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -772,7 +818,11 @@ def _project_with_image(root: Path):
     return paths, source, preview
 
 
-def _install_video_profile_fixture(paths) -> str:
+def _install_video_profile_fixture(
+    paths,
+    *,
+    visual_usage_scope: str = "external_creative_allowed",
+) -> str:
     source = paths.raw_dir / "fixtures" / "installation.mp4"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"authorized-video-source")
@@ -794,6 +844,18 @@ def _install_video_profile_fixture(paths) -> str:
     detail = {
         **catalog[0],
         "source_revision": revision,
+        "visual_usage_scope": visual_usage_scope,
+        "source_audio_use_policy": "mute-required",
+        "claim_use_policy": "visual_observation_only",
+        "publication_gate": "final_human_confirmation_required",
+        "visual_usage_confirmation": (
+            {
+                "confirmed_by": "user",
+                "confirmed_at": "2026-07-29T10:00:00+08:00",
+            }
+            if visual_usage_scope == "external_creative_allowed"
+            else {}
+        ),
         "key_segments": [{
             "segment_id": "segment_01",
             "start_seconds": 0,

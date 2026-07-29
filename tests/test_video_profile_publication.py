@@ -17,6 +17,7 @@ from scripts.tuolin_marketplace.card_validator import (
 from scripts.tuolin_marketplace.project_layout import initialize_project, resolve_paths
 from scripts.tuolin_marketplace.video_profile_publication import (
     amend_published_video_profile,
+    confirm_video_visuals_for_external_creation,
     exclude_published_video_profile_use,
     publish_staged_video_profile,
     refresh_published_video_profile_audio,
@@ -31,6 +32,83 @@ from scripts.tuolin_marketplace.video_profile_interface import (
 
 
 class VideoProfilePublicationTests(unittest.TestCase):
+    def test_human_confirmation_promotes_visuals_without_promoting_claims_or_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            staged = _write_staged_profile(paths)
+            profile = json.loads(staged.read_text(encoding="utf-8"))
+            profile["visual_usage_scope"] = "internal_only"
+            profile["visual_usage_confirmation"] = {}
+            staged.write_text(
+                json.dumps(profile, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            published = publish_staged_video_profile(staged, paths)
+
+            confirmed = confirm_video_visuals_for_external_creation(
+                paths,
+                published.profile_id,
+                confirmed_by="user",
+                confirmed_at="2026-07-29T10:00:00+08:00",
+            )
+            updated = json.loads(confirmed.structured_path.read_text(encoding="utf-8"))
+            policy = read_video_profile_catalog(paths)[0]["usage_policy"]
+
+            self.assertEqual(updated["visual_usage_scope"], "external_creative_allowed")
+            self.assertEqual(updated["source_audio_use_policy"], "mute-required")
+            self.assertEqual(updated["claim_use_policy"], "visual_observation_only")
+            self.assertEqual(
+                updated["publication_gate"],
+                "final_human_confirmation_required",
+            )
+            self.assertTrue(policy["may_appear_in_external_video"])
+            self.assertFalse(policy["may_use_original_audio"])
+            self.assertFalse(policy["may_support_external_claims"])
+            self.assertFalse(policy["may_publish_without_confirmation"])
+
+    def test_external_visual_authorization_is_published_without_external_claim_permission(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            staged = _write_staged_profile(paths)
+            profile = json.loads(staged.read_text(encoding="utf-8"))
+            profile.update(
+                {
+                    "visual_usage_scope": "external_creative_allowed",
+                    "source_audio_use_policy": "mute-required",
+                    "claim_use_policy": "visual_observation_only",
+                    "publication_gate": "final_human_confirmation_required",
+                    "visual_usage_confirmation": {
+                        "confirmed_by": "user",
+                        "confirmed_at": "2026-07-29T10:00:00+08:00",
+                    },
+                }
+            )
+            staged.write_text(
+                json.dumps(profile, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            published = publish_staged_video_profile(staged, paths)
+            structured = json.loads(published.structured_path.read_text(encoding="utf-8"))
+            frontmatter = parse_frontmatter(published.markdown_path.read_text(encoding="utf-8"))
+            catalog = read_video_profile_catalog(paths)
+
+            self.assertEqual(structured["visual_usage_scope"], "external_creative_allowed")
+            self.assertEqual(structured["source_audio_use_policy"], "mute-required")
+            self.assertEqual(structured["claim_use_policy"], "visual_observation_only")
+            self.assertEqual(
+                structured["publication_gate"],
+                "final_human_confirmation_required",
+            )
+            self.assertEqual(frontmatter["usage_scope"], "review_before_external")
+            self.assertEqual(frontmatter["visual_usage_scope"], "external_creative_allowed")
+            self.assertTrue(catalog[0]["usage_policy"]["may_appear_in_external_video"])
+            self.assertFalse(catalog[0]["usage_policy"]["may_use_original_audio"])
+            self.assertFalse(catalog[0]["usage_policy"]["may_support_external_claims"])
+            self.assertFalse(catalog[0]["usage_policy"]["may_publish_without_confirmation"])
+
     def test_audio_refresh_republishes_without_changing_visual_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -490,6 +568,13 @@ def _write_staged_profile(paths) -> Path:
         "audio_observations": [],
         "transcript_detail": {"status": "unavailable"},
         "source_audio_use_policy": "human-review-required",
+        "visual_usage_scope": "external_creative_allowed",
+        "claim_use_policy": "visual_observation_only",
+        "publication_gate": "final_human_confirmation_required",
+        "visual_usage_confirmation": {
+            "confirmed_by": "user",
+            "confirmed_at": "2026-07-29T10:00:00+08:00",
+        },
         "observation_confidence": {"level": "medium"},
         "risk_summary": ["original_audio_unreviewed"],
         "evidence_links": [],

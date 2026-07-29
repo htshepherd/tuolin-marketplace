@@ -17,6 +17,7 @@ from .video_test_evidence import (
     build_downstream_test_summary,
     validate_test_video_trim,
 )
+from .video_usage_policy import evaluate_video_usage_policy
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def activate_tracer_video_profile_interface(
         "interface_revision": interface_revision,
         "interface_state": "tracer_active",
     }
+    usage_policy = evaluate_video_usage_policy(profile)
     catalog_entry = {
         "profile_id": profile["profile_id"],
         "video_asset_id": profile["video_asset_id"],
@@ -146,6 +148,7 @@ def activate_tracer_video_profile_interface(
         "representative_frames": representative_refs,
         "audio_summary": build_downstream_audio_summary(profile),
         "test_summary": build_downstream_test_summary(profile),
+        "usage_policy": usage_policy,
     }
     _write_json(detail_path, detail)
     _write_json(catalog_path, [catalog_entry])
@@ -323,6 +326,9 @@ def authorize_video_profile_for_run(
         raise FileNotFoundError(run_dir)
     manifest = _read_video_interface_manifest(paths)
     detail = read_video_profile_detail(paths, profile_id)
+    usage_policy = evaluate_video_usage_policy(detail)
+    if not usage_policy["may_appear_in_external_video"]:
+        raise PermissionError(usage_policy["user_message"])
     authorization_path = run_dir / "video_profile_authorizations.json"
     authorization = {
         "schema_version": "video-profile-run-authorization-v1",
@@ -337,6 +343,7 @@ def authorize_video_profile_for_run(
                 "profile_revision": detail["profile_revision"],
                 "source_revision": detail["source_revision"],
                 "operations": ["frame", "clip"],
+                "usage_policy": usage_policy,
                 "revoked": False,
                 "segments": [
                     {

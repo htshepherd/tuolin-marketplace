@@ -15,6 +15,7 @@ from .video_profile_maintenance import (
     register_video_cache_entry,
 )
 from .video_test_evidence import validate_test_video_profile_metadata
+from .video_usage_policy import evaluate_video_usage_policy
 
 
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
@@ -932,6 +933,7 @@ def stage_video_profile_draft(
         },
         require_human_review=False,
     )
+    usage_policy = evaluate_video_usage_policy(proposal)
     domain_object = {
         "schema_version": "1.0",
         "profile_id": profile_id,
@@ -952,6 +954,12 @@ def stage_video_profile_draft(
         "audio_observations": list(proposal["audio_observations"]),
         "transcript_detail": proposal["transcript_detail"],
         "source_audio_use_policy": proposal["source_audio_use_policy"],
+        "visual_usage_scope": usage_policy["visual_usage_scope"],
+        "claim_use_policy": usage_policy["claim_use_policy"],
+        "publication_gate": usage_policy["publication_gate"],
+        "visual_usage_confirmation": dict(
+            proposal.get("visual_usage_confirmation") or {}
+        ),
         "observation_confidence": proposal["observation_confidence"],
         "risk_summary": list(proposal["risk_summary"]),
         "evidence_links": list(proposal["evidence_links"]),

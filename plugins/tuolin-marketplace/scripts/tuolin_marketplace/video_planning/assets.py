@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..kb.agent_specific_interfaces import read_video_planner_manifest, read_video_planner_video_detail
+from ..kb.video_usage_policy import evaluate_video_usage_policy
 from ..shared.project_layout import ProjectPaths
 
 
@@ -36,6 +37,9 @@ def authorize_video_profile_for_planning_run(paths: ProjectPaths, run_id: str, p
         raise ValueError("运行固定的专属接口版本与当前接口不一致；不能新增视频授权。")
     if detail.get("product_id") != state.get("product", {}).get("id"):
         raise PermissionError("视频档案不属于当前策划产品。")
+    usage_policy = evaluate_video_usage_policy(detail)
+    if not usage_policy["may_appear_in_external_video"]:
+        raise PermissionError(usage_policy["user_message"])
     segments = [
         {key: item[key] for key in ("segment_id", "start_seconds", "end_seconds")}
         for item in detail.get("key_segments", [])
@@ -58,6 +62,7 @@ def authorize_video_profile_for_planning_run(paths: ProjectPaths, run_id: str, p
         "profile_revision": detail["profile_revision"],
         "source_revision": detail["source_revision"],
         "operations": ["candidate_preview"],
+        "usage_policy": usage_policy,
         "segments": segments,
         "authorized_at": datetime.now(timezone.utc).isoformat(),
     }

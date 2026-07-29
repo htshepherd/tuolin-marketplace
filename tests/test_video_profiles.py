@@ -807,6 +807,13 @@ class VideoProfileTests(unittest.TestCase):
                 "audio_observations": ["存在 AAC 音轨，内容尚未转录。"],
                 "transcript_detail": {"status": "unavailable"},
                 "source_audio_use_policy": "human-review-required",
+                "visual_usage_scope": "external_creative_allowed",
+                "claim_use_policy": "visual_observation_only",
+                "publication_gate": "final_human_confirmation_required",
+                "visual_usage_confirmation": {
+                    "confirmed_by": "user",
+                    "confirmed_at": "2026-07-29T10:00:00+08:00",
+                },
                 "observation_confidence": {
                     "level": "medium",
                     "reasons": ["多张有序画面一致"],
@@ -881,6 +888,18 @@ class VideoProfileTests(unittest.TestCase):
             self.assertIn("视频讲了什么", markdown)
             self.assertIn("镜头由全景逐步靠近卷装产品", markdown)
             self.assertEqual(structured["processing_state"], "review_required")
+            self.assertEqual(
+                structured["visual_usage_scope"],
+                "external_creative_allowed",
+            )
+            self.assertEqual(
+                structured["claim_use_policy"],
+                "visual_observation_only",
+            )
+            self.assertEqual(
+                structured["publication_gate"],
+                "final_human_confirmation_required",
+            )
             self.assertEqual(
                 list((paths.knowledge_dir / "视频档案").rglob("*")),
                 [],

@@ -13,6 +13,7 @@ from .video_audio_policy import (
     redact_transcript_for_downstream,
 )
 from .video_test_evidence import build_downstream_test_summary
+from .video_usage_policy import evaluate_video_usage_policy
 from .partitions import scan_all_partitions, summaries_to_json
 from ..shared.project_layout import ProjectPaths
 
@@ -352,6 +353,7 @@ def _write_video_profile_interface(
                     "content_fingerprint": _file_sha256(media_path),
                 }
             )
+        usage_policy = evaluate_video_usage_policy(profile)
         detail = {
             **profile,
             "transcript_detail": redact_transcript_for_downstream(
@@ -360,6 +362,7 @@ def _write_video_profile_interface(
             "representative_frames": detail_frames,
             "interface_revision": interface_revision,
             "interface_state": "formal_active",
+            "usage_policy": usage_policy,
         }
         asset_id = str(profile["video_asset_id"])
         _write_json(details_dir / f"{asset_id}.json", detail)
@@ -389,6 +392,7 @@ def _write_video_profile_interface(
                 "representative_frames": representative_refs,
                 "audio_summary": build_downstream_audio_summary(profile),
                 "test_summary": build_downstream_test_summary(profile),
+                "usage_policy": usage_policy,
             }
         )
     _write_json(root / "catalog.json", catalog)
