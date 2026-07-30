@@ -22,6 +22,7 @@ AVATAR_VIDEO_AGENT_ID = "tuolin-avatar-video"
 VIDEO_PLANNER_CARD_TYPES = (
     "product",
     "application_scenario",
+    "sales_material",
     "content_asset",
     "evidence",
     "review_item",
@@ -75,6 +76,91 @@ def refresh_registered_agent_interfaces(
         "interfaces": results,
         "legacy_shared_interface_migration_complete": False,
     }
+
+
+def ensure_registered_agent_interfaces_current(
+    paths: ProjectPaths,
+    *,
+    action: str = "automatic_plugin_upgrade_refresh",
+) -> dict[str, Any]:
+    """Upgrade stale agent-specific snapshots from the current shared interface."""
+    source_manifest_path = paths.generated_dir / "agent-interface" / "manifest.json"
+    if not source_manifest_path.is_file():
+        raise RuntimeError("通用 Agent 知识接口不存在，无法自动升级专属接口。")
+    source_manifest = _read_json(source_manifest_path)
+    if not isinstance(source_manifest, dict):
+        raise RuntimeError("通用 Agent 知识接口清单格式无效，无法自动升级专属接口。")
+    source_revision = str(source_manifest.get("interface_revision") or "").strip()
+    if not source_revision:
+        raise RuntimeError("通用 Agent 知识接口缺少版本号，无法自动升级专属接口。")
+
+    required_interfaces = (
+        (VIDEO_PLANNER_AGENT_ID, VIDEO_PLANNER_CARD_TYPES),
+        (AVATAR_VIDEO_AGENT_ID, AVATAR_VIDEO_CARD_TYPES),
+    )
+    stale_interfaces = [
+        agent_id
+        for agent_id, card_types in required_interfaces
+        if _agent_interface_snapshot_is_stale(
+            paths,
+            agent_id=agent_id,
+            card_types=card_types,
+            source_revision=source_revision,
+        )
+    ]
+    if not stale_interfaces:
+        return {
+            "verified": True,
+            "refreshed": False,
+            "source_interface_revision": source_revision,
+            "stale_interfaces": [],
+        }
+
+    refresh = refresh_registered_agent_interfaces(
+        paths,
+        source_interface_revision=source_revision,
+        action=action,
+    )
+    return {
+        "verified": True,
+        "refreshed": True,
+        "source_interface_revision": source_revision,
+        "stale_interfaces": stale_interfaces,
+        "refresh": refresh,
+    }
+
+
+def _agent_interface_snapshot_is_stale(
+    paths: ProjectPaths,
+    *,
+    agent_id: str,
+    card_types: tuple[str, ...],
+    source_revision: str,
+) -> bool:
+    root = agent_interface_root(paths, agent_id)
+    try:
+        manifest = _read_json(root / "manifest.json")
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return True
+    if not isinstance(manifest, dict):
+        return True
+    policy = manifest.get("policy")
+    if not isinstance(policy, dict):
+        return True
+    declared_card_types = manifest.get("card_types")
+    if not isinstance(declared_card_types, list):
+        return True
+    return any(
+        (
+            manifest.get("agent_id") != agent_id,
+            manifest.get("raw_access") is not False,
+            manifest.get("source_knowledge_revision") != source_revision,
+            tuple(declared_card_types) != card_types,
+            policy.get("sales_material_role") != "expression_reference",
+            policy.get("sales_materials_prove_product_facts") is not False,
+            any(not (root / "cards" / f"{card_type}.json").is_file() for card_type in card_types),
+        )
+    )
 
 
 def rebuild_video_planner_interface(
@@ -155,6 +241,8 @@ def rebuild_video_planner_interface(
             "public_trend_search": False,
             "source_video_audio": False,
             "review_before_external_is_draft_only": True,
+            "sales_material_role": "expression_reference",
+            "sales_materials_prove_product_facts": False,
         },
         "counts": {
             "cards": len(selected),
@@ -292,6 +380,8 @@ def rebuild_avatar_video_interface(
                 "public_trend_search": False,
                 "default_bgm": False,
                 "same_language_burned_captions": True,
+                "sales_material_role": "expression_reference",
+                "sales_materials_prove_product_facts": False,
             },
             "counts": {"cards": len(selected), "products": len(products)},
             "verification": {
@@ -548,6 +638,16 @@ def _avatar_video_card_allowed(card: dict[str, Any]) -> bool:
 
 def _project_card(card: dict[str, Any]) -> dict[str, Any]:
     projected = dict(card)
+    card_type = str(card.get("type") or "")
+    roles = {
+        "product": "product_fact",
+        "application_scenario": "scenario_fact",
+        "evidence": "evidence_reference",
+        "sales_material": "expression_reference",
+        "content_asset": "visual_reference",
+        "review_item": "risk_reference",
+        "video_profile": "video_reference",
+    }
     projected["projection_fingerprint"] = _json_digest(
         {
             "id": card.get("id"),
@@ -558,6 +658,10 @@ def _project_card(card: dict[str, Any]) -> dict[str, Any]:
         }
     )
     projected["draft_only"] = card.get("usage_scope") == "review_before_external"
+    projected["knowledge_role"] = roles.get(card_type, "reference")
+    projected["may_prove_product_facts"] = card_type in {"product", "application_scenario"}
+    projected["expression_only"] = card_type == "sales_material"
+    projected["visual_only"] = card_type == "content_asset"
     return projected
 
 

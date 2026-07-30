@@ -3092,6 +3092,7 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
     product_cards = context.get("cards_by_type", {}).get("product", [])
     product = _select_video_product_card(product_cards)
     content_assets = context.get("cards_by_type", {}).get("content_asset", [])
+    sales_materials = context.get("cards_by_type", {}).get("sales_material", [])
     evidence_cards = context.get("evidence", []) or context.get("cards_by_type", {}).get("evidence", [])
     language = state["language_version"]
     duration = state["duration_seconds"]
@@ -3108,6 +3109,8 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
         for card in content_assets
         if (summary := _content_asset_summary(card)) is not None
     ]
+    sales_expression_references = [_sales_expression_summary(card) for card in sales_materials]
+    sales_expression_review_required = any(item["draft_only"] for item in sales_expression_references)
     plan = {
         "schema_version": "video-plan-v1",
         "generated_at": now.isoformat(),
@@ -3156,16 +3159,20 @@ def _build_video_plan_payload(state: dict[str, Any], context: dict[str, Any], no
             "raw_access": False,
             "official_only": True,
             "content_assets_prove_product_facts": False,
+            "sales_materials_prove_product_facts": False,
+            "sales_material_role": "expression_reference",
             "no_keyword_expansion": True,
             "no_write_back_to_knowledge": True,
             "canonical_product_id": context.get("canonical_product_id", INTERNAL_PRODUCT_ID),
             "resolved_product_id": product.get("id") or context.get("product_id"),
             "product_usage_scope": product.get("usage_scope", ""),
-            "external_publication_ready": product.get("usage_scope") == "external_allowed",
-            "draft_only_until_external_review": product.get("usage_scope") == "review_before_external",
+            "external_publication_ready": product.get("usage_scope") == "external_allowed" and not sales_expression_review_required,
+            "draft_only_until_external_review": product.get("usage_scope") == "review_before_external" or sales_expression_review_required,
+            "sales_expression_review_required": sales_expression_review_required,
             "review_before_external_rule": "可用于内部策划和 dry-run 草稿；正式外发成片前必须复核为 external_allowed，或删除高风险 claim。",
         },
         "usable_product_knowledge": _usable_product_knowledge(product, evidence_cards),
+        "sales_expression_references": sales_expression_references,
         "content_assets": content_asset_summaries,
         "material_availability": _material_availability_summary(content_asset_summaries),
         "visual_strategy": _visual_strategy_from_brief(brief, content_assets),
@@ -3272,6 +3279,14 @@ def _render_video_plan(plan: dict[str, Any]) -> str:
         lines.append(f"- {item}")
     if not plan["usable_product_knowledge"]:
         lines.append("- 暂无可摘要的产品正文；后续生成不得补造产品事实。")
+    lines.extend(["", "## 可用销售表达", ""])
+    if plan.get("sales_expression_references"):
+        lines.append("- 以下话术只用于组织表达，不能证明产品参数、性能、认证或安全结论。")
+        for item in plan["sales_expression_references"]:
+            scope = "仅内部草稿" if item["draft_only"] else "允许对外表达"
+            lines.append(f"- {item['id']}｜{item['title']}｜{scope}｜{item['expression_text']}")
+    else:
+        lines.append("- 暂无正式关联销售话术卡。")
     lines.extend(["", "## 可用内容素材", ""])
     if plan["content_assets"]:
         for asset in plan["content_assets"]:
@@ -3479,7 +3494,7 @@ def _validate_reference_visual_assessment(assessment: dict[str, Any], shot_id: s
 
 
 def _validate_semantic_plan_revision(original: dict[str, Any], revised: dict[str, Any]) -> None:
-    for immutable in ["product", "language_version", "platforms", "format", "knowledge_boundary", "content_assets", "prompt_policy"]:
+    for immutable in ["product", "language_version", "platforms", "format", "knowledge_boundary", "sales_expression_references", "content_assets", "prompt_policy"]:
         if revised.get(immutable) != original.get(immutable):
             raise ValueError(f"策划语义修改不得改变受保护字段：{immutable}")
     brief = revised.get("video_brief") or {}
@@ -6784,6 +6799,18 @@ def _content_asset_summary(card: dict[str, Any]) -> dict[str, Any] | None:
         "files": image_files,
         "human_face_risk": str(frontmatter.get("human_face_risk") or "none"),
         "usage_note": "内容素材只用于素材选择、画面描述、Prompt 参考和镜头生成约束，不能证明产品事实。",
+    }
+
+
+def _sales_expression_summary(card: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(card.get("id") or ""),
+        "title": str(card.get("title") or ""),
+        "usage_scope": str(card.get("usage_scope") or ""),
+        "draft_only": bool(card.get("draft_only") or card.get("usage_scope") == "review_before_external"),
+        "knowledge_role": "expression_reference",
+        "may_prove_product_facts": False,
+        "expression_text": str(card.get("body_markdown") or card.get("body_excerpt") or "").strip(),
     }
 
 

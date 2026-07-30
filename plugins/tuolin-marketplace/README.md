@@ -15,7 +15,7 @@ codex plugin list
 
 Open a new Codex conversation after installation. Use the plugin with Chinese natural-language requests; end users do not need to invoke its internal scripts.
 
-Version 2.0.2 routes confirmed product-attribute questions through the generic natural-language Q&A entry point and answers maximum-usage-temperature questions directly from the current generated product card. It continues to discover `<project-dir>/config/tuolin-kb.config.json` for every internal entry point and caches verified video hashes with file size and modification time, so routine knowledge-card refreshes do not reread unchanged local videos. Configured absolute MinerU and ffmpeg paths are reused directly; knowledge workflows do not create replacement Python environments or reinstall MinerU implicitly.
+Version 2.0.3 lets every downstream Agent read official product-linked sales materials as expression references while preventing those materials from proving product parameters, performance, certification, temperature, or safety claims. When upgrading from 2.0.2, the first video-planner or avatar-video request automatically detects, rebuilds, and verifies an old Agent-specific interface snapshot from the current shared Agent interface; users do not need to refresh the knowledge base manually. It also routes confirmed product-attribute questions through the generic natural-language Q&A entry point and answers maximum-usage-temperature questions directly from the current generated product card. It continues to discover `<project-dir>/config/tuolin-kb.config.json` for every internal entry point and caches verified video hashes with file size and modification time, so routine knowledge-card refreshes do not reread unchanged local videos.
 
 To upgrade an existing installation:
 
@@ -27,7 +27,7 @@ codex plugin list
 
 ## LinkedIn prospect search
 
-Version 2.0.2 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts review-pool workflow. It requires:
+Version 2.0.3 includes `$tuolin-linkedin-search`, a keyword-driven LinkedIn Posts review-pool workflow. It requires:
 
 - a writable Tuolin operational workspace; no product knowledge base is required;
 - the official `chrome@openai-bundled` plugin;

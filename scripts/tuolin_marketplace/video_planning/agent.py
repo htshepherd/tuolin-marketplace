@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from ..kb.agent_specific_interfaces import (
+    ensure_registered_agent_interfaces_current,
     read_video_planner_card,
+    read_video_planner_cards,
     read_video_planner_manifest,
     read_video_planner_products,
     read_video_planner_video_detail,
@@ -77,6 +79,7 @@ def create_video_planning_run(
 ) -> VideoPlanningResult:
     if invoked_skill != "$tuolin-video-planner":
         raise ValueError("视频策划任务必须显式调用 $tuolin-video-planner。")
+    ensure_registered_agent_interfaces_current(paths)
     manifest = read_video_planner_manifest(paths)
     if manifest.get("agent_id") != "tuolin-video-planner" or manifest.get("raw_access") is not False:
         raise ValueError("视频策划专属知识接口无效。")
@@ -84,6 +87,11 @@ def create_video_planning_run(
     product = next((item for item in products if item.get("id") == product_id), None)
     if product is None:
         raise ValueError("产品未发布到视频策划专属知识接口。")
+    sales_expression_references = [
+        _sales_expression_reference(card)
+        for card in read_video_planner_cards(paths, "sales_material")
+        if _card_matches_product(card, product_id)
+    ]
     normalized_platforms = _normalize_platforms(platforms)
     language = _normalize_language(language_version)
     product = {**product, "display_title": _select_product_title(product, language)}
@@ -115,6 +123,7 @@ def create_video_planning_run(
         "phase": phase,
         "request_text": request_text.strip(),
         "product": product,
+        "sales_expression_references": sales_expression_references,
         "platforms": normalized_platforms,
         "language_version": language,
         "duration_seconds": duration,
@@ -264,6 +273,7 @@ def write_video_shot_plan(run_dir: Path | str, plan: dict[str, Any]) -> VideoPla
     brief = confirmed_planning_brief(interview)
     normalized = _normalize_and_validate_plan(root, state, plan, brief)
     normalized["decision_evidence"] = deepcopy(interview.get("decision_evidence") or {})
+    normalized["sales_expression_references"] = deepcopy(state.get("sales_expression_references") or [])
     if state["phase"] == "completed":
         _archive_current_delivery(root, state)
         state["confirmations"]["shot_plan"] = False
@@ -316,6 +326,7 @@ def confirm_video_shot_plan(run_dir: Path | str) -> VideoPlanningResult:
     interview = _read_json(root / "interview.json")
     plan = _normalize_and_validate_plan(root, state, stored_plan, confirmed_planning_brief(interview))
     plan["decision_evidence"] = deepcopy(interview.get("decision_evidence") or {})
+    plan["sales_expression_references"] = deepcopy(state.get("sales_expression_references") or [])
     revision_dir = root / "revisions" / f"revision_{int(plan['revision']):04d}"
     if revision_dir.exists():
         raise ValueError("目标修订目录已存在，当前草稿未确认。")
@@ -589,8 +600,7 @@ def _srt_time(seconds: float) -> str:
 
 
 def _render_requirements(state: dict[str, Any]) -> str:
-    return "\n".join(
-        [
+    lines = [
             "# 视频策划需求",
             "",
             f"- 产品：{state['product']['title']}（{state['product']['id']}）",
@@ -603,8 +613,20 @@ def _render_requirements(state: dict[str, Any]) -> str:
             f"- 专属接口 revision：{state['interface']['interface_revision']}",
             "- 终点：确认逐镜头方案与旁白并自动生成 SRT",
             "",
+            "## 可用销售表达",
+            "",
+            "- 以下内容只决定怎么说，不能证明产品事实；参数、性能、认证和安全结论仍须引用正式产品卡或证据。",
         ]
-    )
+    references = list(state.get("sales_expression_references") or [])
+    if references:
+        lines.extend(
+            f"- {item['title']}（{item['card_id']}；{'仅内部草稿' if item['draft_only'] else '允许对外表达'}）：{item['expression_text']}"
+            for item in references
+        )
+    else:
+        lines.append("- 当前没有关联的正式销售话术卡。")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _render_shot_plan(plan: dict[str, Any]) -> str:
@@ -766,6 +788,10 @@ def _revalidate_referenced_knowledge(root: Path, state: dict[str, Any], plan: di
             card = _read_current_card_or_new_run(paths, str(evidence.get("card_id") or ""), "事实证据")
             if card.get("projection_fingerprint") != evidence.get("projection_fingerprint"):
                 raise ValueError("已确认 brief 的事实证据发生实质变更；必须新建视频策划运行。")
+    for reference in state.get("sales_expression_references", []):
+        card = _read_current_card_or_new_run(paths, str(reference.get("card_id") or ""), "销售表达")
+        if card.get("projection_fingerprint") != reference.get("projection_fingerprint"):
+            raise ValueError("已引用销售表达发生实质变更；必须新建视频策划运行。")
     for shot in plan.get("shots", []):
         material = dict(shot.get("material") or {})
         mode = material.get("mode")
@@ -850,12 +876,29 @@ def _validate_planning_evidence(
         if not card_id:
             raise ValueError("事实证据缺少 card_id。")
         card = read_video_planner_card(paths, card_id)
+        if card.get("type") == "sales_material" or card.get("expression_only"):
+            raise ValueError("销售话术只能作为表达参考，不能作为产品事实证据。")
+        if card.get("type") == "content_asset" or card.get("visual_only"):
+            raise ValueError("内容素材只能作为画面参考，不能作为产品事实证据。")
         if card.get("draft_only") or card.get("status") != "official":
             raise ValueError("事实证据必须来自正式且可用的专属接口知识卡。")
         if not _evidence_matches_product(paths, card, product_id):
             raise ValueError("事实证据不属于当前产品。")
         validated.append({**item, "projection_fingerprint": card["projection_fingerprint"]})
     return validated
+
+
+def _sales_expression_reference(card: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "card_id": str(card.get("id") or ""),
+        "title": str(card.get("title") or ""),
+        "usage_scope": str(card.get("usage_scope") or ""),
+        "draft_only": bool(card.get("draft_only")),
+        "knowledge_role": "expression_reference",
+        "may_prove_product_facts": False,
+        "expression_text": str(card.get("body_markdown") or card.get("body_excerpt") or "").strip(),
+        "projection_fingerprint": str(card.get("projection_fingerprint") or ""),
+    }
 
 
 def _read_current_card_or_new_run(paths: ProjectPaths, card_id: str, label: str) -> dict[str, Any]:

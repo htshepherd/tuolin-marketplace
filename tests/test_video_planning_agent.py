@@ -25,6 +25,78 @@ from scripts.tuolin_marketplace.video_planning_agent import (
 
 
 class VideoPlanningAgentTests(unittest.TestCase):
+    def test_entrypoint_migrates_old_snapshot_and_loads_sales_expression_references(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, _, _ = _project_with_image(Path(tmp))
+            _write_card(
+                paths,
+                "sales_material",
+                "sales_material/quartz_wording",
+                "石英纤维隔热带销售话术",
+                extra={
+                    "material_type": "销售话术",
+                    "language": "中文",
+                    "related_products": ["product/quartz_fiber_tape"],
+                },
+            )
+            rebuild_agent_interface(paths)
+            for agent_id in ("tuolin-video-planner", "tuolin-avatar-video"):
+                root = paths.generated_dir / "agent-interfaces" / agent_id
+                manifest_path = root / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["card_types"].remove("sales_material")
+                manifest["policy"].pop("sales_material_role", None)
+                manifest["policy"].pop("sales_materials_prove_product_facts", None)
+                manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+                (root / "cards" / "sales_material.json").unlink()
+
+            run = create_video_planning_run(
+                paths,
+                "为采购商策划一个中文短视频",
+                product_id="product/quartz_fiber_tape",
+                platforms=["youtube_shorts"],
+                language_version="zh",
+                invoked_skill="$tuolin-video-planner",
+                duration_seconds=15,
+            )
+
+            state = json.loads((Path(run.run_dir) / "workflow_state.json").read_text(encoding="utf-8"))
+            references = state["sales_expression_references"]
+            self.assertEqual([item["card_id"] for item in references], ["sales_material/quartz_wording"])
+            self.assertEqual(references[0]["knowledge_role"], "expression_reference")
+            self.assertFalse(references[0]["may_prove_product_facts"])
+
+    def test_sales_material_is_readable_but_cannot_be_used_as_fact_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, _, _ = _project_with_image(Path(tmp))
+            _write_card(
+                paths,
+                "sales_material",
+                "sales_material/quartz_wording",
+                "石英纤维隔热带销售话术",
+                extra={
+                    "material_type": "销售话术",
+                    "language": "中文",
+                    "related_products": ["product/quartz_fiber_tape"],
+                },
+            )
+            rebuild_agent_interface(paths)
+            evidence = _complete_evidence()
+            evidence["priority_messages"] = [{"card_id": "sales_material/quartz_wording"}]
+
+            with self.assertRaisesRegex(ValueError, "销售话术只能作为表达参考"):
+                create_video_planning_run(
+                    paths,
+                    "为采购商策划一个中文短视频",
+                    product_id="product/quartz_fiber_tape",
+                    platforms=["youtube_shorts"],
+                    language_version="zh",
+                    invoked_skill="$tuolin-video-planner",
+                    duration_seconds=15,
+                    initial_decisions=_complete_decisions(),
+                    initial_decision_evidence=evidence,
+                )
+
     def test_image_only_run_confirms_plan_and_generates_srt_without_provider_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths, source, preview = _project_with_image(Path(tmp))
@@ -879,7 +951,12 @@ def _install_video_profile_fixture(
 
 
 def _write_card(paths, card_type: str, card_id: str, title: str, *, extra: dict | None = None) -> None:
-    folder = {"product": "产品", "content_asset": "内容素材", "application_scenario": "应用场景"}[card_type]
+    folder = {
+        "product": "产品",
+        "content_asset": "内容素材",
+        "application_scenario": "应用场景",
+        "sales_material": "销售物料",
+    }[card_type]
     slug = card_id.split("/", 1)[1]
     frontmatter = {
         "card_template_version": f"{card_type}-card-v1",

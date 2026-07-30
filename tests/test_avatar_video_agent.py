@@ -40,6 +40,45 @@ from scripts.tuolin_marketplace.project_layout import initialize_project, resolv
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg/ffprobe required")
 class AvatarVideoAgentTests(unittest.TestCase):
+    def test_entrypoint_migrates_old_snapshot_and_loads_sales_expression_references(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, image_path = _project_with_product_image(Path(tmp))
+            for agent_id in ("tuolin-video-planner", "tuolin-avatar-video"):
+                root = paths.generated_dir / "agent-interfaces" / agent_id
+                manifest_path = root / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["card_types"].remove("sales_material")
+                manifest["policy"].pop("sales_material_role", None)
+                manifest["policy"].pop("sales_materials_prove_product_facts", None)
+                manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+                (root / "cards" / "sales_material.json").unlink()
+
+            run = create_avatar_video_run(
+                paths,
+                "Create an English product avatar video.",
+                product_id="product/quartz_fiber_tape",
+                language_version="en",
+                duration_seconds=30,
+                initial_brief=_complete_brief(),
+                invoked_skill="$tuolin-avatar-video",
+                test_mode=True,
+            )
+
+            state = json.loads((Path(run.run_dir) / "workflow_state.json").read_text(encoding="utf-8"))
+            references = state["sales_expression_references"]
+            self.assertEqual([item["card_id"] for item in references], ["sales_material/quartz_wording"])
+            self.assertEqual(references[0]["knowledge_role"], "expression_reference")
+            self.assertFalse(references[0]["may_prove_product_facts"])
+            self.assertTrue(
+                (paths.generated_dir / "agent-interfaces" / "tuolin-avatar-video" / "cards" / "sales_material.json").is_file()
+            )
+            _inspect_image(Path(run.run_dir), image_path)
+            planned = write_avatar_production_plan(run.run_dir, _plan(image_path))
+            plan = json.loads((Path(run.run_dir) / "production_plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(plan["sales_expression_references"], references)
+            self.assertFalse(plan["knowledge_boundary"]["sales_materials_prove_product_facts"])
+            self.assertIn("仅作表达参考，不能证明产品事实", planned.message)
+
     def test_hyperframes_and_ffmpeg_paths_share_the_same_composition_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths, image_path = _project_with_product_image(Path(tmp))
@@ -769,6 +808,28 @@ def _project_with_product_image(root: Path):
             "usable_for: [avatar_video]",
         ],
         "Official product image for digital-avatar video.",
+    )
+    _write_card(
+        paths.knowledge_dir / "销售物料" / "quartz_wording.md",
+        [
+            "card_template_version: sales-material-card-v1",
+            "type: sales_material",
+            "id: sales_material/quartz_wording",
+            "title: Quartz tape approved sales wording",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions: []",
+            "tags: [sales wording]",
+            "updated_at: 2026-07-30T00:00:00+00:00",
+            "last_reviewed_at: 2026-07-30T00:00:00+00:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "material_type: sales wording",
+            "language: English",
+            "related_products: [product/quartz_fiber_tape]",
+        ],
+        "Comfortable handling language for approved external expression only.",
     )
     rebuild_agent_interface(paths)
     return paths, image_path

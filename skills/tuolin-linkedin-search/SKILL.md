@@ -123,4 +123,4 @@ Workbook edits after snapshot creation cannot change the authorized set. After e
 
 ## Installation acceptance
 
-Version `2.0.2` must pass local runtime, `.xlsx` round-trip, source/plugin mirror, Skill, plugin, and extracted-package checks without a Tuolin knowledge base. Real acceptance remains two stages on the boss's computer: first a read-only run that fills or verifies exhaustion of the requested review pool and updates the workbook; then, only after exact snapshot authorization, a bounded real invitation batch.
+Version `2.0.3` must pass local runtime, `.xlsx` round-trip, source/plugin mirror, Skill, plugin, and extracted-package checks without a Tuolin knowledge base. Real acceptance remains two stages on the boss's computer: first a read-only run that fills or verifies exhaustion of the requested review pool and updates the workbook; then, only after exact snapshot authorization, a bounded real invitation batch.

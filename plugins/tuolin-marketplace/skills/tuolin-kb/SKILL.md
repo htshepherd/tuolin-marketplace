@@ -304,6 +304,8 @@ Rules:
 - Use only `official` fact cards with an allowed `usage_scope`.
 - `review_before_external` official cards may support internal summaries, but every affected conclusion must remain marked for review before external use.
 - Treat evidence-only cards as citations, not as standalone product facts.
+- Every downstream Agent may read official `sales_material` cards linked to its current product. These cards are expression references only: they may organize approved wording, selling points, and calls to action, but they never prove product parameters, performance, certification, temperature, or safety claims. `external_allowed` wording may enter external output; `review_before_external` remains draft-only; `internal_only` stays internal.
+- Downstream interfaces must label sales materials as `expression_reference` with `may_prove_product_facts: false`. Do not copy sales wording into the product card merely to make it readable downstream.
 - Do not use `draft`, `review_required`, or `archived` cards as facts.
 - If the relevant partition is `needs_update`, tell the user to update that partition first.
 - When no confirmed answer exists, say “无法给出已确认答案” and give a concrete next step.

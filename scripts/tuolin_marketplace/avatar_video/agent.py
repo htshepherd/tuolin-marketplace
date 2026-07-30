@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..kb.agent_specific_interfaces import (
+    ensure_registered_agent_interfaces_current,
     read_avatar_video_cards,
     read_avatar_video_manifest,
     read_avatar_video_products,
@@ -79,6 +80,7 @@ def create_avatar_video_run(
 ) -> AvatarVideoResult:
     if invoked_skill != "$tuolin-avatar-video":
         raise ValueError("数字人口播任务必须显式调用 $tuolin-avatar-video。")
+    ensure_registered_agent_interfaces_current(paths)
     manifest = read_avatar_video_manifest(paths)
     if manifest.get("agent_id") != "tuolin-avatar-video" or manifest.get("raw_access") is not False:
         raise ValueError("数字人口播专属知识接口无效。")
@@ -91,6 +93,11 @@ def create_avatar_video_run(
     product = next((item for item in read_avatar_video_products(paths) if item.get("id") == product_id), None)
     if product is None:
         raise ValueError("产品未发布到数字人口播专属知识接口。")
+    sales_expression_references = [
+        _sales_expression_reference(card)
+        for card in read_avatar_video_cards(paths, "sales_material")
+        if _card_matches_product(card, product_id)
+    ]
     brief = {key: str(value).strip() for key, value in dict(initial_brief or {}).items() if str(value).strip()}
     interview = build_avatar_interview(brief)
     phase = "ready_for_plan" if interview["completed"] else "interview"
@@ -107,6 +114,7 @@ def create_avatar_video_run(
         "phase": phase,
         "request_text": request_text.strip(),
         "product": product,
+        "sales_expression_references": sales_expression_references,
         "language_version": language,
         "platforms": list(SUPPORTED_PLATFORMS[language]),
         "duration_seconds": duration,
@@ -1641,6 +1649,11 @@ def _normalize_plan(root: Path, state: dict[str, Any], plan: dict[str, Any]) -> 
         "duration_seconds": state["duration_seconds"],
         "aspect_ratio": "9:16",
         "brief": state["brief"],
+        "knowledge_boundary": {
+            "sales_material_role": "expression_reference",
+            "sales_materials_prove_product_facts": False,
+        },
+        "sales_expression_references": [dict(item) for item in state.get("sales_expression_references", [])],
         "narration": narration,
         "narration_source": str(plan.get("narration_source") or "agent_drafted"),
         "timeline": segments,
@@ -1966,9 +1979,23 @@ def _render_plan(plan: dict[str, Any]) -> str:
         "",
         plan["narration"],
         "",
-        "## 时间线",
+        "## 可用销售表达",
         "",
     ]
+    references = list(plan.get("sales_expression_references") or [])
+    if references:
+        for reference in references:
+            scope_note = "（对外前需复核）" if reference.get("draft_only") else ""
+            lines.append(f"- {reference['title']}{scope_note}：仅作表达参考，不能证明产品事实。")
+    else:
+        lines.append("- 当前产品没有可用销售表达卡。")
+    lines.extend(
+        [
+            "",
+            "## 时间线",
+            "",
+        ]
+    )
     for segment in plan["timeline"]:
         lines.append(
             f"- {segment['start_seconds']}–{segment['end_seconds']}秒：{segment.get('mode', 'presenter')} — {segment.get('purpose', '')}"
@@ -2027,6 +2054,30 @@ def _review_high_risk_claims(paths: ProjectPaths, product_id: str, narration: st
         if matches and not all(str(match).casefold() in knowledge_text for match in matches if isinstance(match, str)):
             notes.append(f"{label}表达需要用户确认其知识依据：{str(matches[0])}")
     return notes
+
+
+def _card_matches_product(card: dict[str, Any], product_id: str) -> bool:
+    if card.get("id") == product_id:
+        return True
+    frontmatter = dict(card.get("frontmatter") or {})
+    related = {
+        str(frontmatter.get("product_id") or ""),
+        *[str(item) for item in frontmatter.get("related_products", [])],
+    }
+    return product_id in related
+
+
+def _sales_expression_reference(card: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "card_id": str(card.get("id") or ""),
+        "title": str(card.get("title") or ""),
+        "usage_scope": str(card.get("usage_scope") or ""),
+        "draft_only": bool(card.get("draft_only")),
+        "knowledge_role": "expression_reference",
+        "may_prove_product_facts": False,
+        "expression_text": str(card.get("body_markdown") or card.get("body_excerpt") or "").strip(),
+        "projection_fingerprint": str(card.get("projection_fingerprint") or ""),
+    }
 
 
 def _load_state(root: Path) -> dict[str, Any]:

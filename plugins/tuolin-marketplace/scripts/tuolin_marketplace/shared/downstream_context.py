@@ -11,7 +11,10 @@ from .project_layout import ProjectPaths
 
 
 TASK_TYPES = {
-    "youtube_video": {"audience": "external", "card_types": ["product", "application_scenario", "content_asset"]},
+    "youtube_video": {
+        "audience": "external",
+        "card_types": ["product", "application_scenario", "sales_material", "content_asset"],
+    },
     "linkedin_post": {
         "audience": "external",
         "card_types": ["product", "application_scenario", "sales_material", "content_asset"],
@@ -27,7 +30,7 @@ TASK_TYPES = {
     "follow_up_email": {"audience": "external", "card_types": ["product", "sales_material", "customer_question"]},
     "video_creation": {
         "audience": "external",
-        "card_types": ["product", "evidence", "content_asset"],
+        "card_types": ["product", "evidence", "sales_material", "content_asset"],
         "fixed_product_id": "product/quartz_fiber_tape",
         "product_alias_ids": ["product/quartz_fiber_exhaust_wrap"],
         "product_terms": [
@@ -80,6 +83,7 @@ def build_downstream_context(
         allow_query_expansion=not config.get("no_keyword_expansion", False),
     )
     selected = _prioritize_product_cards(selected, product_ids)
+    selected = [_annotate_downstream_role(card) for card in selected]
     product_cards = [card for card in selected if card.get("type") == "product"]
     resolved_product_id = product_cards[0]["id"] if product_cards else product_id
     evidence = _collect_evidence(paths, selected)
@@ -121,6 +125,8 @@ def build_downstream_context(
             "review_items_are_facts": False,
             "contexts_are_formal_knowledge": False,
             "content_assets_prove_product_facts": False,
+            "sales_materials_prove_product_facts": False,
+            "sales_material_role": "expression_reference",
             "no_keyword_expansion": bool(config.get("no_keyword_expansion", False)),
             "market_terms_search_only": bool(config.get("market_terms_search_only", False)),
             "fixed_product_scope": fixed_product_id,
@@ -270,6 +276,28 @@ def _group_by_type(cards: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]
     for card in cards:
         grouped.setdefault(card["type"], []).append(card)
     return grouped
+
+
+def _annotate_downstream_role(card: dict[str, Any]) -> dict[str, Any]:
+    card_type = str(card.get("type") or "")
+    roles = {
+        "product": "product_fact",
+        "application_scenario": "scenario_fact",
+        "evidence": "evidence_reference",
+        "sales_material": "expression_reference",
+        "content_asset": "visual_reference",
+        "customer_question": "customer_support_reference",
+        "market_intelligence": "market_reference",
+        "company_capability": "company_reference",
+        "standard": "standard_reference",
+    }
+    projected = dict(card)
+    projected["knowledge_role"] = roles.get(card_type, "reference")
+    projected["may_prove_product_facts"] = card_type in {"product", "application_scenario"}
+    projected["expression_only"] = card_type == "sales_material"
+    projected["visual_only"] = card_type == "content_asset"
+    projected["draft_only"] = card.get("usage_scope") == "review_before_external"
+    return projected
 
 
 def _prioritize_product_cards(cards: list[dict[str, Any]], product_ids: list[str] | None) -> list[dict[str, Any]]:

@@ -338,8 +338,15 @@ class VideoCreationAgentTests(unittest.TestCase):
             self.assertIn("耐高温1000度", usable_knowledge)
             self.assertIn("不刺痒", usable_knowledge)
             self.assertIn("不冒烟", usable_knowledge)
+            self.assertEqual(
+                {item["id"] for item in plan["sales_expression_references"]},
+                {"sales_material/quartz_video_wording"},
+            )
+            self.assertFalse(plan["sales_expression_references"][0]["may_prove_product_facts"])
             plan_text = (run_dir / "video_plan.md").read_text(encoding="utf-8")
             self.assertIn("证据知识卡：石英纤维隔热带关键参数", plan_text)
+            self.assertIn("以下话术只用于组织表达", plan_text)
+            self.assertIn("联系拓霖确认应用条件", plan_text)
             self.assertNotIn("关键参数需要从检测报告", plan_text)
 
     def test_video_creation_run_requires_core_interview_before_plan(self) -> None:
@@ -2368,6 +2375,31 @@ def _write_official_cards(paths, human_face_risk: str = "none") -> None:
             "  - video_creation",
         ],
         "这是产品实拍视频素材；视频创作 Agent 不应把视频文件用于策划素材或即梦任务。",
+    )
+    _write_card(
+        paths.knowledge_dir / "销售物料" / "quartz_video_wording.md",
+        [
+            "card_template_version: sales-material-card-v1",
+            "type: sales_material",
+            "id: sales_material/quartz_video_wording",
+            "title: 石英纤维隔热带视频销售表达",
+            "aliases: []",
+            "status: official",
+            "usage_scope: external_allowed",
+            "raw_partitions:",
+            "  - raw/05_销售物料/",
+            "tags:",
+            "  - 销售话术",
+            "updated_at: 2026-07-30T00:00:00+08:00",
+            "last_reviewed_at: 2026-07-30T00:00:00+08:00",
+            "evidence_refs: []",
+            "review_refs: []",
+            "material_type: 视频销售话术",
+            "language: 中文",
+            "related_products:",
+            "  - product/quartz_fiber_tape",
+        ],
+        "建议使用已确认产品事实并联系拓霖确认应用条件。",
     )
 
 

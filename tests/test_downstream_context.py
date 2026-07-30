@@ -114,9 +114,73 @@ class DownstreamContextTests(unittest.TestCase):
                 {"content_asset/quartz_product_photo"},
             )
             self.assertNotIn("application_scenario", context["cards_by_type"])
-            self.assertNotIn("sales_material", context["cards_by_type"])
+            self.assertEqual(
+                {card["id"] for card in context["cards_by_type"]["sales_material"]},
+                {"sales_material/quartz_tape_datasheet"},
+            )
+            sales_material = context["cards_by_type"]["sales_material"][0]
+            self.assertEqual(sales_material["knowledge_role"], "expression_reference")
+            self.assertFalse(sales_material["may_prove_product_facts"])
             self.assertNotIn("customer_question", context["cards_by_type"])
             self.assertFalse(context["policy"]["content_assets_prove_product_facts"])
+            self.assertFalse(context["policy"]["sales_materials_prove_product_facts"])
+
+    def test_every_downstream_context_can_read_sales_material_as_expression_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+
+            for task_type in (
+                "youtube_video",
+                "linkedin_post",
+                "linkedin_search",
+                "outreach_email",
+                "follow_up_email",
+                "video_creation",
+                "customer_support",
+            ):
+                with self.subTest(task_type=task_type):
+                    context = build_downstream_context(
+                        paths,
+                        task_type,
+                        product_id="product/quartz_fiber_tape",
+                    )
+                    sales_materials = context["cards_by_type"].get("sales_material", [])
+                    self.assertEqual(
+                        {card["id"] for card in sales_materials},
+                        {"sales_material/quartz_tape_datasheet"},
+                    )
+                    self.assertTrue(all(card["knowledge_role"] == "expression_reference" for card in sales_materials))
+                    self.assertTrue(all(card["may_prove_product_facts"] is False for card in sales_materials))
+                    self.assertFalse(context["policy"]["sales_materials_prove_product_facts"])
+
+    def test_review_before_external_sales_material_is_draft_only_for_video_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            _create_fixture(paths)
+            sales_path = paths.knowledge_dir / "销售物料" / "quartz_tape_datasheet.md"
+            sales_path.write_text(
+                sales_path.read_text(encoding="utf-8").replace(
+                    "usage_scope: external_allowed",
+                    "usage_scope: review_before_external",
+                ),
+                encoding="utf-8",
+            )
+            rebuild_agent_interface(paths)
+
+            video_context = build_downstream_context(
+                paths,
+                "video_creation",
+                product_id="product/quartz_fiber_tape",
+            )
+            youtube_context = build_downstream_context(
+                paths,
+                "youtube_video",
+                product_id="product/quartz_fiber_tape",
+            )
+
+            self.assertTrue(video_context["cards_by_type"]["sales_material"][0]["draft_only"])
+            self.assertNotIn("sales_material", youtube_context["cards_by_type"])
 
     def test_video_creation_rejects_other_product_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -8,6 +8,9 @@ from unittest.mock import patch
 
 from scripts.tuolin_marketplace.agent_interface import rebuild_agent_interface
 from scripts.tuolin_marketplace.agent_specific_interfaces import (
+    ensure_registered_agent_interfaces_current,
+    read_avatar_video_cards,
+    read_avatar_video_manifest,
     read_video_planner_cards,
     read_video_planner_manifest,
     read_video_planner_products,
@@ -16,6 +19,65 @@ from scripts.tuolin_marketplace.project_layout import initialize_project, resolv
 
 
 class VideoPlannerInterfaceTests(unittest.TestCase):
+    def test_first_use_migrates_2_0_2_video_interface_snapshots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_product(paths, "product/quartz_fiber_tape", "石英纤维隔热带")
+            _write_sales_material(paths)
+            rebuild_agent_interface(paths)
+
+            for agent_id in ("tuolin-video-planner", "tuolin-avatar-video"):
+                root = paths.generated_dir / "agent-interfaces" / agent_id
+                manifest_path = root / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["card_types"].remove("sales_material")
+                manifest["policy"].pop("sales_material_role", None)
+                manifest["policy"].pop("sales_materials_prove_product_facts", None)
+                manifest_path.write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                (root / "cards" / "sales_material.json").unlink()
+
+            result = ensure_registered_agent_interfaces_current(paths)
+
+            self.assertTrue(result["refreshed"])
+            self.assertEqual(
+                result["stale_interfaces"],
+                ["tuolin-video-planner", "tuolin-avatar-video"],
+            )
+            self.assertTrue(result["refresh"]["verified"])
+            for manifest in (read_video_planner_manifest(paths), read_avatar_video_manifest(paths)):
+                self.assertIn("sales_material", manifest["card_types"])
+                self.assertEqual(manifest["policy"]["sales_material_role"], "expression_reference")
+                self.assertFalse(manifest["policy"]["sales_materials_prove_product_facts"])
+            self.assertEqual(
+                [card["id"] for card in read_video_planner_cards(paths, "sales_material")],
+                ["sales_material/quartz_wording"],
+            )
+            self.assertEqual(
+                [card["id"] for card in read_avatar_video_cards(paths, "sales_material")],
+                ["sales_material/quartz_wording"],
+            )
+
+    def test_video_interfaces_project_sales_material_as_expression_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = resolve_paths(Path(tmp), {})
+            initialize_project(paths)
+            _write_product(paths, "product/quartz_fiber_tape", "石英纤维隔热带")
+            _write_sales_material(paths)
+
+            rebuild_agent_interface(paths)
+
+            planner_cards = read_video_planner_cards(paths, "sales_material")
+            avatar_cards = read_avatar_video_cards(paths, "sales_material")
+            for cards in (planner_cards, avatar_cards):
+                self.assertEqual([card["id"] for card in cards], ["sales_material/quartz_wording"])
+                self.assertEqual(cards[0]["knowledge_role"], "expression_reference")
+                self.assertFalse(cards[0]["may_prove_product_facts"])
+                self.assertTrue(cards[0]["expression_only"])
+
     def test_rebuild_creates_independent_multi_product_projection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = resolve_paths(Path(tmp), {})
@@ -105,6 +167,31 @@ def _write_product(paths, card_id: str, title: str, *, status: str = "official")
     for key, value in frontmatter.items():
         lines.append(f"{key}: {json.dumps(value, ensure_ascii=False)}")
     lines.extend(["---", "", "# 产品定义", "", title, ""])
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_sales_material(paths) -> None:
+    frontmatter = {
+        "card_template_version": "sales-material-card-v1",
+        "type": "sales_material",
+        "id": "sales_material/quartz_wording",
+        "title": "石英纤维隔热带对外话术",
+        "aliases": [],
+        "status": "official",
+        "usage_scope": "external_allowed",
+        "raw_partitions": ["raw/05_销售物料/"],
+        "tags": ["销售话术"],
+        "updated_at": "2026-07-30T00:00:00+00:00",
+        "last_reviewed_at": "2026-07-30T00:00:00+00:00",
+        "evidence_refs": [],
+        "review_refs": [],
+        "material_type": "销售话术",
+        "language": "中文",
+        "related_products": ["product/quartz_fiber_tape"],
+    }
+    path = paths.knowledge_dir / "销售物料" / "quartz_wording.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["---", *[f"{key}: {json.dumps(value, ensure_ascii=False)}" for key, value in frontmatter.items()], "---", "", "用于组织对外表达，不单独证明产品事实。", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
